@@ -1,0 +1,29 @@
+[project]
+name = "solradm"
+version = "0.8.0"
+description = "Solr Administration CLI"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiohttp==3.12.15",
+    "async-typer>=0.1.9",
+    "dynaconf>=3.2.4",
+    "kazoo>=2.10.0",
+    "kubernetes>=33.1.0",
+    "lazy-loader>=0.4",
+    "platformdirs>=4.3.8",
+    "pyyaml>=6.0.2",
+    "typer>=0.16.0",
+    "watchdog>=6.0.0",
+]
+
+[project.scripts]
+solradm = "solradm.main:run"
+sa = "solradm.main:run"
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
