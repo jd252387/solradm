@@ -1,3 +1,0 @@
-[console_scripts]
-sa = solradm.main:run
-solradm = solradm.main:run
