@@ -57,7 +57,7 @@ class ShardFilter(Filter):
             "typer_option": typer.Option(
                 None,
                 "--shards",
-                help="Shard numbers to include (e.g. '1,3-5,2+3')",
+                help="Shard numbers to include (e.g. '1,3-5,2+3-7,+4-16')",
             )
         },
     )
@@ -82,14 +82,21 @@ class ShardFilter(Filter):
             part = part.strip()
             if not part:
                 continue
-            if "+" in part:
-                start, step = part.split("+", 1)
-                rules.append(("seq", int(start), int(step)))
-            elif "-" in part:
-                start, end = part.split("-", 1)
-                rules.append(("range", int(start), int(end)))
-            else:
+            seq_match = re.fullmatch(r"(?:(\d+)?\+(\d+)(?:-(\d+))?)", part)
+            if seq_match:
+                start = int(seq_match.group(1)) if seq_match.group(1) else 1
+                step = int(seq_match.group(2))
+                end = int(seq_match.group(3)) if seq_match.group(3) else None
+                rules.append(("seq", start, step, end))
+                continue
+            range_match = re.fullmatch(r"(\d+)-(\d+)", part)
+            if range_match:
+                rules.append(("range", int(range_match.group(1)), int(range_match.group(2))))
+                continue
+            if part.isdigit():
                 rules.append(("eq", int(part)))
+                continue
+            raise typer.BadParameter(f"Invalid shard specification '{part}'")
         return rules
 
     def _matches(self, rules, shard_num: int) -> bool:
@@ -100,9 +107,10 @@ class ShardFilter(Filter):
             if kind == "range" and rule[1] <= shard_num <= rule[2]:
                 return True
             if kind == "seq":
-                start, step = rule[1], rule[2]
+                start, step, end = rule[1], rule[2], rule[3]
                 if shard_num >= start and (shard_num - start) % step == 0:
-                    return True
+                    if end is None or shard_num <= end:
+                        return True
         return False
 
     def apply(self, cluster_state: List[Collection]) -> List[Collection]:
@@ -178,6 +186,121 @@ class ReplicaTypeFilter(Filter):
                     match_exclude = (
                         self._is_type(replica, self.exclude_replica_type)
                         if self.exclude_replica_type
+                        else False
+                    )
+                    if match_include and not match_exclude:
+                        new_replicas.append(replica)
+                if new_replicas:
+                    shard.replicas = new_replicas
+                    new_shards.append(shard)
+            if new_shards:
+                collection.shards = new_shards
+                filtered_collections.append(collection)
+        return filtered_collections
+
+
+@dataclass
+class ReplicaPositionFilter(Filter):
+    """Filter replicas by their position within a shard."""
+    replica_position: Optional[int] = field(
+        default=None,
+        metadata={
+            "typer_option": typer.Option(
+                None,
+                "--replica-position",
+                help="Select only the replica at this 1-indexed position",
+            )
+        },
+    )
+    exclude_replica_position: Optional[int] = field(
+        default=None,
+        metadata={
+            "typer_option": typer.Option(
+                None,
+                "--exclude-replica-position",
+                help="Exclude the replica at this 1-indexed position",
+            )
+        },
+    )
+
+    def init(self):
+        # nothing required on init
+        pass
+
+    def apply(self, cluster_state: List[Collection]) -> List[Collection]:
+        filtered_collections = []
+        for collection in cluster_state:
+            new_shards = []
+            for shard in collection.shards:
+                sorted_replicas = sorted(
+                    shard.replicas,
+                    key=lambda r: int(re.findall(r"\d+", r.name)[0]),
+                )
+                new_replicas = []
+                for idx, replica in enumerate(sorted_replicas, start=1):
+                    match_include = (
+                        idx == self.replica_position if self.replica_position is not None else True
+                    )
+                    match_exclude = (
+                        idx == self.exclude_replica_position
+                        if self.exclude_replica_position is not None
+                        else False
+                    )
+                    if match_include and not match_exclude:
+                        new_replicas.append(replica)
+                if new_replicas:
+                    shard.replicas = new_replicas
+                    new_shards.append(shard)
+            if new_shards:
+                collection.shards = new_shards
+                filtered_collections.append(collection)
+        return filtered_collections
+
+
+@dataclass
+class ReplicaStateFilter(Filter):
+    """Filter replicas by their state."""
+    replica_state: Optional[str] = field(
+        default=None,
+        metadata={
+            "typer_option": typer.Option(
+                None,
+                "--replica-state",
+                help="Replica state to include: 'active', 'down', 'recovering', 'recovery_failed'",
+            )
+        },
+    )
+    exclude_replica_state: Optional[str] = field(
+        default=None,
+        metadata={
+            "typer_option": typer.Option(
+                None,
+                "--exclude-replica-state",
+                help="Replica state to exclude: 'active', 'down', 'recovering', 'recovery_failed'",
+            )
+        },
+    )
+
+    def init(self):
+        valid = {"active", "down", "recovering", "recovery_failed", None}
+        if self.replica_state not in valid or self.exclude_replica_state not in valid:
+            raise typer.BadParameter(
+                "Replica state must be one of 'active', 'down', 'recovering', 'recovery_failed'"
+            )
+
+    def apply(self, cluster_state: List[Collection]) -> List[Collection]:
+        filtered_collections = []
+        for collection in cluster_state:
+            new_shards = []
+            for shard in collection.shards:
+                new_replicas = []
+                for replica in shard.replicas:
+                    match_include = (
+                        replica.state == self.replica_state if self.replica_state else True
+                    )
+                    match_exclude = (
+                        replica.state == self.exclude_replica_state
+                        if self.exclude_replica_state
                         else False
                     )
                     if match_include and not match_exclude:
