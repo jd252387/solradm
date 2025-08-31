@@ -8,6 +8,7 @@ from solradm.commands.core import cores
 from solradm.commands.zk import editor
 from solradm.exceptions.adm_exception import AdmException
 from solradm.exceptions.solr_exception import SolrException
+from solradm.update import notify_if_outdated
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,6 +30,8 @@ def run():
         logging.error("Received a fatal error from Solr: %s", e)
     except AdmException as e:
         logging.error("Internal error:: %s", e)
+    finally:
+        notify_if_outdated()
 
 if __name__ == "__main__":
     run()
