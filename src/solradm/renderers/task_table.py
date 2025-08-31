@@ -83,5 +83,5 @@ class MultiTaskTable(Renderer):
             task_table.add_row(*task.metadata_rows, TaskResult.FAILED.value)
 
         return Group(
-            Panel.fit(counts_table, title="Progress"), Panel(task_table, title="URLs")
+            Panel.fit(counts_table, title="Progress"), Panel.fit(task_table, title="URLs")
         )

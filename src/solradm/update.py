@@ -65,6 +65,7 @@ def notify_if_outdated() -> None:
     if not latest_str or time.time() - checked_at > 3600:
         latest_str = _fetch_latest()
         if not latest_str:
+            _save_cache(current_str)
             return
         _save_cache(latest_str)
 

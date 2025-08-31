@@ -1,3 +1,4 @@
+import asyncio
 import functools
 import inspect
 import re
@@ -11,6 +12,11 @@ from rich.prompt import Confirm
 
 from solradm.api.models import Collection
 from solradm.api.state import get_collections
+from solradm.api.utils import get_replicas, send_request
+from solradm.renderers.task_table import MultiTaskTable
+from solradm.tasks.metatask import MetaTask
+from solradm.tasks.multimetatask import MultiMetaTask
+from solradm.zk.utils import get_overseer_leader
 
 app = AsyncTyper()
 
@@ -314,126 +320,6 @@ class ReplicaStateFilter(Filter):
         return filtered_collections
 
 
-# @dataclass
-# class ShardCountFilter:
-#     """Filter collections by shard count range."""
-#     min_shards: Optional[int] = field(
-#         default=None,
-#         metadata={
-#             "typer_option": "--min-shards",
-#             "help": "Minimum number of shards"
-#         }
-#     )
-#     max_shards: Optional[int] = field(
-#         default=None,
-#         metadata={
-#             "typer_option": "--max-shards",
-#             "help": "Maximum number of shards"
-#         }
-#     )
-
-#     def apply(self, cluster_state: ClusterState) -> ClusterState:
-#         filtered_collections = cluster_state.collections
-
-#         if self.min_shards is not None:
-#             filtered_collections = [
-#                 c for c in filtered_collections 
-#                 if len(c.shards) >= self.min_shards
-#             ]
-
-#         if self.max_shards is not None:
-#             filtered_collections = [
-#                 c for c in filtered_collections 
-#                 if len(c.shards) <= self.max_shards
-#             ]
-
-#         return ClusterState(collections=filtered_collections)
-
-
-# @dataclass
-# class ReplicationFactorFilter:
-#     """Filter collections by replication factor range."""
-#     min_replication: Optional[int] = field(
-#         default=None,
-#         metadata={
-#             "typer_option": "--min-replication",
-#             "help": "Minimum replication factor"
-#         }
-#     )
-#     max_replication: Optional[int] = field(
-#         default=None,
-#         metadata={
-#             "typer_option": "--max-replication",
-#             "help": "Maximum replication factor"
-#         }
-#     )
-
-#     def apply(self, cluster_state: ClusterState) -> ClusterState:
-#         filtered_collections = cluster_state.collections
-
-#         if self.min_replication is not None:
-#             filtered_collections = [
-#                 c for c in filtered_collections 
-#                 if c.replicationFactor >= self.min_replication
-#             ]
-
-#         if self.max_replication is not None:
-#             filtered_collections = [
-#                 c for c in filtered_collections 
-#                 if c.replicationFactor <= self.max_replication
-#             ]
-
-#         return ClusterState(collections=filtered_collections)
-
-
-# @dataclass
-# class CollectionTypeFilter:
-#     """Filter collections by replica types."""
-#     has_nrt: Optional[bool] = field(
-#         default=None,
-#         metadata={
-#             "typer_option": "--has-nrt",
-#             "help": "Filter collections that have NRT replicas"
-#         }
-#     )
-#     has_tlog: Optional[bool] = field(
-#         default=None,
-#         metadata={
-#             "typer_option": "--has-tlog",
-#             "help": "Filter collections that have TLog replicas"
-#         }
-#     )
-#     has_pull: Optional[bool] = field(
-#         default=None,
-#         metadata={
-#             "typer_option": typer.Option(None, "--has-pull", help="Filter collections that have Pull replicas")
-#         }
-#     )
-
-#     def apply(self, cluster_state: ClusterState) -> ClusterState:
-#         filtered_collections = cluster_state.collections
-
-#         if self.has_nrt is not None:
-#             filtered_collections = [
-#                 c for c in filtered_collections 
-#                 if (c.nrtReplicas > 0) == self.has_nrt
-#             ]
-
-#         if self.has_tlog is not None:
-#             filtered_collections = [
-#                 c for c in filtered_collections 
-#                 if (c.tlogReplicas > 0) == self.has_tlog
-#             ]
-
-#         if self.has_pull is not None:
-#             filtered_collections = [
-#                 c for c in filtered_collections 
-#                 if (c.pullReplicas > 0) == self.has_pull
-#             ]
-
-#         return ClusterState(collections=filtered_collections)
-
-
 def with_cluster_state(*filter_classes):
     """
     Decorator that automatically fetches ClusterState and optionally applies filters.
@@ -495,17 +381,18 @@ def with_cluster_state(*filter_classes):
 
 
 @app.async_command()
-@with_cluster_state(CollectionNameFilter)
+@with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def full_reload(
         cluster_state: List[Collection]
 ):
+    replicas = get_replicas(cluster_state)
     tasks = [
         MetaTask(
-            [descriptor.base_url, descriptor.core_name],
-            asyncio.create_task(reload_core(descriptor)),
+            [replica.base_url, replica.core],
+            asyncio.create_task(send_request(get_overseer_leader(), "/admin/cores",
+                                             params={"action": "RELOAD", "core": replica.core})),
         )
-        for descriptor in pending
+        for replica in replicas
     ]
-    table = MultiTaskTable(MultiMetaTask(["host", "core"], tasks), refresh_every=0.25)
-    await asyncio.gather(*[task.task for task in tasks])
-    table.stop()
+    metatasks = MultiMetaTask(["host", "core"], tasks)
+    await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))

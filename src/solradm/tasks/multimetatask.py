@@ -1,5 +1,7 @@
+import asyncio
 from typing import Iterable, List
 
+from solradm.renderers.renderer import Renderer
 from solradm.tasks.metatask import MetaTask
 
 
@@ -16,6 +18,12 @@ class MultiMetaTask(Iterable[MetaTask]):
 
         self.tasks = tasks
         self.metadata_titles = metadata_titles
+
+    async def gather_ignoring_errors(self, renderer: Renderer = None):
+        await asyncio.gather(*[task.task for task in self.tasks], return_exceptions=True)
+
+        if renderer is not None:
+            renderer.stop()
 
     def add_tasks(self, tasks: Iterable[MetaTask]):
         for i, task in enumerate(tasks):

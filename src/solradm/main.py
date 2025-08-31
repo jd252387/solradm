@@ -3,6 +3,7 @@ import logging
 from async_typer import AsyncTyper
 from rich.logging import RichHandler
 
+from solradm.api import get_session, get_initialized_sesssion
 from solradm.commands import config
 from solradm.commands.core import cores
 from solradm.commands.zk import editor
@@ -32,6 +33,9 @@ def run():
         logging.error("Internal error:: %s", e)
     finally:
         notify_if_outdated()
+        import asyncio
+        if get_initialized_sesssion():
+            asyncio.run(get_initialized_sesssion().close())
 
 if __name__ == "__main__":
     run()
