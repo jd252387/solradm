@@ -68,7 +68,7 @@ def connect(
 @app.command()
 def save(name: str = typer.Argument(..., help="Context name")):
     if "name" not in settings.contexts.current:
-        new_context(
+        add(
             name,
             settings.contexts.current.zk,
             settings.contexts.current.get("kubecontext"),
@@ -80,7 +80,7 @@ def save(name: str = typer.Argument(..., help="Context name")):
 
 
 @app.command()
-def new_context(
+def add(
     name: str = typer.Argument(..., help="Context name"),
     zk: str = typer.Option(..., "-z", "--zk", help="ZooKeeper address"),
     kubecontext: str = typer.Option(
@@ -104,7 +104,36 @@ def new_context(
 
 
 @app.command()
-def delete_context(name: str = typer.Argument(...)):
+def edit(
+    name: str = typer.Argument(..., help="Context name"),
+    zk: str = typer.Option(None, "-z", "--zk", help="ZooKeeper address"),
+    kubecontext: str = typer.Option(
+        None, "-k", "--kubecontext", help="Target Kubecontext"
+    ),
+):
+    if name not in [context.name for context in settings.contexts.available]:
+        raise typer.BadParameter(f"Context {name} does not exist!")
+
+    if zk is None and kubecontext is None:
+        raise typer.BadParameter("Please specify --zk and/or --kubecontext")
+
+    if kubecontext and not get_kubecontext(kubecontext):
+        raise typer.BadParameter(f"Kubecontext {kubecontext} does not exist!")
+
+    for context in settings.contexts.available:
+        if context.name == name:
+            if zk:
+                context.zk = zk
+            if kubecontext:
+                context.kubecontext = kubecontext
+            break
+
+    persist()
+    rich.print(f"[success]✅  Updated context {name}!")
+
+
+@app.command()
+def delete(name: str = typer.Argument(...)):
     if name not in [context.name for context in settings.contexts.available]:
         raise typer.BadParameter(f"Context {name} does not exist!")
 
