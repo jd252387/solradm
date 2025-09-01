@@ -184,6 +184,4 @@ async def create(
     rich.print(f"[success]✅  Created collection {name}!")
 
     if populate_after:
-        if node is None:
-            raise typer.BadParameter("--node must be specified when using --populate")
-        await populate(dry_run=api_utils.is_dry_run, collection=name, node=[node])
+        await populate(dry_run=api_utils.is_dry_run, collection_name_filter=name, node=[node] if node else None, exclude_node=None)

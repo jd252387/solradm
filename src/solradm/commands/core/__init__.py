@@ -40,8 +40,7 @@ async def full_reload(
         MetaTask(
             [replica.base_url, replica.core],
             asyncio.create_task(send_request(replica.base_url, "/admin/cores",
-                                             params={"action": "RELOAD", "core": replica.core},
-                                             dry_output=None if not dry_run else "response")))
+                                             params={"action": "RELOAD", "core": replica.core})))
         for replica in replicas
     ]
     metatasks = MultiMetaTask(["host", "core"], tasks)
