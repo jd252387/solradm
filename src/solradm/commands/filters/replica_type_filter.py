@@ -3,6 +3,7 @@ from typing import Optional, List
 
 import typer
 
+from solradm import completion
 from solradm.api.models import Collection
 from solradm.commands.filters.filter import Filter
 
@@ -14,7 +15,10 @@ class ReplicaTypeFilter(Filter):
         default=None,
         metadata={
             "typer_option": typer.Option(
-                None, "--replica-type", help="Replica type to include: 'leader' or 'follower'"
+                None,
+                "--replica-type",
+                help="Replica type to include: 'leader' or 'follower'",
+                autocompletion=completion.replica_types,
             )
         },
     )
@@ -25,6 +29,7 @@ class ReplicaTypeFilter(Filter):
                 None,
                 "--exclude-replica-type",
                 help="Replica type to exclude: 'leader' or 'follower'",
+                autocompletion=completion.replica_types,
             )
         },
     )
