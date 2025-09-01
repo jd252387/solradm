@@ -4,7 +4,7 @@ from async_typer import AsyncTyper
 from rich.logging import RichHandler
 
 from solradm.api import get_initialized_sesssion
-from solradm.commands import config, core, collections, backups
+from solradm.commands import config, core, collections, backups, auth
 from solradm.commands.zk import editor
 from solradm.exceptions.adm_exception import AdmException
 from solradm.exceptions.solr_exception import SolrException
@@ -24,6 +24,7 @@ app.add_typer(collections.app, name="coll", help="Interact with the Collections 
 app.add_typer(backups.app, name="backup", help="Take or restore backups using the Replication API")
 app.add_typer(config.app, name="context", help="Manage solradm Contexts")
 app.add_typer(editor.app, name="zoo", help="Manage ZooKeeper")
+app.add_typer(auth.app, name="auth", help="Manage Solr authentication")
 
 def run():
     try:

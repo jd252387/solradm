@@ -11,7 +11,7 @@ from rich.table import Table
 from async_typer import AsyncTyper
 
 from solradm.api.models import Collection
-from solradm.api.state import get_nodes_by_role
+from solradm.api.state import get_nodes_by_role, get_collections
 import solradm.api.utils as api_utils
 from solradm.api.utils import validate_num_replicas, get_replicas, send_request
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
@@ -35,7 +35,33 @@ app = AsyncTyper()
 async def depopulate(
         cluster_state: List[Collection]
 ):
-    replicas = validate_num_replicas(get_replicas(cluster_state))
+    replicas = get_replicas(cluster_state)
+
+    table = Table(title="Cluster State", header_style="bold magenta")
+    table.add_column("Collection", style="cyan")
+    table.add_column("Active Shards", justify="right", style="green")
+    table.add_column("Active Replicas", justify="right", style="green")
+
+    total_active_shards = 0
+    total_active_replicas = 0
+    for coll in cluster_state:
+        active_shards = sum(
+            1 for shard in coll.shards if any(r.state == "active" for r in shard.replicas)
+        )
+        active_replicas = sum(
+            1 for shard in coll.shards for r in shard.replicas if r.state == "active"
+        )
+        total_active_shards += active_shards
+        total_active_replicas += active_replicas
+        table.add_row(coll.name, str(active_shards), str(active_replicas))
+
+    table.add_row("[bold]TOTAL[/bold]", str(total_active_shards), str(total_active_replicas), style="bold")
+    rich.print(table)
+
+    if not Confirm.ask("Proceed with removing replicas?"):
+        raise typer.Exit(0)
+
+    replicas = validate_num_replicas(replicas)
     tasks = [
         MetaTask(
             [replica.shard.collection.name, replica.shard.name, replica.name],
@@ -185,3 +211,28 @@ async def create(
 
     if populate_after:
         await populate(dry_run=api_utils.is_dry_run, collection_name_filter=name, node=[node] if node else None, exclude_node=None)
+
+
+@app.async_command()
+@with_dry_run
+async def delete(
+        pattern: str = typer.Argument(..., help="Regex pattern for collection names"),
+):
+    filt = CollectionNameFilter(collection_name_filter=pattern)
+    cluster_state = filt.apply(get_collections())
+    names = [c.name for c in cluster_state]
+    if not names:
+        rich.print("[error] ❌ No collections match the given pattern")
+        raise typer.Exit(1)
+
+    await depopulate(collection_name_filter=pattern, dry_run=api_utils.is_dry_run)
+    if api_utils.is_dry_run:
+        return
+
+    for name in names:
+        await send_request(
+            get_overseer_leader(),
+            "/admin/collections",
+            params={"action": "DELETE", "name": name},
+        )
+        rich.print(f"[success]✅  Deleted collection {name}!")
