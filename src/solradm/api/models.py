@@ -5,7 +5,7 @@ from pydantic import BaseModel, field_validator, ConfigDict, Field
 
 class Router(BaseModel):
     name: str
-    field: str | None
+    field: str | None = None
 
 class CoreCloudDescriptor(BaseModel):
     collection: str
