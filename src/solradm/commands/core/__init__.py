@@ -1,6 +1,8 @@
 import asyncio
+import json
 from typing import List
 
+import rich
 import typer
 from async_typer import AsyncTyper
 
@@ -16,6 +18,7 @@ from solradm.commands.filters.utils import with_cluster_state, with_dry_run
 from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
+from solradm.zk.utils import get_overseer_leader
 
 app = AsyncTyper()
 
@@ -49,3 +52,26 @@ async def reload(
     ]
     metatasks = MultiMetaTask(["host", "core"], tasks)
     await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
+
+
+@app.async_command(help="Execute a query against a collection")
+async def query(
+        collection: str = typer.Argument(..., help="Collection to query"),
+        q: str = typer.Argument(..., help="Lucene query string"),
+        rows: int = typer.Option(10, help="Number of rows to return"),
+        fl: str = typer.Option("*", help="Fields to return"),
+        debug: bool = typer.Option(False, help="Include debug information"),
+):
+    """Query a collection and pretty-print the top results."""
+
+    params = {"q": q, "rows": rows, "fl": fl}
+    if debug:
+        params["debug"] = "true"
+
+    resp = await send_request(get_overseer_leader(), f"/{collection}/select", params=params)
+
+    docs = resp.get("response", {}).get("docs", [])
+    rich.print_json(data=json.dumps(docs))
+
+    if debug and "debug" in resp:
+        rich.print_json(data=json.dumps(resp["debug"]))
