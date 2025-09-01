@@ -28,6 +28,12 @@ app.add_typer(auth.app, name="auth", help="Manage Solr authentication")
 
 def run():
     try:
+        import sys
+
+        top_commands = {"core", "coll", "backup", "context", "zoo", "auth"}
+        if len(sys.argv) >= 2 and not sys.argv[1].startswith("-") and sys.argv[1] not in top_commands:
+            config.switch(sys.argv[1])
+            return
         app()
     except SolrException as e:
         logging.error("Received a fatal error from Solr: %s", e)
