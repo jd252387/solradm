@@ -50,8 +50,8 @@ async def depopulate(
 @with_cluster_state(CollectionNameFilter, ShardFilter)
 async def populate(
         cluster_state: List[Collection],
-        node: List[str] | None = typer.Option(None, "--node", help="Regex to select nodes", multiple=True),
-        exclude_node: List[str] | None = typer.Option(None, "--exclude-node", help="Regex to exclude nodes", multiple=True),
+        node: List[str] | None = typer.Option(None, "--node", help="Regex to select nodes"),
+        exclude_node: List[str] | None = typer.Option(None, "--exclude-node", help="Regex to exclude nodes"),
 ):
     if len(cluster_state) != 1:
         rich.print("[error] ❌ More than one collection has been filtered, and this command requires a singular collection!")
