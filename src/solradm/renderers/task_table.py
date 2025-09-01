@@ -1,15 +1,14 @@
 import asyncio
 from asyncio import Task
-from typing import List
+from enum import Enum
 
 from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
-from enum import Enum
 
-from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.renderers.renderer import Renderer
+from solradm.tasks.multimetatask import MultiMetaTask
 
 
 class TaskResult(Enum):

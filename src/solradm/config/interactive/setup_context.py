@@ -1,5 +1,3 @@
-from typing import Dict
-
 import rich.console
 from kubernetes.config import list_kube_config_contexts
 from rich.prompt import Confirm, Prompt

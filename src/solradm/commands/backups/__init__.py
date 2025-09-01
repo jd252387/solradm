@@ -1,5 +1,5 @@
 import asyncio
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from typing import List, Collection
 
 import rich

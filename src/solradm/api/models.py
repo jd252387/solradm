@@ -1,5 +1,6 @@
 import datetime
-from typing import Literal, List
+from typing import List
+
 from pydantic import BaseModel, field_validator, ConfigDict, Field
 
 

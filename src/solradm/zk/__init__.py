@@ -1,5 +1,7 @@
-from kazoo.client import KazooClient
 import logging
+
+from kazoo.client import KazooClient
+
 from solradm.config.util import get_current_context
 
 logging.getLogger("kazoo").setLevel(logging.CRITICAL)

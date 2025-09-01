@@ -1,9 +1,7 @@
-from urllib.parse import urljoin
 import aiohttp
 from aiohttp import BasicAuth
-import rich
+
 from solradm.config import settings
-from solradm.exceptions.solr_exception import SolrException
 
 _session: aiohttp.ClientSession | None = None
 

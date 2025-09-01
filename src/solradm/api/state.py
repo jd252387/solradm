@@ -4,6 +4,7 @@ from typing import List, Literal, Dict
 from solradm.api.models import Collection
 from solradm.zk import get_client
 
+
 def get_collection_names() -> List[str]:
     zk = get_client()
     collections = zk.get_children("/collections")

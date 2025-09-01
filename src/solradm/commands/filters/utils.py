@@ -2,11 +2,10 @@ import functools
 import inspect
 
 import rich
+import typer
 from rich.panel import Panel
 
 import solradm.api.utils
-import typer
-
 from solradm.api.state import get_collections
 
 

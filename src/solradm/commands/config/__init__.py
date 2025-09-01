@@ -1,18 +1,19 @@
+import subprocess
+import sys
+
 import rich
 import typer
-from async_typer import AsyncTyper
 from kazoo.handlers.threading import KazooTimeoutError
-from kubernetes.config import list_kube_config_contexts
+from rich.pretty import pprint
+from rich.prompt import Confirm
 from typer import Typer
 
-from solradm.config import settings, persist
+from solradm.config import settings, persist, config_path
 from solradm.config.context import Context
 from solradm.config.interactive.setup_context import setup
 from solradm.config.util import get_current_context
 from solradm.kube.utils import get_kubecontext
 from solradm.zk import get_client
-from rich.pretty import pprint
-from rich.prompt import Confirm
 
 app = Typer()
 
@@ -48,6 +49,17 @@ def switch(name: str = typer.Argument(..., help="Context name")) -> bool:
             rich.print(f'Switched to context "{name}"')
     else:
         raise typer.BadParameter(f"Context {name} does not exist!")
+
+
+@app.command()
+def open_config():
+    """Open the configuration directory and highlight the settings file"""
+    if sys.platform.startswith("win"):
+        subprocess.run(["explorer", f"/select,{config_path}"])
+    elif sys.platform == "darwin":
+        subprocess.run(["open", "-R", str(config_path)])
+    else:
+        subprocess.run(["xdg-open", str(config_path.parent)])
 
 
 @app.command()

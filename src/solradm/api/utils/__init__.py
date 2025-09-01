@@ -1,11 +1,13 @@
 from typing import List, Any
 from urllib.parse import urljoin, urlparse, urlunparse
+
 import rich
 import typer
 
 from solradm.api import get_session
 from solradm.api.models import Collection, Replica, Core
 from solradm.exceptions.solr_exception import SolrException
+
 
 def get_collections_using_config(cluster_state: List[Collection], config_name: str) -> List[Collection]:
     return [collection for collection in cluster_state if collection.configName == config_name]

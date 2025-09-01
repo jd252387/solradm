@@ -6,13 +6,13 @@ from typing import List
 
 import rich
 import typer
+from async_typer import AsyncTyper
 from rich.prompt import Confirm
 from rich.table import Table
-from async_typer import AsyncTyper
 
+import solradm.api.utils as api_utils
 from solradm.api.models import Collection
 from solradm.api.state import get_nodes_by_role, get_collections
-import solradm.api.utils as api_utils
 from solradm.api.utils import validate_num_replicas, get_replicas, send_request
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
@@ -20,12 +20,12 @@ from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
 from solradm.commands.filters.replica_type_filter import ReplicaTypeFilter
 from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
+from solradm.commands.zk.utils import create_or_update, get_relative_znode_path
 from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
-from solradm.zk.utils import get_overseer_leader
-from solradm.commands.zk.utils import create_or_update, get_relative_znode_path
 from solradm.zk import get_client
+from solradm.zk.utils import get_overseer_leader
 
 app = AsyncTyper()
 

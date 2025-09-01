@@ -1,7 +1,7 @@
 import re
 from typing import Any, List
 
-from kubernetes.client import CoreV1Api, V1PodList, V1Pod, api
+from kubernetes.client import CoreV1Api, V1PodList, V1Pod
 from kubernetes.config import list_kube_config_contexts, load_kube_config
 from kubernetes.stream import stream
 

@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Annotated
+from typing import List
 
 import typer
 from async_typer import AsyncTyper
