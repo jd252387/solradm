@@ -1,5 +1,5 @@
 import json
-from typing import List
+from typing import List, Literal, Dict
 
 from solradm.api.models import Collection
 from solradm.zk import get_client
@@ -21,3 +21,11 @@ def get_collection_state(collection: str) -> Collection:
 def get_collections() -> List[Collection]:
     collection_names = get_collection_names()
     return [get_collection_state(collection) for collection in collection_names]
+
+def get_nodes_by_role(role: Literal["coordinator", "data", "overseer"]) -> Dict[str, str]:
+    states = get_client().get_children(f"/node_roles/{role}")
+    state_to_node = {}
+    for state in states:
+        state_to_node[state] = get_client().get_children(f"/node_roles/{role}/{state}")
+
+    return state_to_node

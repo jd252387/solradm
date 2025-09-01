@@ -1,15 +1,31 @@
+import datetime
 from typing import Literal, List
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ConfigDict, Field
+
 
 class Router(BaseModel):
     name: str
     field: str | None
 
-class Node(BaseModel):
+class CoreCloudDescriptor(BaseModel):
+    collection: str
+    shard: str
+    replica: str
+    replicaType: str
+
+class Core(BaseModel):
     name: str
-    coordinator_role: bool
-    data_role: bool
-    overseer_role: Literal["allowed", "disallowed", "preferred"]
+    instanceDir: str
+    dataDir: str
+    config: str
+    schema_: str = Field(alias="schema")
+    startTime: datetime.datetime
+    uptime: int
+    lastPublished: str
+    configVersion: int
+    cloud: CoreCloudDescriptor
+    # index information may come in the core json
+    model_config = ConfigDict(extra="ignore")
 
 class Replica(BaseModel):
     name: str
@@ -20,11 +36,13 @@ class Replica(BaseModel):
     leader: bool
     force_set_state: bool
     base_url: str
+    shard: 'Shard | None' = None
 
 class Shard(BaseModel):
     name: str
     range: str
     replicas: List[Replica]
+    collection: 'Collection | None' = None
     
     @field_validator('replicas', mode='before')
     @classmethod
@@ -36,6 +54,10 @@ class Shard(BaseModel):
                 for replica_name, replica_data in v.items()
             ]
         return v
+
+    def model_post_init(self, __context):
+        for replica in self.replicas:
+            replica.shard = self
 
 class Collection(BaseModel):
     name: str
@@ -57,3 +79,7 @@ class Collection(BaseModel):
                 for shard_name, shard_data in v.items()
             ]
         return v
+
+    def model_post_init(self, __context):
+        for shard in self.shards:
+            shard.collection = self

@@ -3,9 +3,8 @@ import logging
 from async_typer import AsyncTyper
 from rich.logging import RichHandler
 
-from solradm.api import get_session, get_initialized_sesssion
-from solradm.commands import config
-from solradm.commands.core import cores
+from solradm.api import get_initialized_sesssion
+from solradm.commands import config, core, collections, backups
 from solradm.commands.zk import editor
 from solradm.exceptions.adm_exception import AdmException
 from solradm.exceptions.solr_exception import SolrException
@@ -20,7 +19,9 @@ logging.basicConfig(
 
 app = AsyncTyper()
 
-app.add_typer(cores.app, name="core", help="Interact with the Core API")
+app.add_typer(core.app, name="core", help="Interact with the Core API")
+app.add_typer(collections.app, name="coll", help="Interact with the Collections API")
+app.add_typer(backups.app, name="backup", help="Take or restore backups using the Replication API")
 app.add_typer(config.app, name="context", help="Manage solradm Contexts")
 app.add_typer(editor.app, name="zoo", help="Manage ZooKeeper")
 

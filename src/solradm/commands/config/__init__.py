@@ -122,10 +122,8 @@ def edit(
 
     for context in settings.contexts.available:
         if context.name == name:
-            if zk:
-                context.zk = zk
-            if kubecontext:
-                context.kubecontext = kubecontext
+            new_context = Context(name, zk=zk if zk else context.zk, kubecontext=kubecontext if kubecontext else context.kubecontext)
+            settings.contexts.available = [context for context in settings.contexts.available if context.name != name] + [new_context.as_dict()]
             break
 
     persist()
