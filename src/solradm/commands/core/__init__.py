@@ -19,13 +19,15 @@ from solradm.tasks.multimetatask import MultiMetaTask
 
 app = AsyncTyper()
 
-@app.async_command()
+@app.async_command(help="Reload cores for filtered replicas")
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def reload(
         cluster_state: List[Collection],
         coordinators: bool = typer.Option(True, help="Also reload coordinators")
 ):
+    """Reload the specified cores and optionally coordinators."""
+
     replicas = get_replicas(cluster_state)
     if coordinators:
         coordinator_nodes = get_nodes_by_role("coordinator")["on"]

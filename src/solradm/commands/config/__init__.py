@@ -19,6 +19,8 @@ app = Typer()
 
 @app.command()
 def current():
+    """Show the currently active context."""
+
     pprint(get_current_context())
 
 
@@ -37,6 +39,8 @@ def _verify_zk_connection() -> bool:
 
 @app.command()
 def switch(name: str = typer.Argument(..., help="Context name")) -> bool:
+    """Switch to an existing context."""
+
     if name in [context.name for context in settings.contexts.available]:
         settings.contexts.current = {"name": name}
         if _verify_zk_connection():
@@ -51,6 +55,8 @@ def connect(
     zk: str = typer.Argument(..., help="ZooKeeper Host"),
     kubecontext: str = typer.Option(None, help="Kubernetes context"),
 ):
+    """Temporarily connect to a ZooKeeper host."""
+
     settings.contexts.current = {"zk": zk}
 
     if kubecontext:
@@ -67,6 +73,8 @@ def connect(
 
 @app.command()
 def save(name: str = typer.Argument(..., help="Context name")):
+    """Persist the current temporary context under a new name."""
+
     if "name" not in settings.contexts.current:
         add(
             name,
@@ -88,6 +96,8 @@ def add(
     ),
     interactive: bool = typer.Option(False, help="Interactive setup mode"),
 ):
+    """Add a new named context."""
+
     if name in [context.name for context in settings.contexts.available]:
         raise typer.BadParameter(f"Context {name} already exists!")
 
@@ -111,6 +121,8 @@ def edit(
         None, "-k", "--kubecontext", help="Target Kubecontext"
     ),
 ):
+    """Modify an existing context."""
+
     if name not in [context.name for context in settings.contexts.available]:
         raise typer.BadParameter(f"Context {name} does not exist!")
 
@@ -131,7 +143,9 @@ def edit(
 
 
 @app.command()
-def delete(name: str = typer.Argument(...)):
+def delete(name: str = typer.Argument(..., help="Context name")):
+    """Remove a saved context."""
+
     if name not in [context.name for context in settings.contexts.available]:
         raise typer.BadParameter(f"Context {name} does not exist!")
 
@@ -140,3 +154,4 @@ def delete(name: str = typer.Argument(...)):
     ]
     persist()
     rich.print(f"[success]✅  Deleted context {name}!")
+

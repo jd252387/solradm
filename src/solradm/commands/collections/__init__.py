@@ -29,12 +29,14 @@ from solradm.zk import get_client
 
 app = AsyncTyper()
 
-@app.async_command()
+@app.async_command(help="Remove replicas for filtered collections")
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def depopulate(
         cluster_state: List[Collection]
 ):
+    """Remove replicas from the selected collections."""
+
     replicas = get_replicas(cluster_state)
 
     table = Table(title="Cluster State", header_style="bold magenta")
@@ -76,7 +78,7 @@ async def depopulate(
     await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
 
 
-@app.async_command()
+@app.async_command(help="Add replicas to a collection across selected nodes")
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter)
 async def populate(
@@ -84,6 +86,8 @@ async def populate(
         node: List[str] | None = typer.Option(None, "--node", help="Regex to select nodes"),
         exclude_node: List[str] | None = typer.Option(None, "--exclude-node", help="Regex to exclude nodes"),
 ):
+    """Populate a single collection with replicas across nodes."""
+
     if len(cluster_state) != 1:
         rich.print("[error] ❌ More than one collection has been filtered, and this command requires a singular collection!")
         raise typer.Exit(1)
@@ -176,7 +180,7 @@ async def populate(
     await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
 
 
-@app.async_command()
+@app.async_command(help="Create a new collection")
 @with_dry_run
 async def create(
         name: str = typer.Argument(..., help="Name of the collection"),
@@ -189,6 +193,8 @@ async def create(
         populate_after: bool = typer.Option(False, "--populate", help="Populate the collection after creation"),
         node: str | None = typer.Option(None, "--node", help="Regex to select nodes for populate"),
 ):
+    """Create a collection in Solr."""
+
     if upload_conf:
         for f in Path(upload_conf).rglob("*"):
             if f.is_file():
@@ -213,11 +219,13 @@ async def create(
         await populate(dry_run=api_utils.is_dry_run, collection_name_filter=name, node=[node] if node else None, exclude_node=None)
 
 
-@app.async_command()
+@app.async_command(help="Delete collections matching a pattern")
 @with_dry_run
 async def delete(
         pattern: str = typer.Argument(..., help="Regex pattern for collection names"),
 ):
+    """Delete collections and their replicas."""
+
     filt = CollectionNameFilter(collection_name_filter=pattern)
     cluster_state = filt.apply(get_collections())
     names = [c.name for c in cluster_state]
@@ -236,3 +244,4 @@ async def delete(
             params={"action": "DELETE", "name": name},
         )
         rich.print(f"[success]✅  Deleted collection {name}!")
+

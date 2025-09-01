@@ -23,7 +23,7 @@ from solradm.zk.utils import get_overseer_leader
 app = AsyncTyper()
 
 
-@app.async_command()
+@app.async_command(help="Create backups for filtered replicas")
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def take(
@@ -35,6 +35,8 @@ async def take(
         create_directories=typer.Option(True,
                                         help="If set, required folders will be created via the kubecontext. This requires a kubecontext to be set, so set this to false and manually create the folders if you don't have one.")
 ):
+    """Create backups of the specified shards."""
+
     replicas = validate_num_replicas(get_replicas(cluster_state))
     base_location = PurePosixPath(base_location_str)
 
@@ -68,6 +70,8 @@ async def restore(
         cluster_state: List[Collection],
         backups_path_str: str = typer.Option(..., "--location",
                                              help="Directory which contains the shard directories. This directory must have subdirectories named shard1, shard2... which contain the backups.")):
+    """Restore backups for the selected collection."""
+
     if len(cluster_state) > 1:
         rich.print(
             "[error] ❌ More than one collection has been filtered, and this command requires a singular collection or a part of it! ")
@@ -87,3 +91,4 @@ async def restore(
     ]
     metatasks = MultiMetaTask(["collection", "shard", "core"], tasks)
     await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
+
