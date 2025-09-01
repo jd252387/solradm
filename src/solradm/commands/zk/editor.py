@@ -2,7 +2,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 import rich
 import typer
@@ -12,12 +12,12 @@ from watchdog.observers import Observer
 
 from solradm.commands.zk.utils import (
     open_vscode,
-    create_or_update,
-    get_relative_znode_path,
+    upload_to_zk,
 )
 from solradm.commands.zk.utils.sync_handler import ZooKeeperSyncHandler
 from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
 from solradm.zk import get_client
+from solradm.config.util import get_configsets_dir
 
 app = typer.Typer()
 
@@ -125,28 +125,23 @@ def edit(
 
 @app.command()
 def upload(
-    paths: List[Path] = typer.Argument(
-        ..., exists=True, resolve_path=True, help="Paths to copy to ZooKeeper"
+    paths: List[Path] | None = typer.Argument(
+        None,
+        exists=True,
+        resolve_path=True,
+        help="Paths to copy to ZooKeeper (defaults to the configsets directory)",
     ),
     znode_path: str = typer.Option("/configs", help="Path of the zNode to copy"),
 ):
     """Upload local files or directories to a ZooKeeper znode."""
 
-    file_paths: List[Tuple[Path, Path]] = []
-
-    for path in paths:
-        if path.is_file():
-            file_paths.append((path, path))
-        elif path.is_dir():
-            for sub_file in path.rglob("*"):
-                if sub_file.is_file():
-                    file_paths.append((path, sub_file))
-
-    for file_path in file_paths:
-        with open(file_path[1], "rb") as f:
-            create_or_update(
-                get_client(),
-                get_relative_znode_path(znode_path, str(file_path[0]), str(file_path[1])),
-                f.read(),
+    if not paths:
+        try:
+            paths = [get_configsets_dir()]
+        except Exception:
+            raise typer.BadParameter(
+                "Please configure a valid configuration directory using 'solradm config edit-configdir'"
             )
+
+    upload_to_zk(paths, znode_path)
 

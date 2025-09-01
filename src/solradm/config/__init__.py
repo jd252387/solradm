@@ -55,12 +55,17 @@ Please use your personal Solr administration token.""")
     auth = setup_solrauth.setup()
     settings.set("auth", {"user": auth.login, "password": auth.password})
 
+    rich.print("Now let's set up your default configuration directory. It must contain 'root' and 'configsets' subdirectories.")
+    from solradm.config.interactive import setup_configdir
+    conf_dir = setup_configdir.setup()
+    settings.set("local_config_dir", str(conf_dir))
+
     persist()
 
     rich.print(
-        f"""Great! You have set-up a new solradm context named [red]{new_context.name}[/], and authentication using the [red]{auth.login}[/] token!
+        f"""Great! You have set-up a new solradm context named [red]{new_context.name}[/], authentication using the [red]{auth.login}[/] token, and configured your default configuration directory at [red]{conf_dir}[/]!
 There are many commands to manage contexts. Type [purple italic]solradm context --help[/] to see them all.
-[dim italic]* Note - the command you entered was intentionally not ran, since you didn't have a context set-up. Please re-run it. 
+[dim italic]* Note - the command you entered was intentionally not ran, since you didn't have a context set-up. Please re-run it.
         """
     )
 

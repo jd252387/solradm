@@ -1,5 +1,6 @@
 import subprocess
 import sys
+from pathlib import Path
 
 import rich
 import typer
@@ -12,7 +13,7 @@ from solradm import completion
 from solradm.config import settings, persist, config_path
 from solradm.config.context import Context
 from solradm.config.interactive.setup_context import setup
-from solradm.config.util import get_current_context
+from solradm.config.util import get_current_context, is_valid_config_dir
 from solradm.kube.utils import get_kubecontext
 from solradm.zk import get_client
 
@@ -65,6 +66,23 @@ def open_config():
         subprocess.run(["open", "-R", str(config_path)])
     else:
         subprocess.run(["xdg-open", str(config_path.parent)])
+
+
+@app.command("edit-configdir")
+def edit_configdir(
+    path: Path = typer.Argument(
+        ..., exists=True, file_okay=False, dir_okay=True, resolve_path=True
+    ),
+):
+    """Modify the default configuration directory."""
+
+    if not is_valid_config_dir(path):
+        raise typer.BadParameter(
+            "Configuration directory must contain 'root' and 'configsets' subdirectories"
+        )
+    settings.local_config_dir = str(path)
+    persist()
+    rich.print(f"[success]✅  Updated configuration directory to {path}!")
 
 
 @app.command()

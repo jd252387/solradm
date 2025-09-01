@@ -1,7 +1,6 @@
 import asyncio
 import re
 from collections import Counter
-from pathlib import Path
 from typing import List
 
 import rich
@@ -21,7 +20,8 @@ from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
 from solradm.commands.filters.replica_type_filter import ReplicaTypeFilter
 from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
-from solradm.commands.zk.utils import create_or_update, get_relative_znode_path
+from solradm.commands.zk.utils import upload_to_zk
+from solradm.config.util import resolve_config_path
 from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
@@ -202,9 +202,10 @@ async def create(
             help="Configuration name in ZooKeeper",
             autocompletion=completion.config_names,
         ),
-        upload_conf: Path | None = typer.Option(
-            None, "--upload-conf", exists=True, file_okay=False, dir_okay=True, resolve_path=True,
-            help="Path to configuration directory to upload before creation"
+        upload_conf: str | None = typer.Option(
+            None,
+            "--upload-conf",
+            help="Configuration directory or name to upload before creation",
         ),
         populate_after: bool = typer.Option(False, "--populate", help="Populate the collection after creation"),
         node: str | None = typer.Option(
@@ -217,14 +218,13 @@ async def create(
     """Create a collection in Solr."""
 
     if upload_conf:
-        for f in Path(upload_conf).rglob("*"):
-            if f.is_file():
-                with open(f, "rb") as fh:
-                    create_or_update(
-                        get_client(),
-                        get_relative_znode_path(f"/configs/{conf}", str(upload_conf), str(f)),
-                        fh.read(),
-                    )
+        try:
+            local_dir = resolve_config_path(upload_conf)
+        except FileNotFoundError:
+            raise typer.BadParameter(
+                f'Configuration "{upload_conf}" not found'
+            )
+        upload_to_zk([local_dir], f"/configs/{conf}")
 
     params = {
         "action": "CREATE",
