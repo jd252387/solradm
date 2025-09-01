@@ -130,6 +130,8 @@ def upload(
     ),
     znode_path: str = typer.Option("/configs", help="Path of the zNode to copy"),
 ):
+    """Upload local files or directories to a ZooKeeper znode."""
+
     file_paths: List[Tuple[Path, Path]] = []
 
     for path in paths:
@@ -142,4 +144,9 @@ def upload(
 
     for file_path in file_paths:
         with open(file_path[1], "rb") as f:
-            create_or_update(get_client(), get_relative_znode_path(znode_path, str(file_path[0]), str(file_path[1])), f.read())
+            create_or_update(
+                get_client(),
+                get_relative_znode_path(znode_path, str(file_path[0]), str(file_path[1])),
+                f.read(),
+            )
+
