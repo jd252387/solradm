@@ -4,6 +4,7 @@ from typing import List, Optional
 
 import typer
 
+from solradm import completion
 from solradm.api.models import Collection
 from solradm.commands.filters.filter import Filter
 
@@ -18,6 +19,7 @@ class ShardFilter(Filter):
                 None,
                 "--shards",
                 help="Shard numbers to include (e.g. '1,3-5,2+3-7,+4-16')",
+                autocompletion=completion.shard_numbers,
             )
         },
     )
@@ -28,6 +30,7 @@ class ShardFilter(Filter):
                 None,
                 "--exclude-shards",
                 help="Shard numbers to exclude",
+                autocompletion=completion.shard_numbers,
             )
         },
     )

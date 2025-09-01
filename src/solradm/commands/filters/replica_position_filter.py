@@ -4,6 +4,7 @@ from typing import Optional, List
 
 import typer
 
+from solradm import completion
 from solradm.api.models import Collection
 from solradm.commands.filters.filter import Filter
 
@@ -18,6 +19,7 @@ class ReplicaPositionFilter(Filter):
                 None,
                 "--replica-position",
                 help="Select only the replica at this 1-indexed position",
+                autocompletion=completion.replica_positions,
             )
         },
     )
@@ -28,6 +30,7 @@ class ReplicaPositionFilter(Filter):
                 None,
                 "--exclude-replica-position",
                 help="Exclude the replica at this 1-indexed position",
+                autocompletion=completion.replica_positions,
             )
         },
     )

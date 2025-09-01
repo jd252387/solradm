@@ -8,6 +8,7 @@ from rich.pretty import pprint
 from rich.prompt import Confirm
 from typer import Typer
 
+from solradm import completion
 from solradm.config import settings, persist, config_path
 from solradm.config.context import Context
 from solradm.config.interactive.setup_context import setup
@@ -39,7 +40,11 @@ def _verify_zk_connection() -> bool:
 
 
 @app.command()
-def switch(name: str = typer.Argument(..., help="Context name")) -> bool:
+def switch(
+    name: str = typer.Argument(
+        ..., help="Context name", autocompletion=completion.context_names
+    )
+) -> bool:
     """Switch to an existing context."""
 
     if name in [context.name for context in settings.contexts.available]:
@@ -65,7 +70,9 @@ def open_config():
 @app.command()
 def connect(
     zk: str = typer.Argument(..., help="ZooKeeper Host"),
-    kubecontext: str = typer.Option(None, help="Kubernetes context"),
+    kubecontext: str = typer.Option(
+        None, help="Kubernetes context", autocompletion=completion.kube_contexts
+    ),
 ):
     """Temporarily connect to a ZooKeeper host."""
 
@@ -104,7 +111,11 @@ def add(
     name: str = typer.Argument(..., help="Context name"),
     zk: str = typer.Option(..., "-z", "--zk", help="ZooKeeper address"),
     kubecontext: str = typer.Option(
-        None, "-k", "--kubecontext", help="Target Kubecontext"
+        None,
+        "-k",
+        "--kubecontext",
+        help="Target Kubecontext",
+        autocompletion=completion.kube_contexts,
     ),
     interactive: bool = typer.Option(False, help="Interactive setup mode"),
 ):
@@ -127,10 +138,16 @@ def add(
 
 @app.command()
 def edit(
-    name: str = typer.Argument(..., help="Context name"),
+    name: str = typer.Argument(
+        ..., help="Context name", autocompletion=completion.context_names
+    ),
     zk: str = typer.Option(None, "-z", "--zk", help="ZooKeeper address"),
     kubecontext: str = typer.Option(
-        None, "-k", "--kubecontext", help="Target Kubecontext"
+        None,
+        "-k",
+        "--kubecontext",
+        help="Target Kubecontext",
+        autocompletion=completion.kube_contexts,
     ),
 ):
     """Modify an existing context."""
@@ -155,7 +172,11 @@ def edit(
 
 
 @app.command()
-def delete(name: str = typer.Argument(..., help="Context name")):
+def delete(
+    name: str = typer.Argument(
+        ..., help="Context name", autocompletion=completion.context_names
+    )
+):
     """Remove a saved context."""
 
     if name not in [context.name for context in settings.contexts.available]:

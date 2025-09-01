@@ -11,6 +11,7 @@ from rich.prompt import Confirm
 from rich.table import Table
 
 import solradm.api.utils as api_utils
+from solradm import completion
 from solradm.api.models import Collection
 from solradm.api.state import get_nodes_by_role, get_collections
 from solradm.api.utils import validate_num_replicas, get_replicas, send_request
@@ -83,8 +84,18 @@ async def depopulate(
 @with_cluster_state(CollectionNameFilter, ShardFilter)
 async def populate(
         cluster_state: List[Collection],
-        node: List[str] | None = typer.Option(None, "--node", help="Regex to select nodes"),
-        exclude_node: List[str] | None = typer.Option(None, "--exclude-node", help="Regex to exclude nodes"),
+        node: List[str] | None = typer.Option(
+            None,
+            "--node",
+            help="Regex to select nodes",
+            autocompletion=completion.node_names,
+        ),
+        exclude_node: List[str] | None = typer.Option(
+            None,
+            "--exclude-node",
+            help="Regex to exclude nodes",
+            autocompletion=completion.node_names,
+        ),
 ):
     """Populate a single collection with replicas across nodes."""
 
@@ -185,13 +196,23 @@ async def populate(
 async def create(
         name: str = typer.Argument(..., help="Name of the collection"),
         shards: int = typer.Option(..., "--shards", help="Number of shards"),
-        conf: str = typer.Option(..., "--conf", help="Configuration name in ZooKeeper"),
+        conf: str = typer.Option(
+            ...,
+            "--conf",
+            help="Configuration name in ZooKeeper",
+            autocompletion=completion.config_names,
+        ),
         upload_conf: Path | None = typer.Option(
             None, "--upload-conf", exists=True, file_okay=False, dir_okay=True, resolve_path=True,
             help="Path to configuration directory to upload before creation"
         ),
         populate_after: bool = typer.Option(False, "--populate", help="Populate the collection after creation"),
-        node: str | None = typer.Option(None, "--node", help="Regex to select nodes for populate"),
+        node: str | None = typer.Option(
+            None,
+            "--node",
+            help="Regex to select nodes for populate",
+            autocompletion=completion.node_names,
+        ),
 ):
     """Create a collection in Solr."""
 

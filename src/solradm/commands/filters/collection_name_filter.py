@@ -5,6 +5,7 @@ from typing import Optional, List
 import typer
 from rich.prompt import Confirm
 
+from solradm import completion
 from solradm.api.models import Collection
 from solradm.commands.filters.filter import Filter
 
@@ -15,7 +16,12 @@ class CollectionNameFilter(Filter):
     collection_name_filter: Optional[str] = field(
         default=None,
         metadata={
-            "typer_option": typer.Option(None, "--collection", help="Regex pattern to filter collections by name")
+            "typer_option": typer.Option(
+                None,
+                "--collection",
+                help="Regex pattern to filter collections by name",
+                autocompletion=completion.collection_names,
+            )
         }
     )
 

@@ -3,6 +3,7 @@ from typing import Optional, List
 
 import typer
 
+from solradm import completion
 from solradm.api.models import Collection
 from solradm.commands.filters.filter import Filter
 
@@ -17,6 +18,7 @@ class ReplicaStateFilter(Filter):
                 None,
                 "--replica-state",
                 help="Replica state to include: 'active', 'down', 'recovering', 'recovery_failed'",
+                autocompletion=completion.replica_states,
             )
         },
     )
@@ -27,6 +29,7 @@ class ReplicaStateFilter(Filter):
                 None,
                 "--exclude-replica-state",
                 help="Replica state to exclude: 'active', 'down', 'recovering', 'recovery_failed'",
+                autocompletion=completion.replica_states,
             )
         },
     )
