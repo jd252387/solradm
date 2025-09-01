@@ -1,7 +1,7 @@
 import asyncio
 import re
 from collections import Counter
-from typing import List, Collection
+from typing import List
 
 import rich
 import typer
@@ -9,6 +9,7 @@ from rich.prompt import Confirm
 from rich.table import Table
 from async_typer import AsyncTyper
 
+from solradm.api.models import Collection
 from solradm.api.state import get_nodes_by_role
 from solradm.api.utils import validate_num_replicas, get_replicas, send_request
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
@@ -50,8 +51,8 @@ async def depopulate(
 @with_cluster_state(CollectionNameFilter, ShardFilter)
 async def populate(
         cluster_state: List[Collection],
-        node: List[str] | None = typer.Option(None, "--node", help="Regex to select nodes", multiple=True),
-        exclude_node: List[str] | None = typer.Option(None, "--exclude-node", help="Regex to exclude nodes", multiple=True),
+        node: List[str] | None = typer.Option(None, "--node", help="Regex to select nodes"),
+        exclude_node: List[str] | None = typer.Option(None, "--exclude-node", help="Regex to exclude nodes"),
 ):
     if len(cluster_state) != 1:
         rich.print("[error] ❌ More than one collection has been filtered, and this command requires a singular collection!")

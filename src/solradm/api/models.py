@@ -33,7 +33,7 @@ class Replica(BaseModel):
     node_name: str
     type: str
     state: str
-    leader: bool
+    leader: bool = False
     force_set_state: bool
     base_url: str
     shard: 'Shard | None' = None
