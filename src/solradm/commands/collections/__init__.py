@@ -1,7 +1,7 @@
 import asyncio
 import re
 from collections import Counter, defaultdict
-from typing import List, Collection
+from typing import List
 
 import rich
 import typer
@@ -9,6 +9,7 @@ from rich.prompt import Confirm
 from rich.table import Table
 from async_typer import AsyncTyper
 
+from solradm.api.models import Collection
 from solradm.api.state import get_nodes_by_role
 from solradm.api.utils import validate_num_replicas, get_replicas, send_request
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
