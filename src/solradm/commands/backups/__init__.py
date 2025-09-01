@@ -61,7 +61,7 @@ async def take(
     await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
 
 
-@app.async_command(help="Restore backups. [red] This command requires only one collection to be filtered!")
+@app.async_command(help="Restore backups. This command requires only one collection to be filtered!")
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def restore(

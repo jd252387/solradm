@@ -7,6 +7,8 @@ from solradm.api import get_session
 from solradm.api.models import Collection, Replica, Core
 from solradm.exceptions.solr_exception import SolrException
 
+def get_collections_using_config(cluster_state: List[Collection], config_name: str) -> List[Collection]:
+    return [collection for collection in cluster_state if collection.configName == config_name]
 
 def get_replicas(cluster_state: List[Collection]) -> List[Replica]:
     replicas = []
@@ -38,8 +40,11 @@ async def send_request(host: str, endpoint: str, params: dict = None, dry_output
         return dry_output
 
     url = urljoin(get_host_with_scheme(host, "http"), "/solr" + endpoint)
-    resp = await get_session().get(url,
-                                   params=params)
+    try:
+        resp = await get_session().get(url, params=params)
+    except Exception as e:
+        rich.print(f"[error]  ❌ Encountered networking error while sending request: {e}")
+        raise e
     json = await resp.json()
     if not resp.ok or not json["responseHeader"]["status"] == 0:
         rich.print(f"[error]❌  Error received from Solr for request to {url} with params {params}:\n[yellow]{json["error"]["msg"]}")

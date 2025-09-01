@@ -1,21 +1,13 @@
-import hashlib
-import os
-import shutil
 import subprocess
 import tempfile
-import threading
 import time
 from pathlib import Path
 from typing import List, Tuple
 
 import rich
 import typer
-from kazoo.client import KazooClient
-from kazoo.exceptions import NoNodeError
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.text import Text
-from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from solradm.commands.zk.utils import (
@@ -40,6 +32,7 @@ def edit(
     no_vscode: bool = typer.Option(
         False, "--no-vscode", help="Don't open VSCode automatically"
     ),
+    reload: bool = typer.Option(False, "--reload", help="Automatically reloads collections whose configs have been edited, in real-time up to sync-interval")
 ):
     """Interactively view and edit ZooKeeper."""
 
@@ -86,7 +79,7 @@ def edit(
 
             # Create watchdog observer
             event_handler = ZooKeeperSyncHandler(
-                get_client(), temp_dir, znode_path, sync_interval
+                get_client(), temp_dir, znode_path, sync_interval, reload=True
             )
             observer = Observer()
             observer.schedule(event_handler, temp_dir, recursive=True)

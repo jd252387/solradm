@@ -22,17 +22,19 @@ app = AsyncTyper()
 @app.async_command()
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
-async def full_reload(
-        cluster_state: List[Collection]
+async def reload(
+        cluster_state: List[Collection],
+        coordinators: bool = typer.Option(True, help="Also reload coordinators")
 ):
     replicas = get_replicas(cluster_state)
-    coordinator_nodes = get_nodes_by_role("coordinator")["on"]
-    for node in coordinator_nodes:
-        cores = await get_cores_from_node(node)
-        for core in cores:
-            replicas.append(
-                Replica(name=core.cloud.replica, core=core.name, node_name=node, type=core.cloud.replicaType,
-                        state=core.lastPublished, leader=True, force_set_state=False, base_url=node))
+    if coordinators:
+        coordinator_nodes = get_nodes_by_role("coordinator")["on"]
+        for node in coordinator_nodes:
+            cores = await get_cores_from_node(node)
+            for core in cores:
+                replicas.append(
+                    Replica(name=core.cloud.replica, core=core.name, node_name=node, type=core.cloud.replicaType,
+                            state=core.lastPublished, leader=True, force_set_state=False, base_url=node))
 
     validate_num_replicas(replicas)
 

@@ -1,5 +1,7 @@
+import asyncio
 import hashlib
 import os
+import re
 import threading
 import time
 
@@ -7,6 +9,10 @@ import rich
 from kazoo.client import KazooClient
 from watchdog.events import FileSystemEventHandler
 
+from solradm.api import get_initialized_sesssion
+from solradm.api.state import get_collections
+from solradm.api.utils import get_collections_using_config
+from solradm.commands.core import reload
 from solradm.commands.zk.utils import create_or_update, get_relative_znode_path
 
 
@@ -14,16 +20,18 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
     """Watchdog handler for syncing local changes back to ZooKeeper."""
 
     def __init__(
-        self,
-        zk: KazooClient,
-        temp_dir: str,
-        znode_path: str,
-        sync_interval: int = 5,
+            self,
+            zk: KazooClient,
+            temp_dir: str,
+            znode_path: str,
+            sync_interval: int = 5,
+            reload: bool = False,
     ):
         self.zk = zk
         self.temp_dir = temp_dir
         self.znode_path = znode_path
         self.sync_interval = sync_interval
+        self.reload = reload
         self.last_sync = 0
         self.pending_changes = dict()
         self.modification_hashes = dict()
@@ -35,7 +43,11 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
 
     def on_modified(self, event):
         if not event.is_directory:
-            edit_hash = hashlib.md5(open(event.src_path, "rb").read()).hexdigest()
+            contents = open(event.src_path, "rb").read()
+            if not contents:
+                return
+
+            edit_hash = hashlib.md5(contents).hexdigest()
 
             if self.modification_hashes.get(event.src_path) != edit_hash:
                 self._schedule_sync(event.src_path, "modified")
@@ -50,17 +62,17 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
         rich.print(f"🔄 [yellow]{change_type}: [green] {file_path}")
         current_time = time.time()
         self.pending_changes[file_path] = change_type
-        lastSyncDelta = current_time - self.last_sync
+        last_sync_delta = current_time - self.last_sync
 
-        if lastSyncDelta >= self.sync_interval:
+        if last_sync_delta >= self.sync_interval:
             self._sync_changes()
         else:
             if not self.scheduled_sync or not self.scheduled_sync.is_alive():
                 self.scheduled_sync = threading.Timer(
-                    self.sync_interval - lastSyncDelta, self._sync_changes
+                    self.sync_interval - last_sync_delta, self._sync_changes
                 )
                 rich.print(
-                    f"[blue]🔄 Scheduling sync in {self.sync_interval - lastSyncDelta} seconds"
+                    f"[blue]🔄 Scheduling sync in {self.sync_interval - last_sync_delta} seconds"
                 )
                 self.scheduled_sync.start()
 
@@ -73,21 +85,34 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
             f"[blue]🔄 Syncing {len(self.pending_changes)} changes to ZooKeeper..."
         )
 
+        to_reload = []
+
         for file_path, change_type in self.pending_changes.items():
             try:
-                self._sync_file_change(file_path, change_type)
+                zk_path = get_relative_znode_path(self.znode_path, self.temp_dir, file_path)
+                self._sync_file_change(file_path, zk_path, change_type)
+
+                if self.reload:
+                    split_path = zk_path.split("/")
+                    if split_path[0] == "configs":
+                        to_reload.extend(get_collections_using_config(get_collections(), split_path[1]))
             except Exception as e:
                 rich.print(f"[error]❌ Error syncing {file_path}: {e}")
+
+        if to_reload:
+            asyncio.run(reload(
+                collection_name_filter=r"^(" + "|".join(re.escape(collection.name) for collection in to_reload) + r")$",
+                dry_run=False))
+            asyncio.run(get_initialized_sesssion().close())
 
         self.pending_changes.clear()
         self.modification_hashes.clear()
         self.last_sync = time.time()
         rich.print("[success]✅ Sync completed")
 
-    def _sync_file_change(self, file_path: str, change_type: str):
+    def _sync_file_change(self, file_path: str, zk_path: str, change_type: str):
         """Sync a single file change to ZooKeeper."""
         # Calculate relative path from temp directory
-        zk_path = get_relative_znode_path(self.znode_path, self.temp_dir, file_path)
 
         if change_type == "created" or change_type == "modified":
             # Create or update zNode
