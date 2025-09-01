@@ -29,7 +29,7 @@ app = AsyncTyper()
 async def take(
         cluster_state: List[Collection],
         base_location_str: str = typer.Option("/mnt/backups", "--location",
-                                   help="Base location on each node's disk to place the backup. Each backup will be created under location/collection_name/shard_number"),
+                                              help="Base location on each node's disk to place the backup. Each backup will be created under location/collection_name/shard_number"),
         number_to_keep=typer.Option(None,
                                     help="Number of previous backups to keep. If more backups than the specified number exist in the directory, the oldest ones will be deleted."),
         create_directories=typer.Option(True,
@@ -43,7 +43,8 @@ async def take(
         overseer_pod = find_pods_by_node_name(get_overseer_leader())[0]
         rich.print(
             f"[text] Making sure backup directories exist on {base_location} through overseer-elected pod {overseer_pod.metadata.name}...")
-        run_command_in_pod(overseer_pod.metadata.name, f"mkdir -p {" ".join([str(base_location / f"{replica.shard.collection.name}/{replica.shard.name}") for replica in replicas])}")
+        run_command_in_pod(overseer_pod.metadata.name,
+                           f"mkdir -p {" ".join([str(base_location / f"{replica.shard.collection.name}/{replica.shard.name}") for replica in replicas])}")
 
     global_params = {"numberToKeep": number_to_keep}
     tasks = [
@@ -53,6 +54,34 @@ async def take(
                                              params={**global_params, "command": "backup",
                                                      "location": base_location / f"{replica.shard.collection.name}/{replica.shard.name}"}
                                              ),
+                                ))
+        for replica in replicas
+    ]
+    metatasks = MultiMetaTask(["collection", "shard", "core"], tasks)
+    await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
+
+
+@app.async_command(help="Restore backups. [red] This command requires only one collection to be filtered!")
+@with_dry_run
+@with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
+async def restore(
+        cluster_state: List[Collection],
+        backups_path_str: str = typer.Option(..., "--location",
+                                             help="Directory which contains the shard directories. This directory must have subdirectories named shard1, shard2... which contain the backups.")):
+    if len(cluster_state) > 1:
+        rich.print(
+            "[error] ❌ More than one collection has been filtered, and this command requires a singular collection or a part of it! ")
+        raise typer.Exit(1)
+
+    replicas = validate_num_replicas(get_replicas(cluster_state))
+    backups_path = PurePosixPath(backups_path_str)
+
+    tasks = [
+        MetaTask(
+            [replica.shard.collection.name, replica.shard.name, replica.core],
+            asyncio.create_task(send_request(get_overseer_leader(), f"/{replica.core}/replication",
+                                             params={"command": "restore",
+                                                     "location": backups_path / replica.shard.name}),
                                 ))
         for replica in replicas
     ]
