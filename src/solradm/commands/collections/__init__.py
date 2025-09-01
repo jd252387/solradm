@@ -1,6 +1,7 @@
 import asyncio
 import re
 from collections import Counter
+from pathlib import Path
 from typing import List
 
 import rich
@@ -11,6 +12,7 @@ from async_typer import AsyncTyper
 
 from solradm.api.models import Collection
 from solradm.api.state import get_nodes_by_role
+import solradm.api.utils as api_utils
 from solradm.api.utils import validate_num_replicas, get_replicas, send_request
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
@@ -22,6 +24,8 @@ from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
+from solradm.commands.zk.utils import create_or_update, get_relative_znode_path
+from solradm.zk import get_client
 
 app = AsyncTyper()
 
@@ -144,3 +148,42 @@ async def populate(
 
     metatasks = MultiMetaTask(["collection", "shard", "node"], tasks)
     await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
+
+
+@app.async_command()
+@with_dry_run
+async def create(
+        name: str = typer.Argument(..., help="Name of the collection"),
+        shards: int = typer.Option(..., "--shards", help="Number of shards"),
+        conf: str = typer.Option(..., "--conf", help="Configuration name in ZooKeeper"),
+        upload_conf: Path | None = typer.Option(
+            None, "--upload-conf", exists=True, file_okay=False, dir_okay=True, resolve_path=True,
+            help="Path to configuration directory to upload before creation"
+        ),
+        populate_after: bool = typer.Option(False, "--populate", help="Populate the collection after creation"),
+        node: str | None = typer.Option(None, "--node", help="Regex to select nodes for populate"),
+):
+    if upload_conf:
+        for f in Path(upload_conf).rglob("*"):
+            if f.is_file():
+                with open(f, "rb") as fh:
+                    create_or_update(
+                        get_client(),
+                        get_relative_znode_path(f"/configs/{conf}", str(upload_conf), str(f)),
+                        fh.read(),
+                    )
+
+    params = {
+        "action": "CREATE",
+        "name": name,
+        "numShards": shards,
+        "collection.configName": conf,
+        "createNodeSet": "EMPTY",
+    }
+    await send_request(get_overseer_leader(), "/admin/collections", params=params)
+    rich.print(f"[success]✅  Created collection {name}!")
+
+    if populate_after:
+        if node is None:
+            raise typer.BadParameter("--node must be specified when using --populate")
+        await populate(dry_run=api_utils.is_dry_run, collection=name, node=[node])
