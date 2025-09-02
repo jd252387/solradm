@@ -21,7 +21,7 @@ class ReplicaPositionFilter(Filter):
                 None,
                 "--replica-position",
                 help="Select only the replica at this 1-indexed position",
-                autocompletion=completion.replica_positions,
+                shell_complete=completion.replica_positions,
             )
         },
     )
@@ -32,7 +32,7 @@ class ReplicaPositionFilter(Filter):
                 None,
                 "--exclude-replica-position",
                 help="Exclude the replica at this 1-indexed position",
-                autocompletion=completion.replica_positions,
+                shell_complete=completion.replica_positions,
             )
         },
     )

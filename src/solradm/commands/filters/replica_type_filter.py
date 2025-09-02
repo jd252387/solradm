@@ -20,7 +20,7 @@ class ReplicaTypeFilter(Filter):
                 None,
                 "--replica-type",
                 help="Replica type to include: 'leader' or 'follower'",
-                autocompletion=completion.replica_types,
+                shell_complete=completion.replica_types,
             )
         },
     )
@@ -31,7 +31,7 @@ class ReplicaTypeFilter(Filter):
                 None,
                 "--exclude-replica-type",
                 help="Replica type to exclude: 'leader' or 'follower'",
-                autocompletion=completion.replica_types,
+                shell_complete=completion.replica_types,
             )
         },
     )

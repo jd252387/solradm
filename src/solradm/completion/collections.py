@@ -1,10 +1,8 @@
 import re
-from typing import List
-
 from .utils import _filter
 
 
-def collection_names(ctx, args: List[str], incomplete: str) -> List[str]:
+def collection_names(ctx, param, incomplete: str):
     try:
         from solradm.api.state import get_collection_names
 
@@ -14,7 +12,7 @@ def collection_names(ctx, args: List[str], incomplete: str) -> List[str]:
     return _filter(sorted(names), incomplete)
 
 
-def source_collection_names(ctx, args: List[str], incomplete: str) -> List[str]:
+def source_collection_names(ctx, param, incomplete: str):
     try:
         context = ctx.params.get("source_context")
         if context:
@@ -43,7 +41,7 @@ def source_collection_names(ctx, args: List[str], incomplete: str) -> List[str]:
     return _filter(sorted(names), incomplete)
 
 
-def shard_numbers(ctx, args: List[str], incomplete: str) -> List[str]:
+def shard_numbers(ctx, param, incomplete: str):
     try:
         from solradm.api.state import get_collections
 
@@ -59,7 +57,7 @@ def shard_numbers(ctx, args: List[str], incomplete: str) -> List[str]:
     return _filter(options, incomplete)
 
 
-def replica_positions(ctx, args: List[str], incomplete: str) -> List[str]:
+def replica_positions(ctx, param, incomplete: str):
     try:
         from solradm.api.state import get_collections
 

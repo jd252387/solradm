@@ -1,9 +1,7 @@
-from typing import List
-
 from .utils import _filter
 
 
-def context_names(ctx, args: List[str], incomplete: str) -> List[str]:
+def context_names(ctx, param, incomplete: str):
     try:
         from solradm.config import settings
 
@@ -13,7 +11,7 @@ def context_names(ctx, args: List[str], incomplete: str) -> List[str]:
     return _filter(sorted(names), incomplete)
 
 
-def kube_contexts(ctx, args: List[str], incomplete: str) -> List[str]:
+def kube_contexts(ctx, param, incomplete: str):
     try:
         from kubernetes.config import list_kube_config_contexts
 
@@ -24,7 +22,7 @@ def kube_contexts(ctx, args: List[str], incomplete: str) -> List[str]:
     return _filter(sorted(names), incomplete)
 
 
-def context_repo_paths(ctx, args: List[str], incomplete: str) -> List[str]:
+def context_repo_paths(ctx, param, incomplete: str):
     try:
         from solradm.config import settings
 

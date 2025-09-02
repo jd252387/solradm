@@ -20,7 +20,7 @@ class ReplicaStateFilter(Filter):
                 None,
                 "--replica-state",
                 help="Replica state to include: 'active', 'down', 'recovering', 'recovery_failed'",
-                autocompletion=completion.replica_states,
+                shell_complete=completion.replica_states,
             )
         },
     )
@@ -31,7 +31,7 @@ class ReplicaStateFilter(Filter):
                 None,
                 "--exclude-replica-state",
                 help="Replica state to exclude: 'active', 'down', 'recovering', 'recovery_failed'",
-                autocompletion=completion.replica_states,
+                shell_complete=completion.replica_states,
             )
         },
     )

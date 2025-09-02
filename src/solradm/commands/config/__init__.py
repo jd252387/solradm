@@ -65,7 +65,7 @@ def _verify_zk_connection() -> bool:
 @app.command()
 def switch(
         name: str = typer.Argument(
-            ..., help="Context name", autocompletion=completion.context_names
+            ..., help="Context name", shell_complete=completion.context_names
         )
 ):
     """Switch to an existing context."""
@@ -128,7 +128,7 @@ def add_repo(
 @repo_app.command("remove")
 def remove_repo(
     path: Path = typer.Argument(
-        ..., exists=True, file_okay=True, dir_okay=False, autocompletion=completion.context_repo_paths, help="Path to context repository"
+        ..., exists=True, file_okay=True, dir_okay=False, shell_complete=completion.context_repo_paths, help="Path to context repository"
     ),
 ):
     """Remove a context repository."""
@@ -162,7 +162,7 @@ def list_repos():
 @repo_app.command("open")
 def open_repo(
     path: Path = typer.Argument(
-        ..., exists=True, file_okay=True, dir_okay=False, autocompletion=completion.context_repo_paths, help="Path to context repository"
+        ..., exists=True, file_okay=True, dir_okay=False, shell_complete=completion.context_repo_paths, help="Path to context repository"
     ),
 ):
     """Open the location of a configured context repository."""
@@ -201,7 +201,7 @@ def config_dir(
 def connect(
         zk: str = typer.Argument(..., help="ZooKeeper Host"),
         kubecontext: str = typer.Option(
-            None, help="Kubernetes context", autocompletion=completion.kube_contexts
+            None, help="Kubernetes context", shell_complete=completion.kube_contexts
         ),
 ):
     """Temporarily connect to a ZooKeeper host."""
@@ -283,7 +283,7 @@ def add(
             "-k",
             "--kubecontext",
             help="Target Kubecontext",
-            autocompletion=completion.kube_contexts,
+            shell_complete=completion.kube_contexts,
         ),
         interactive: bool = typer.Option(False, help="Interactive setup mode"),
 ):
@@ -309,7 +309,7 @@ def add(
 @app.command()
 def edit(
         name: str = typer.Argument(
-            ..., help="Context name", autocompletion=completion.context_names
+            ..., help="Context name", shell_complete=completion.context_names
         ),
         zk: str = typer.Option(None, "-z", "--zk", help="ZooKeeper address"),
         kubecontext: str = typer.Option(
@@ -317,7 +317,7 @@ def edit(
             "-k",
             "--kubecontext",
             help="Target Kubecontext",
-            autocompletion=completion.kube_contexts,
+            shell_complete=completion.kube_contexts,
         ),
 ):
     """Modify an existing context."""
@@ -381,7 +381,7 @@ def edit(
 @app.command("delete")
 def delete(
         name: str = typer.Argument(
-            ..., help="Context name", autocompletion=completion.context_names
+            ..., help="Context name", shell_complete=completion.context_names
         )
 ):
     """Remove a saved context."""
@@ -416,11 +416,11 @@ def delete(
 @app.command()
 def upload(
         name: str = typer.Argument(
-            ..., help="Local context name", autocompletion=completion.context_names
+            ..., help="Local context name", shell_complete=completion.context_names
         ),
         repo: Path = typer.Option(
             ..., "-r", "--repo", exists=True, file_okay=True, dir_okay=False,
-            autocompletion=completion.context_repo_paths, help="Target context repository"
+            shell_complete=completion.context_repo_paths, help="Target context repository"
         ),
 ):
     """Upload a local context to a repository."""

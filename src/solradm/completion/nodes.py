@@ -1,9 +1,7 @@
-from typing import List
-
 from .utils import _filter
 
 
-def node_names(ctx, args: List[str], incomplete: str) -> List[str]:
+def node_names(ctx, param, incomplete: str):
     try:
         from solradm.api.state import get_nodes_by_role
 

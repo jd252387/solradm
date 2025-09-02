@@ -39,13 +39,13 @@ async def drain(
         None,
         "--node",
         help="Regex to select nodes",
-        autocompletion=completion.node_names,
+        shell_complete=completion.node_names,
     ),
     exclude_node: List[str] | None = typer.Option(
         None,
         "--exclude-node",
         help="Regex to exclude nodes",
-        autocompletion=completion.node_names,
+        shell_complete=completion.node_names,
     ),
 ):
     """Drain a node of cores that do not belong to the selected collections.

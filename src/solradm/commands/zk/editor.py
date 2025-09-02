@@ -160,7 +160,7 @@ def upload(
         None,
         "--exclude",
         help="Collections to exclude from reloading",
-        autocompletion=completion.collection_names,
+        shell_complete=completion.collection_names,
     ),
     skip_checks: bool = typer.Option(False, "--skip-confirm", "-y", help="Skip confirmation prompt"),
 ):

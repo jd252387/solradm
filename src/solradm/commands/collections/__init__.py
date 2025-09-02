@@ -109,13 +109,13 @@ async def populate(
             None,
             "--node",
             help="Regex to select nodes",
-            autocompletion=completion.node_names,
+            shell_complete=completion.node_names,
         ),
         exclude_node: List[str] | None = typer.Option(
             None,
             "--exclude-node",
             help="Regex to exclude nodes",
-            autocompletion=completion.node_names,
+            shell_complete=completion.node_names,
         ),
 ):
     """Populate a single collection with replicas across nodes."""
@@ -221,7 +221,7 @@ async def create(
             None,
             "--conf",
             help="Configuration name in ZooKeeper",
-            autocompletion=completion.config_names,
+            shell_complete=completion.config_names,
         ),
         upload_conf: Path | None = typer.Option(
             None,
@@ -235,7 +235,7 @@ async def create(
             None,
             "--node",
             help="Regex to select nodes for populate",
-            autocompletion=completion.node_names,
+            shell_complete=completion.node_names,
         ),
 ):
     """Create a collection in Solr."""
@@ -327,7 +327,7 @@ async def reload(
 
 @app.async_command(help="Execute a query against a collection")
 async def query(
-        collection: str = typer.Argument(..., help="Collection to query", autocompletion=completion.collection_names),
+        collection: str = typer.Argument(..., help="Collection to query", shell_complete=completion.collection_names),
         q: str = typer.Argument(..., help="Lucene query string"),
         rows: int = typer.Option(10, help="Number of rows to return"),
         fl: str = typer.Option("*", help="Fields to return"),
@@ -386,10 +386,10 @@ def _get_collection_from_context(context_zk: str, collection: str) -> Collection
 @app.async_command(help="Reindex documents from a source collection into a target collection using the dataimport handler")
 async def reindex(
         source_collection: str = typer.Option(
-            ..., "--source", help="Collection to reindex from", autocompletion=completion.source_collection_names
+            ..., "--source", help="Collection to reindex from", shell_complete=completion.source_collection_names
         ),
-        target_collection: str = typer.Option(..., "--target", help="Collection to reindex into", autocompletion=completion.collection_names),
-        source_context: str | None = typer.Option(None, "--source-context", help="Context of the source collection", autocompletion=completion.context_names),
+        target_collection: str = typer.Option(..., "--target", help="Collection to reindex into", shell_complete=completion.collection_names),
+        source_context: str | None = typer.Option(None, "--source-context", help="Context of the source collection", shell_complete=completion.context_names),
         handler: str = typer.Option("/dataimport", "--handler", help="Path of the dataimport handler"),
         fq: List[str] | None = typer.Option(None, "--fq", help="Filter query to pass to the dataimport handler"),
         source_shard: List[str] | None = typer.Option(None, "--source-shard", help="Source shards to reindex"),

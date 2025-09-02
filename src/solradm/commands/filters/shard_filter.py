@@ -21,7 +21,7 @@ class ShardFilter(Filter):
                 None,
                 "--shards",
                 help="Shard numbers to include (e.g. '1,3-5,2+3-7,+4-16')",
-                autocompletion=completion.shard_numbers,
+                shell_complete=completion.shard_numbers,
             )
         },
     )
@@ -32,7 +32,7 @@ class ShardFilter(Filter):
                 None,
                 "--exclude-shards",
                 help="Shard numbers to exclude",
-                autocompletion=completion.shard_numbers,
+                shell_complete=completion.shard_numbers,
             )
         },
     )

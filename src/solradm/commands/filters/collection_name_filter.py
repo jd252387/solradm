@@ -24,7 +24,7 @@ class CollectionNameFilter(Filter):
                 None,
                 "--collection",
                 help="Regex pattern to filter collections by name",
-                autocompletion=completion.collection_names,
+                shell_complete=completion.collection_names,
             )
         }
     )

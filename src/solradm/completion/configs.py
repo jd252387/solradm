@@ -1,9 +1,7 @@
-from typing import List
-
 from .utils import _filter
 
 
-def config_names(ctx, args: List[str], incomplete: str) -> List[str]:
+def config_names(ctx, param, incomplete: str):
     try:
         from solradm.zk import get_client
 
