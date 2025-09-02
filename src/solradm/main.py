@@ -1,5 +1,6 @@
 import logging
 
+import rich
 from async_typer import AsyncTyper
 from rich.logging import RichHandler
 
@@ -37,9 +38,12 @@ def run():
     try:
         import sys
 
-        top_commands = {"core", "coll", "backup", "context", "zoo", "auth"}
+        top_commands = {"core", "coll", "backup", "context", "zoo", "auth", "kube", "node", "state", "status"}
         if len(sys.argv) >= 2 and not sys.argv[1].startswith("-") and sys.argv[1] not in top_commands:
-            config.switch(sys.argv[1])
+            try:
+                config.switch(sys.argv[1])
+            except Exception as e:
+                rich.print(f"Context [magenta]{sys.argv[1]}[/] doesn't exist!")
             return
         app()
     except SolrException as e:

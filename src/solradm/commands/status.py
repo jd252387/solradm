@@ -39,6 +39,7 @@ def status(
         "-s",
         help="Only show replicas with these severities",
     ),
+    show_max: int = typer.Option(20, "--show", help="Show this amount of top rows")
 ):
     """Display status table for all replicas across collections."""
 
@@ -57,7 +58,9 @@ def status(
     table.add_column("Node", style="cyan")
     table.add_column("State")
 
-    for replica in replicas:
+    for i, replica in enumerate(replicas):
+        if i == show_max:
+            break
         state = replica.state.lower()
         color = STATE_COLORS.get(state, "white")
         table.add_row(
