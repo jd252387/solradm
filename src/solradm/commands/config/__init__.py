@@ -5,12 +5,11 @@ from urllib.parse import urlparse
 import rich
 import typer
 from kazoo.handlers.threading import KazooTimeoutError
-from kubernetes.client import CoreV1Api, Configuration
-from kubernetes.config import load_kube_config
 from rich.pretty import pprint
 from rich.prompt import Confirm
 from typer import Typer
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from solradm import completion
 from solradm.config import settings, persist, config_path
@@ -23,6 +22,9 @@ from solradm.kube.utils import (
     get_kubecontext,
 )
 from solradm.zk import get_client
+
+if TYPE_CHECKING:  # pragma: no cover
+    from kubernetes.client import CoreV1Api, Configuration
 
 app = Typer()
 
@@ -128,6 +130,9 @@ def connect_current():
         raise typer.BadParameter(
             "The current kubecontext does not map to a specific namespace!"
         )
+
+    from kubernetes.config import load_kube_config
+    from kubernetes.client import CoreV1Api, Configuration
 
     load_kube_config()
     services = CoreV1Api().list_namespaced_service(namespace).items

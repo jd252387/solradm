@@ -6,13 +6,11 @@ import sys
 
 import rich
 import typer
-from kubernetes.client import AppsV1Api
-from kubernetes.client import CoreV1Api
 from rich.prompt import Confirm
 from rich.table import Table
 from platformdirs import user_config_dir
 from async_typer import AsyncTyper
-from kubernetes.stream import stream
+from typing import TYPE_CHECKING
 
 from solradm.kube.utils import (
     get_configured_kubecontext,
@@ -22,6 +20,10 @@ from solradm.kube.utils import (
     run_command_in_pod,
     switch_current_kubecontext,
 )
+
+if TYPE_CHECKING:  # pragma: no cover
+    from kubernetes.client import AppsV1Api, CoreV1Api
+    from kubernetes.stream import stream
 
 app = AsyncTyper()
 
@@ -33,6 +35,8 @@ def _load_kube_config():
 
 
 def _get_workloads(pattern: re.Pattern):
+    from kubernetes.client import AppsV1Api
+
     namespace = get_current_kubecontext_namespace()
     api = AppsV1Api()
     deployments = [
@@ -74,6 +78,9 @@ async def logs(
         raise typer.BadParameter("No pods matched the given pattern")
 
     namespace = get_current_kubecontext_namespace()
+
+    from kubernetes.client import CoreV1Api
+    from kubernetes.stream import stream
 
     for pod in pods:
         resp = stream(
@@ -164,6 +171,8 @@ def suspend(
     with open(sf, "w") as f:
         json.dump(data, f)
 
+    from kubernetes.client import AppsV1Api
+
     api = AppsV1Api()
     namespace = get_current_kubecontext_namespace()
     for d in deployments:
@@ -208,6 +217,8 @@ def resume(
 
     if not Confirm.ask("Proceed with restoring these workloads?"):
         raise typer.Exit(0)
+
+    from kubernetes.client import AppsV1Api
 
     api = AppsV1Api()
     namespace = get_current_kubecontext_namespace()

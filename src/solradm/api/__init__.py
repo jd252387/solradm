@@ -1,15 +1,34 @@
-import aiohttp
-from aiohttp import BasicAuth
+"""HTTP session management for solradm."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from solradm.config import settings
 
-_session: aiohttp.ClientSession | None = None
+if TYPE_CHECKING:  # pragma: no cover - only for type checking
+    import aiohttp
 
-def get_session() -> aiohttp.ClientSession:
+_session: "aiohttp.ClientSession | None" = None
+
+
+def get_session() -> "aiohttp.ClientSession":
+    """Return a globally cached aiohttp ClientSession.
+
+    The heavy aiohttp import is deferred until this function is called to
+    keep CLI start-up and autocompletion fast.
+    """
     global _session
     if _session is None or _session.closed:
-        _session = aiohttp.ClientSession(auth=BasicAuth(settings.auth.user, settings.auth.password))
+        import aiohttp
+        from aiohttp import BasicAuth
+
+        _session = aiohttp.ClientSession(
+            auth=BasicAuth(settings.auth.user, settings.auth.password)
+        )
     return _session
 
-def get_initialized_sesssion() -> aiohttp.ClientSession:
+
+def get_initialized_sesssion() -> "aiohttp.ClientSession | None":
+    """Return the session if it has been created."""
     return _session
