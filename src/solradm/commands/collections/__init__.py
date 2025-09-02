@@ -6,21 +6,29 @@ import os
 import re
 from collections import Counter
 from pathlib import Path
-from typing import List, TYPE_CHECKING, Any
+from typing import List, TYPE_CHECKING
 
 import typer
 from async_typer import AsyncTyper
-from solradm.lazy import lazy_module
-
+from kazoo.client import KazooClient
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn
+from rich.prompt import Confirm
+from rich.table import Table
 from solradm import completion
-from solradm.config import settings
-from solradm.config.util import get_current_context
+from solradm.api.models import Collection, Replica, Shard
+from solradm.api.state import get_nodes_by_role, get_collections
+from solradm.api.utils import validate_num_replicas, get_replicas, send_request
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
 from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
 from solradm.commands.filters.replica_type_filter import ReplicaTypeFilter
 from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
+from solradm.config import settings
+from solradm.config import settings
+from solradm.config.util import get_current_context
+from solradm.config.util import get_current_context
+from solradm.lazy import lazy_module
 from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
@@ -48,7 +56,7 @@ app = AsyncTyper()
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def depopulate(
-        cluster_state: List[Any]
+        cluster_state: List[Collection]
 ):
     """Remove replicas from the selected collections."""
 
@@ -97,7 +105,7 @@ async def depopulate(
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter)
 async def populate(
-        cluster_state: List[Any],
+        cluster_state: List[Collection],
         node: List[str] | None = typer.Option(
             None,
             "--node",
@@ -287,7 +295,7 @@ async def delete(
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def reload(
-        cluster_state: List[Any],
+        cluster_state: List[Collection],
         coordinators: bool = typer.Option(None, help="If unset, reloads both data and coordinator nodes. If set to true, only reload coordinators. If set to false, only reload data nodes.")
 ):
     """Reload the specified cores and optionally coordinators."""
@@ -388,7 +396,7 @@ async def reindex(
         source_shard: List[str] | None = typer.Option(None, "--source-shard", help="Source shards to reindex"),
 ):
     current_ctx = get_current_context()
-    cluster_state = api_state.get_collections()
+    cluster_state = get_collections()
     target_coll = next((c for c in cluster_state if c.name == target_collection), None)
     if not target_coll:
         rich.print(f"[error]❌  Target collection {target_collection} not found")
@@ -429,7 +437,7 @@ async def reindex(
     for name, rep in leaders.items():
         if rep is None:
             continue
-        status = await api_utils.send_request(rep.base_url, f"/{target_collection}{handler}", params={"command": "status", "wt": "json"})
+        status = await send_request(rep.base_url, f"/{target_collection}{handler}", params={"command": "status", "wt": "json"})
         if status.get("status") == "busy":
             busy.append((name, rep))
 
@@ -440,7 +448,7 @@ async def reindex(
 
             async def monitor(replica: Replica, name: str):
                 while True:
-                    stat = await api_utils.send_request(replica.base_url, f"/{target_collection}{handler}", params={"command": "status", "wt": "json"})
+                    stat = await send_request(replica.base_url, f"/{target_collection}{handler}", params={"command": "status", "wt": "json"})
                     done, total, st = _parse_status(stat)
                     if total:
                         progress.update(tasks[name], total=total, completed=done)
@@ -471,10 +479,10 @@ async def reindex(
                 }
                 if fq:
                     params["fq"] = fq
-                await api_utils.send_request(leader.base_url, f"/{target_collection}{handler}", params=params)
+                await send_request(leader.base_url, f"/{target_collection}{handler}", params=params)
 
                 while True:
-                    stat = await api_utils.send_request(leader.base_url, f"/{target_collection}{handler}", params={"command": "status", "wt": "json"})
+                    stat = await send_request(leader.base_url, f"/{target_collection}{handler}", params={"command": "status", "wt": "json"})
                     done, total, st = _parse_status(stat)
                     if total:
                         progress.update(task_id, total=total, completed=done)
