@@ -4,10 +4,10 @@ import inspect
 import rich
 import typer
 from rich.panel import Panel
-from lazy_loader import load as lazy_load
+from solradm.lazy import lazy_module
 
-api_utils = lazy_load("solradm.api.utils")
-api_state = lazy_load("solradm.api.state")
+api_utils = lazy_module("solradm.api.utils")
+api_state = lazy_module("solradm.api.state")
 
 
 def with_dry_run(func):

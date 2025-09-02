@@ -15,7 +15,7 @@ from rich.table import Table
 from rich.text import Text
 
 from solradm import completion
-from lazy_loader import load as lazy_load
+from solradm.lazy import lazy_module
 from solradm.commands.zk.utils import (
     open_vscode,
     create_or_update,
@@ -25,9 +25,9 @@ from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
 from solradm.zk import get_client
 from solradm.config.util import resolve_config_name_to_abs_or_default_directory
 
-api = lazy_load("solradm.api")
-api_state = lazy_load("solradm.api.state")
-api_utils = lazy_load("solradm.api.utils")
+api = lazy_module("solradm.api")
+api_state = lazy_module("solradm.api.state")
+api_utils = lazy_module("solradm.api.utils")
 
 app = typer.Typer()
 

@@ -8,14 +8,14 @@ import time
 import rich
 from kazoo.client import KazooClient
 from watchdog.events import FileSystemEventHandler
-from lazy_loader import load as lazy_load
+from solradm.lazy import lazy_module
 
 from solradm.commands.collections import reload
 from solradm.commands.zk.utils import create_or_update, get_relative_znode_path
 
-api = lazy_load("solradm.api")
-api_state = lazy_load("solradm.api.state")
-api_utils = lazy_load("solradm.api.utils")
+api = lazy_module("solradm.api")
+api_state = lazy_module("solradm.api.state")
+api_utils = lazy_module("solradm.api.utils")
 
 
 class ZooKeeperSyncHandler(FileSystemEventHandler):

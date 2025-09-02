@@ -7,12 +7,12 @@ from async_typer import AsyncTyper
 import rich
 import typer
 import yaml
-from lazy_loader import load as lazy_load
+from solradm.lazy import lazy_module
 
 from solradm.zk.utils import get_overseer_leader
 
-api_state = lazy_load("solradm.api.state")
-api_utils = lazy_load("solradm.api.utils")
+api_state = lazy_module("solradm.api.state")
+api_utils = lazy_module("solradm.api.utils")
 
 if TYPE_CHECKING:  # pragma: no cover
     from solradm.api.models import Collection

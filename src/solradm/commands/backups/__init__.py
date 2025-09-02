@@ -5,7 +5,7 @@ from typing import List, TYPE_CHECKING, Any
 import rich
 import typer
 from async_typer import AsyncTyper
-from lazy_loader import load as lazy_load
+from solradm.lazy import lazy_module
 
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
@@ -20,7 +20,7 @@ from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
 
-api_utils = lazy_load("solradm.api.utils")
+api_utils = lazy_module("solradm.api.utils")
 
 if TYPE_CHECKING:  # pragma: no cover
     from solradm.api.models import Collection

@@ -9,7 +9,7 @@ from typing import List, TYPE_CHECKING, Any
 import rich
 import typer
 from async_typer import AsyncTyper
-from lazy_loader import load as lazy_load
+from solradm.lazy import lazy_module
 from rich.prompt import Confirm
 from rich.table import Table
 
@@ -25,8 +25,8 @@ from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
 
-api_utils = lazy_load("solradm.api.utils")
-api_state = lazy_load("solradm.api.state")
+api_utils = lazy_module("solradm.api.utils")
+api_state = lazy_module("solradm.api.state")
 
 if TYPE_CHECKING:  # pragma: no cover - used only for type hints
     from solradm.api.models import Collection, Replica

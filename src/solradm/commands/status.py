@@ -4,11 +4,11 @@ from typing import List, TYPE_CHECKING, Any
 import rich
 import typer
 from rich.table import Table
-from lazy_loader import load as lazy_load
+from solradm.lazy import lazy_module
 
 from solradm.commands.filters.utils import with_cluster_state
 
-api_utils = lazy_load("solradm.api.utils")
+api_utils = lazy_module("solradm.api.utils")
 
 if TYPE_CHECKING:  # pragma: no cover
     from solradm.api.models import Collection
