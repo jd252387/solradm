@@ -1,0 +1,106 @@
+services:
+  slr-1:
+    container_name: slr-1
+    image: solr:9.9.0
+    ports:
+      - "8983:8983"
+      - "5005:5005"
+    networks: [search]
+    environment:
+      ZK_HOST: "zoo-1:2181"
+      SOLR_HOST: "localhost"
+      SOLR_PORT: "8983"
+      SOLR_OPTS: "-Denable.packages=true -Dsolr.allowPaths=* -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+    depends_on: [zoo-1]
+    volumes:
+      - ./build/libs:/opt/solr/lib
+
+  # slr-2:
+  #   container_name: slr-2
+  #   image: solr:9.9.0
+  #   ports:
+  #     - "8984:8984"
+  #     - "5006:5005"
+  #   networks: [search]
+  #   environment:
+  #     ZK_HOST: "zoo-1:2181"
+  #     SOLR_HOST: "host.docker.internal"
+  #     SOLR_PORT: "8984"
+  #     SOLR_OPTS: "-Denable.packages=true -Dsolr.allowPaths=* -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+  #   depends_on: [zoo-1]
+  #   volumes:
+  #     - ./build/libs:/opt/solr/lib
+
+  # slr-3:
+  #   container_name: slr-3
+  #   image: solr:9.9.0
+  #   ports:
+  #     - "8985:8985"
+  #     - "5007:5005"
+  #   networks: [search]
+  #   environment:
+  #     ZK_HOST: "zoo-1:2181"
+  #     SOLR_HOST: "host.docker.internal"
+  #     SOLR_PORT: "8985"
+  #     SOLR_OPTS: "-Denable.packages=true -Dsolr.allowPaths=* -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+  #   depends_on: [zoo-1]
+  #   volumes:
+  #     - ./build/libs:/opt/solr/lib
+
+  # slr-4:
+  #  container_name: slr-4
+  #  image: solr:9.9.0
+  #  ports:
+  #    - "8986:8986"
+  #    - "5008:5005"
+  #  networks: [ search ]
+  #  environment:
+  #     ZK_HOST: "zoo-1:2181"
+  #     SOLR_HOST: "host.docker.internal"
+  #     SOLR_PORT: "8986"
+  #     SOLR_OPTS: "-Denable.packages=true -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005  -Dsolr.node.roles=coordinator:on,data:off"
+  #  depends_on: [ zoo-1 ]
+  #  volumes:
+  #     - ./build/libs:/opt/solr/lib
+
+  zoo-1:
+    container_name: zoo-1
+    image: zookeeper:3.9
+    networks: [search]
+    ports:
+      - "2181:2181"
+    environment:
+      ZOO_4LW_COMMANDS_WHITELIST: "mntr,conf,ruok"
+
+  # zoo-2:
+  #   container_name: zoo-2
+  #   image: zookeeper:3.9
+  #   networks: [search]
+  #   ports:
+  #     - "2182:2181"
+  #   environment:
+  #     ZOO_4LW_COMMANDS_WHITELIST: "mntr,conf,ruok"
+
+#  pkg-store:
+#    image: python:3
+#    working_dir: /package-store
+#    command: python -m http.server 8000 --bind 0.0.0.0
+#    networks: [search]
+#    ports:
+#      - "8000:8000"
+#    volumes:
+#      - ./package-store:/package-store
+
+  zoon:
+    image: elkozmon/zoonavigator:latest
+    container_name: zoon
+    networks: [search]
+    ports:
+      - "8080:9000"
+    environment:
+      HTTP_PORT: 9000
+    restart: unless-stopped
+
+networks:
+  search:
+    driver: bridge

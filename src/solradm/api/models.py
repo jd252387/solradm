@@ -1,7 +1,7 @@
 import datetime
-from typing import List
+from typing import List, Optional
 
-from pydantic import BaseModel, field_validator, ConfigDict, Field
+from pydantic import BaseModel, computed_field, field_serializer, field_validator, ConfigDict, Field
 
 
 class Router(BaseModel):
@@ -37,50 +37,54 @@ class Replica(BaseModel):
     leader: bool = False
     force_set_state: bool
     base_url: str
-    shard: 'Shard | None' = None
+    shard: Optional['Shard'] = Field(default=None, exclude=True)  # <- kill cycle here
+
+    @computed_field
+    @property
+    def shard_name(self) -> Optional[str]:
+        return self.shard.name if self.shard else None
 
 class Shard(BaseModel):
     name: str
     range: str
-    replicas: List[Replica]
-    collection: 'Collection | None' = None
-    
+    replicas: List[Replica] = Field(default_factory=list)
+    collection: Optional['Collection'] = Field(default=None, exclude=True)  # <- and here
+
+    @computed_field
+    @property
+    def collection_name(self) -> Optional[str]:
+        return self.collection.name if self.collection else None
+
     @field_validator('replicas', mode='before')
     @classmethod
     def transform_replicas_dict_to_list(cls, v):
         if isinstance(v, dict):
-            # Transform dict of replicas to list, setting name from key
-            return [
-                Replica(name=replica_name, **replica_data)
-                for replica_name, replica_data in v.items()
-            ]
+            return [Replica(name=replica_name, **replica_data)
+                    for replica_name, replica_data in v.items()]
         return v
 
     def model_post_init(self, __context):
-        for replica in self.replicas:
-            replica.shard = self
+        for r in self.replicas:
+            r.shard = self
 
 class Collection(BaseModel):
     name: str
     pullReplicas: int
     configName: str
     replicationFactor: int
-    router: Router
+    router: 'Router'             # your existing type
     nrtReplicas: int
     tlogReplicas: int
-    shards: List[Shard]
-    
+    shards: List[Shard] = Field(default_factory=list)
+
     @field_validator('shards', mode='before')
     @classmethod
     def transform_shards_dict_to_list(cls, v):
         if isinstance(v, dict):
-            # Transform dict of shards to list, setting name from key
-            return [
-                Shard(name=shard_name, **shard_data)
-                for shard_name, shard_data in v.items()
-            ]
+            return [Shard(name=shard_name, **shard_data)
+                    for shard_name, shard_data in v.items()]
         return v
 
     def model_post_init(self, __context):
-        for shard in self.shards:
-            shard.collection = self
+        for s in self.shards:
+            s.collection = self

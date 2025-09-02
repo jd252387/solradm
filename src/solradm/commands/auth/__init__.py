@@ -1,4 +1,5 @@
 import rich
+from rich.pretty import pprint
 from typer import Typer
 
 from solradm.config import settings, persist
@@ -14,3 +15,8 @@ def edit():
     settings.set("auth", {"user": auth.login, "password": auth.password})
     persist()
     rich.print("[success]✅  Updated Solr credentials!")
+
+@app.command()
+def view():
+    """View stored Solr credentials"""
+    pprint({"user": settings.auth.user, "password": settings.auth.password})

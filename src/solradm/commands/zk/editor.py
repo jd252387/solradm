@@ -243,7 +243,7 @@ def upload(
                 reload_cmd(
                     collection_name_filter=
                     r"^(" + "|".join(re.escape(c) for c in to_reload) + r")$",
-                    dry_run=False,
+                    dry_run=False, coordinators=None
                 )
             )
             asyncio.run(get_initialized_sesssion().close())

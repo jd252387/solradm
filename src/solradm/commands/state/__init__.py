@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from typing import List
 
+from async_typer import AsyncTyper
 import rich
 import typer
 import yaml
@@ -12,7 +13,7 @@ from solradm.api.state import get_collections
 from solradm.api.utils import send_request
 from solradm.zk.utils import get_overseer_leader
 
-app = typer.Typer()
+app = AsyncTyper()
 
 
 @app.command(help="Export cluster state to a file")
@@ -27,8 +28,8 @@ def export(file: Path = typer.Argument(..., help="Destination file")) -> None:
     rich.print(f"[success]✅  Exported state to {file}")
 
 
-@app.command(name="import", help="Restore cluster state from a snapshot")
-def import_state(file: Path = typer.Argument(..., help="Snapshot file")) -> None:
+@app.async_command(name="import", help="Restore cluster state from a snapshot")
+async def import_state(file: Path = typer.Argument(..., help="Snapshot file")) -> None:
     """Read a snapshot and create missing collections/replicas."""
     if not file.exists():
         raise typer.BadParameter(f"Snapshot file {file} does not exist")
@@ -56,7 +57,7 @@ def import_state(file: Path = typer.Argument(..., help="Snapshot file")) -> None
                 "replicationFactor": coll.replicationFactor,
                 "createNodeSet": "EMPTY",
             }
-            asyncio.run(send_request(overseer, "/admin/collections", params=params))
+            await send_request(overseer, "/admin/collections", params=params)
             existing_shards = {}
         else:
             existing_shards = {s.name: s for s in existing_coll.shards}
@@ -75,6 +76,6 @@ def import_state(file: Path = typer.Argument(..., help="Snapshot file")) -> None
                     "node": replica.node_name,
                     "type": replica.type,
                 }
-                asyncio.run(send_request(overseer, "/admin/collections", params=params))
+                await send_request(overseer, "/admin/collections", params=params)
 
     rich.print(f"[success]✅  Imported state from {file}")
