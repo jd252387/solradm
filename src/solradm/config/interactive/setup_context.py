@@ -1,7 +1,6 @@
-from solradm.lazy import lazy_module
-
 from solradm.config.util import Context
 from solradm.kube.utils import get_kubecontext
+from solradm.lazy import lazy_module
 
 list_kube_config_contexts = lazy_module("kubernetes.config").list_kube_config_contexts
 rich = lazy_module("rich")

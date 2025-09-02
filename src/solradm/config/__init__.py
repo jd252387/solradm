@@ -4,6 +4,7 @@ from pathlib import Path
 import yaml
 from dynaconf import Dynaconf
 from platformdirs import user_config_dir
+
 from solradm.config.util import is_valid_context_repo
 from solradm.lazy import lazy_module
 

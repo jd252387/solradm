@@ -2,12 +2,11 @@ from typing import List, Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
 import typer
-from solradm.lazy import lazy_module
 
 from solradm.api import get_session
 from solradm.api.models import Collection, Replica, Core
 from solradm.exceptions.solr_exception import SolrException
-
+from solradm.lazy import lazy_module
 
 rich = lazy_module("rich")
 

@@ -4,7 +4,6 @@ from typing import List, TYPE_CHECKING, Any
 
 import typer
 from async_typer import AsyncTyper
-from solradm.lazy import lazy_module
 
 from solradm import completion
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
@@ -15,6 +14,7 @@ from solradm.kube.utils import (
     run_command_in_pod,
     switch_current_kubecontext,
 )
+from solradm.lazy import lazy_module
 from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
@@ -25,7 +25,7 @@ api_utils = lazy_module("solradm.api.utils")
 api_state = lazy_module("solradm.api.state")
 
 if TYPE_CHECKING:  # pragma: no cover
-    from solradm.api.models import Collection
+    pass
 
 app = AsyncTyper()
 

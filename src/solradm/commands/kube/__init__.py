@@ -1,14 +1,13 @@
 import asyncio
 import json
 import re
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
-from platformdirs import user_config_dir
 from async_typer import AsyncTyper
-from typing import TYPE_CHECKING
-from solradm.lazy import lazy_module
+from platformdirs import user_config_dir
 
 from solradm.kube.utils import (
     get_configured_kubecontext,
@@ -18,6 +17,7 @@ from solradm.kube.utils import (
     run_command_in_pod,
     switch_current_kubecontext,
 )
+from solradm.lazy import lazy_module
 
 if TYPE_CHECKING:  # pragma: no cover
     from kubernetes.client import AppsV1Api, CoreV1Api

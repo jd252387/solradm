@@ -5,7 +5,7 @@ from solradm.config.util import get_current_context
 from solradm.exceptions.adm_exception import AdmException
 
 if TYPE_CHECKING:  # pragma: no cover
-    from kubernetes.client import CoreV1Api, V1Pod
+    pass
 
 
 def get_kubecontext(name: str) -> Any | None:

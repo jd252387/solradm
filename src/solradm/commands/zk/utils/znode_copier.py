@@ -3,6 +3,7 @@ from pathlib import Path
 
 from kazoo.client import KazooClient
 from kazoo.exceptions import NoNodeError
+
 from solradm.lazy import lazy_module
 
 rich = lazy_module("rich")

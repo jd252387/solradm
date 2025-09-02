@@ -1,7 +1,7 @@
 import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, computed_field, field_serializer, field_validator, ConfigDict, Field
+from pydantic import BaseModel, computed_field, field_validator, ConfigDict, Field
 
 
 class Router(BaseModel):

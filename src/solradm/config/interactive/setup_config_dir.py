@@ -1,8 +1,7 @@
 from pathlib import Path
 
-from solradm.lazy import lazy_module
-
 from solradm.config.util import _validate_config_dir
+from solradm.lazy import lazy_module
 
 rich = lazy_module("rich")
 Prompt = lazy_module("rich.prompt").Prompt

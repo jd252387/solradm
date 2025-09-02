@@ -5,10 +5,9 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import List
 
 import typer
-from solradm.lazy import lazy_module
 
 from solradm import completion
 from solradm.commands.zk.utils import (
@@ -17,8 +16,9 @@ from solradm.commands.zk.utils import (
     build_files_by_config,
 )
 from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
-from solradm.zk import get_client
 from solradm.config.util import resolve_config_name_to_abs_or_default_directory
+from solradm.lazy import lazy_module
+from solradm.zk import get_client
 
 rich = lazy_module("rich")
 Panel = lazy_module("rich.panel").Panel

@@ -10,11 +10,11 @@ from kazoo.handlers.threading import KazooTimeoutError
 from rich.pretty import pprint
 from rich.prompt import Confirm
 from rich.table import Table
+from typer import Typer
+
 from solradm import completion
 from solradm.config import settings, persist, config_path, local_contexts
 from solradm.config.context import Context
-from solradm.config.interactive.setup_context import setup
-from solradm.config.util import get_current_context, validate_config_dir
 from solradm.config.util import (
     get_current_context,
     validate_config_dir,
@@ -29,7 +29,6 @@ from solradm.kube.utils import (
 )
 from solradm.lazy import lazy_module
 from solradm.zk import get_client
-from typer import Typer
 
 if TYPE_CHECKING:  # pragma: no cover
     from kubernetes.client import CoreV1Api, Configuration

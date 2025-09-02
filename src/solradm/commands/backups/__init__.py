@@ -4,7 +4,6 @@ from typing import List, TYPE_CHECKING, Any
 
 import typer
 from async_typer import AsyncTyper
-from solradm.lazy import lazy_module
 
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
@@ -14,6 +13,7 @@ from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
 from solradm.kube.utils import find_pods_by_node_name, get_configured_kubecontext, switch_current_kubecontext, \
     run_command_in_pod
+from solradm.lazy import lazy_module
 from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
@@ -23,7 +23,7 @@ rich = lazy_module("rich")
 api_utils = lazy_module("solradm.api.utils")
 
 if TYPE_CHECKING:  # pragma: no cover
-    from solradm.api.models import Collection
+    pass
 
 app = AsyncTyper()
 

@@ -7,7 +7,7 @@ from solradm import completion
 from solradm.commands.filters.filter import Filter
 
 if TYPE_CHECKING:  # pragma: no cover
-    from solradm.api.models import Collection
+    pass
 
 
 @dataclass

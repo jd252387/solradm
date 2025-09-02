@@ -14,10 +14,11 @@ from kazoo.client import KazooClient
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn
 from rich.prompt import Confirm
 from rich.table import Table
+
 from solradm import completion
-from solradm.api.models import Collection, Replica, Shard
-from solradm.api.state import get_nodes_by_role, get_collections
-from solradm.api.utils import validate_num_replicas, get_replicas, send_request
+from solradm.api.models import Collection
+from solradm.api.state import get_collections
+from solradm.api.utils import send_request
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
 from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
@@ -25,8 +26,6 @@ from solradm.commands.filters.replica_type_filter import ReplicaTypeFilter
 from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
 from solradm.config import settings
-from solradm.config import settings
-from solradm.config.util import get_current_context
 from solradm.config.util import get_current_context
 from solradm.lazy import lazy_module
 from solradm.renderers.task_table import MultiTaskTable

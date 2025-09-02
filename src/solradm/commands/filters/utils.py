@@ -2,6 +2,7 @@ import functools
 import inspect
 
 import typer
+
 from solradm.lazy import lazy_module
 
 rich = lazy_module("rich")

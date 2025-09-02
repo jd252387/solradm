@@ -1,16 +1,16 @@
 from typing import List, TYPE_CHECKING, Any
 
 import typer
-from solradm.lazy import lazy_module
 
 from solradm.commands.filters.utils import with_cluster_state
+from solradm.lazy import lazy_module
 
 rich = lazy_module("rich")
 Table = lazy_module("rich.table").Table
 api_utils = lazy_module("solradm.api.utils")
 
 if TYPE_CHECKING:  # pragma: no cover
-    from solradm.api.models import Collection
+    pass
 
 
 # Mapping of replica states to severity for sorting

@@ -1,12 +1,12 @@
 import os
 import shutil
 import subprocess
-
-from kazoo.client import KazooClient
 from pathlib import Path
 from typing import Dict, List, Tuple
-from solradm.lazy import lazy_module
 
+from kazoo.client import KazooClient
+
+from solradm.lazy import lazy_module
 
 rich = lazy_module("rich")
 
