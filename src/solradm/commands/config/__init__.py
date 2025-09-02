@@ -66,7 +66,18 @@ def switch(
         settings.contexts.current = {"name": name}
         if _verify_zk_connection():
             persist()
-            rich.print(f'Switched to context "{name}"')
+            if name in [c["name"] for c in local_contexts]:
+                location = "local configuration"
+            else:
+                repo_list = list(settings.get("context_repositories") or [])
+                location = "unknown location"
+                for repo in reversed(repo_list):
+                    repo_path = Path(repo)
+                    contexts = load_repo_contexts(repo_path)
+                    if any(c["name"] == name for c in contexts):
+                        location = f"repository {repo_path}"
+                        break
+            rich.print(f'Switched to context "{name}" from {location}')
     else:
         raise typer.BadParameter(f"Context {name} does not exist!")
 
@@ -127,9 +138,22 @@ def del_repo(
     rich.print(f"[success]✅  Deleted context repository {path}!")
 
 
+@app.command("repos")
+def list_repos():
+    """List configured context repositories and their contexts."""
+
+    repo_list = list(settings.get("context_repositories") or [])
+    table = Table("Repository", "Contexts")
+    for repo in repo_list:
+        repo_path = Path(repo)
+        contexts = [c["name"] for c in load_repo_contexts(repo_path)]
+        table.add_row(str(repo_path), ", ".join(contexts) if contexts else "-")
+    rich.print(table)
+
+
 @app.command("config-dir")
 def config_dir(
-    path: Path = typer.Argument(
+        path: Path = typer.Argument(
         ..., exists=True, file_okay=False, dir_okay=True, resolve_path=True, help="Path to default configsets directory"
     ),
 ):

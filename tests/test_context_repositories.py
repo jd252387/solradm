@@ -150,3 +150,40 @@ def test_list_contexts(monkeypatch, tmp_path, capsys):
     assert "dup" in out and str(cfg.config_path) in out
     assert "*" in out
 
+
+def test_switch_outputs_location(monkeypatch, tmp_path, capsys):
+    repo_content = """contexts:\n  available:\n    - name: r1\n      zk: rzk\n"""
+    settings_content = """context_repositories:\n  - {repo}\ncontexts:\n  available:\n    - name: l1\n      zk: lzk\n  current: {{}}\n"""
+    repo, cfg, config_cmd = _prepare(
+        monkeypatch,
+        tmp_path,
+        repo_content,
+        settings_content.format(repo=tmp_path / "repo.yaml"),
+    )
+
+    monkeypatch.setattr(config_cmd, "_verify_zk_connection", lambda: True)
+
+    config_cmd.switch("l1")
+    out = capsys.readouterr().out
+    assert "local configuration" in out
+
+    config_cmd.switch("r1")
+    out = capsys.readouterr().out
+    assert f"repository {repo}" in out
+
+
+def test_list_repos(monkeypatch, tmp_path, capsys):
+    repo_content = """contexts:\n  available:\n    - name: r1\n      zk: rzk\n"""
+    settings_content = """context_repositories:\n  - {repo}\ncontexts:\n  available: []\n  current: {{}}\n"""
+    repo, cfg, config_cmd = _prepare(
+        monkeypatch,
+        tmp_path,
+        repo_content,
+        settings_content.format(repo=tmp_path / "repo.yaml"),
+    )
+
+    config_cmd.list_repos()
+    out = capsys.readouterr().out
+    assert str(repo) in out
+    assert "r1" in out
+
