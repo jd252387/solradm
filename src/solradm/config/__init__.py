@@ -28,6 +28,8 @@ def persist(repos_override=None):
     not persisted here.
     """
 
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
     data = {}
     if config_path.exists():
         with open(config_path) as f:
@@ -39,9 +41,10 @@ def persist(repos_override=None):
     }
 
     if settings.get("auth"):
-        data["auth"] = settings.auth
+        auth = settings.auth
+        data["auth"] = auth.to_dict() if hasattr(auth, "to_dict") else auth
     if settings.get("config_dir"):
-        data["config_dir"] = settings.config_dir
+        data["config_dir"] = str(settings.config_dir)
 
     repos = settings.get("context_repositories") or []
     data["context_repositories"] = list(repos_override if repos_override is not None else repos)

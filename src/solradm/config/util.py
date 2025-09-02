@@ -63,3 +63,21 @@ def validate_config_dir(path: Path):
     if not _validate_config_dir(path):
         rich.print(f"[error]❌ Used a relative path to the default configuration directory, but it is not configured or invalid. Use sa context config-dir to modify fix this.")
         raise typer.Exit(1)
+
+
+def load_repo_contexts(path: Path) -> list[dict]:
+    """Load available contexts from a repository file."""
+
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+    return list(data.get("contexts", {}).get("available", []))
+
+
+def save_repo_contexts(path: Path, contexts: list[dict]):
+    """Persist contexts back to a repository file."""
+
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+    data.setdefault("contexts", {})["available"] = contexts
+    with open(path, "w") as f:
+        yaml.safe_dump(data, f, sort_keys=False)

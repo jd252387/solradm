@@ -94,3 +94,59 @@ def test_add_repo_invalid(monkeypatch, tmp_path):
     bad_repo.write_text("bad: true")
     with pytest.raises(typer.BadParameter):
         config_cmd.add_repo(bad_repo)
+
+
+def test_upload_and_edit_delete_repo_context(monkeypatch, tmp_path):
+    repo_content = """contexts:\n  available: []\n"""
+    settings_content = """context_repositories:\n  - {repo}\ncontexts:\n  available:\n    - name: local\n      zk: lzk\n  current: {{name: local}}\n"""
+    repo, cfg, config_cmd = _prepare(
+        monkeypatch,
+        tmp_path,
+        repo_content,
+        settings_content.format(repo=tmp_path / "repo.yaml"),
+    )
+
+    # upload local context to repo
+    config_cmd.upload("local", repo)
+    import yaml
+    data = yaml.safe_load(repo.read_text())
+    assert any(c["name"] == "local" for c in data["contexts"]["available"])
+
+    # edit context - should modify local configuration first
+    config_cmd.edit("local", zk="newzk", kubecontext=None)
+    data = yaml.safe_load(repo.read_text())
+    assert any(c["zk"] == "lzk" for c in data["contexts"]["available"])
+    with open(cfg.config_path) as f:
+        cfg_data = yaml.safe_load(f) or {}
+    assert any(c["zk"] == "newzk" for c in cfg_data["contexts"]["available"])
+
+    # delete from local first
+    config_cmd.delete("local")
+    with open(cfg.config_path) as f:
+        cfg_data = yaml.safe_load(f) or {}
+    assert not any(c["name"] == "local" for c in cfg_data["contexts"]["available"])
+    data = yaml.safe_load(repo.read_text())
+    assert any(c["name"] == "local" for c in data["contexts"]["available"])
+
+    # delete remaining context from repo
+    config_cmd.delete("local")
+    data = yaml.safe_load(repo.read_text())
+    assert not any(c["name"] == "local" for c in data["contexts"]["available"])
+
+
+def test_list_contexts(monkeypatch, tmp_path, capsys):
+    repo_content = """contexts:\n  available:\n    - name: repo\n      zk: rzk\n    - name: dup\n      zk: rdup\n"""
+    settings_content = """context_repositories:\n  - {repo}\ncontexts:\n  available:\n    - name: dup\n      zk: ldup\n  current: {{name: dup}}\n"""
+    repo, cfg, config_cmd = _prepare(
+        monkeypatch,
+        tmp_path,
+        repo_content,
+        settings_content.format(repo=tmp_path / "repo.yaml"),
+    )
+
+    config_cmd.list_contexts()
+    out = capsys.readouterr().out
+    assert "repo" in out and str(repo) in out
+    assert "dup" in out and str(cfg.config_path) in out
+    assert "*" in out
+
