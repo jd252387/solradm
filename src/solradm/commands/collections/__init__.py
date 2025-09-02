@@ -17,7 +17,7 @@ from kazoo.client import KazooClient
 
 import solradm.api.utils as api_utils
 from solradm import completion
-from solradm.api.models import Collection, Replica
+from solradm.api.models import Collection, Replica, Shard
 from solradm.api.state import get_nodes_by_role, get_collections
 from solradm.api.utils import validate_num_replicas, get_replicas, send_request
 from solradm.config import settings
@@ -403,13 +403,13 @@ async def reindex(
     tgt_shards = sorted(target_coll.shards, key=lambda s: s.name)
     src_shards_sorted = sorted(src_shards, key=lambda s: s.name)
 
-    shard_map: dict = {}
+    shard_map: dict[str, List[Shard]] = {}
     if len(tgt_shards) >= len(src_shards_sorted):
         for idx, src in enumerate(src_shards_sorted):
-            shard_map.setdefault(tgt_shards[idx], []).append(src)
+            shard_map.setdefault(tgt_shards[idx].name, []).append(src)
     else:
         for idx, src in enumerate(src_shards_sorted):
-            shard_map.setdefault(tgt_shards[idx % len(tgt_shards)], []).append(src)
+            shard_map.setdefault(tgt_shards[idx % len(tgt_shards)].name, []).append(src)
 
     leaders = {shard.name: next((r for r in shard.replicas if r.leader), None) for shard in target_coll.shards}
     busy = []
@@ -442,9 +442,9 @@ async def reindex(
 
     with Progress(SpinnerColumn(), TextColumn("{task.description}"), BarColumn(), TimeRemainingColumn()) as progress:
 
-        async def run_target(shard, src_list):
-            leader = leaders[shard.name]
-            task_id = progress.add_task(shard.name, total=100)
+        async def run_target(shard_name: str, src_list: List[Shard]):
+            leader = leaders[shard_name]
+            task_id = progress.add_task(shard_name, total=100)
             for src in src_list:
                 params = {
                     "command": "full-import",
@@ -472,6 +472,6 @@ async def reindex(
                     await asyncio.sleep(1)
             progress.update(task_id, completed=progress.tasks[task_id].total or progress.tasks[task_id].completed)
 
-        await asyncio.gather(*(run_target(t, s) for t, s in shard_map.items()))
+        await asyncio.gather(*(run_target(name, shards) for name, shards in shard_map.items()))
 
     rich.print("[success]✅  Reindex completed")
