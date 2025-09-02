@@ -108,7 +108,7 @@ share them, create temporary ones, and so on...
     rich.print(
         "[text bold]Your team most likely has already setup a common repository on a network drive, so it is recommended to ask them for it and set it up here. ")
     rich.print(
-        "[yellow bold]Note that it is possible to use a context repository without declaring local contexts, and only use contexts found in repostories.")
+        "[yellow bold]Note that it is possible to use a context repository without declaring local contexts, and only use contexts found in repositories.")
     create_repo = Confirm.ask(
         "[question]Would you like to add a context repository?", default=False
     )

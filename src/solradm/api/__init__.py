@@ -13,5 +13,5 @@ def get_session() -> aiohttp.ClientSession:
     return _session
 
 
-def get_initialized_sesssion() -> aiohttp.ClientSession:
+def get_initialized_session() -> aiohttp.ClientSession:
     return _session

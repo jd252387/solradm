@@ -278,7 +278,7 @@ def add(
             "-k",
             "--kubecontext",
             help="Target Kubecontext",
-            autocompletion=completion.kube_contexts,
+            autocompletion=kube_contexts,
         ),
         interactive: bool = typer.Option(False, help="Interactive setup mode"),
 ):
