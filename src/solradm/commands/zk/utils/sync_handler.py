@@ -5,7 +5,6 @@ import re
 import threading
 import time
 
-import rich
 from kazoo.client import KazooClient
 from watchdog.events import FileSystemEventHandler
 from solradm.lazy import lazy_module
@@ -13,6 +12,7 @@ from solradm.lazy import lazy_module
 from solradm.commands.collections import reload
 from solradm.commands.zk.utils import create_or_update, get_relative_znode_path
 
+rich = lazy_module("rich")
 api = lazy_module("solradm.api")
 api_state = lazy_module("solradm.api.state")
 api_utils = lazy_module("solradm.api.utils")

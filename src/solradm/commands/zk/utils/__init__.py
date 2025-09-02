@@ -2,10 +2,13 @@ import os
 import shutil
 import subprocess
 
-import rich
 from kazoo.client import KazooClient
 from pathlib import Path
 from typing import Dict, List, Tuple
+from solradm.lazy import lazy_module
+
+
+rich = lazy_module("rich")
 
 
 def open_vscode(directory: str):

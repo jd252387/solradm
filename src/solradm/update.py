@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Optional, Tuple
 
-from rich.console import Console
+from solradm.lazy import lazy_module
 
 CACHE_PATH = Path.home() / ".cache" / "solradm" / "update.json"
 
@@ -71,7 +71,7 @@ def notify_if_outdated() -> None:
 
     latest = _parse_version(latest_str)
     if latest > current:
-        console = Console()
+        console = lazy_module("rich.console").Console()
         console.print(
             f"[yellow]A new version of solradm ({latest_str}) is available.[/yellow] "
             f"You are using {current_str}. "

@@ -1,11 +1,14 @@
-import rich.console
-from kubernetes.config import list_kube_config_contexts
-from rich.prompt import Confirm, Prompt
-from rich.table import Table
-from rich.text import Text
+from solradm.lazy import lazy_module
 
 from solradm.config.util import Context
 from solradm.kube.utils import get_kubecontext
+
+list_kube_config_contexts = lazy_module("kubernetes.config").list_kube_config_contexts
+rich = lazy_module("rich")
+Confirm = lazy_module("rich.prompt").Confirm
+Prompt = lazy_module("rich.prompt").Prompt
+Table = lazy_module("rich.table").Table
+Text = lazy_module("rich.text").Text
 
 
 def setup() -> Context:

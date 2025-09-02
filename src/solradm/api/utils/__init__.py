@@ -1,12 +1,15 @@
 from typing import List, Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
-import rich
 import typer
+from solradm.lazy import lazy_module
 
 from solradm.api import get_session
 from solradm.api.models import Collection, Replica, Core
 from solradm.exceptions.solr_exception import SolrException
+
+
+rich = lazy_module("rich")
 
 
 def get_collections_using_config(cluster_state: List[Collection], config_name: str) -> List[Collection]:

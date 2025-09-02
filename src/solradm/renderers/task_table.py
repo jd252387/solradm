@@ -2,13 +2,14 @@ import asyncio
 from asyncio import Task
 from enum import Enum
 
-from rich.console import Group
-from rich.live import Live
-from rich.panel import Panel
-from rich.table import Table
-
+from solradm.lazy import lazy_module
 from solradm.renderers.renderer import Renderer
 from solradm.tasks.multimetatask import MultiMetaTask
+
+Group = lazy_module("rich.console").Group
+Live = lazy_module("rich.live").Live
+Panel = lazy_module("rich.panel").Panel
+Table = lazy_module("rich.table").Table
 
 
 class TaskResult(Enum):

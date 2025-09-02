@@ -1,13 +1,12 @@
-from typing import List
 from typing import List, TYPE_CHECKING, Any
 
-import rich
 import typer
-from rich.table import Table
 from solradm.lazy import lazy_module
 
 from solradm.commands.filters.utils import with_cluster_state
 
+rich = lazy_module("rich")
+Table = lazy_module("rich.table").Table
 api_utils = lazy_module("solradm.api.utils")
 
 if TYPE_CHECKING:  # pragma: no cover

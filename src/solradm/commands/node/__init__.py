@@ -2,7 +2,6 @@ import asyncio
 import re
 from typing import List, TYPE_CHECKING, Any
 
-import rich
 import typer
 from async_typer import AsyncTyper
 from solradm.lazy import lazy_module
@@ -21,6 +20,7 @@ from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
 
+rich = lazy_module("rich")
 api_utils = lazy_module("solradm.api.utils")
 api_state = lazy_module("solradm.api.state")
 

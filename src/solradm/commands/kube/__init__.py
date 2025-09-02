@@ -4,13 +4,11 @@ import re
 from pathlib import Path
 import sys
 
-import rich
 import typer
-from rich.prompt import Confirm
-from rich.table import Table
 from platformdirs import user_config_dir
 from async_typer import AsyncTyper
 from typing import TYPE_CHECKING
+from solradm.lazy import lazy_module
 
 from solradm.kube.utils import (
     get_configured_kubecontext,
@@ -28,6 +26,10 @@ if TYPE_CHECKING:  # pragma: no cover
 app = AsyncTyper()
 
 STATE_FILE = Path(user_config_dir("solradm", "eclipse")) / "kube-scale-state.json"
+
+rich = lazy_module("rich")
+Confirm = lazy_module("rich.prompt").Confirm
+Table = lazy_module("rich.table").Table
 
 
 def _load_kube_config():

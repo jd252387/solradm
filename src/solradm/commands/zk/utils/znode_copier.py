@@ -1,10 +1,14 @@
 import os
 from pathlib import Path
 
-import rich
 from kazoo.client import KazooClient
 from kazoo.exceptions import NoNodeError
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from solradm.lazy import lazy_module
+
+rich = lazy_module("rich")
+Progress = lazy_module("rich.progress").Progress
+SpinnerColumn = lazy_module("rich.progress").SpinnerColumn
+TextColumn = lazy_module("rich.progress").TextColumn
 
 
 def copy_znode_to_local(

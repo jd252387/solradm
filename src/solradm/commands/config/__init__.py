@@ -2,14 +2,12 @@ import subprocess
 import sys
 from urllib.parse import urlparse
 
-import rich
 import typer
 from kazoo.handlers.threading import KazooTimeoutError
-from rich.pretty import pprint
-from rich.prompt import Confirm
 from typer import Typer
 from pathlib import Path
 from typing import TYPE_CHECKING
+from solradm.lazy import lazy_module
 
 from solradm import completion
 from solradm.config import settings, persist, config_path
@@ -24,6 +22,10 @@ from solradm.zk import get_client
 
 if TYPE_CHECKING:  # pragma: no cover
     from kubernetes.client import CoreV1Api, Configuration
+
+rich = lazy_module("rich")
+pprint = lazy_module("rich.pretty").pprint
+Confirm = lazy_module("rich.prompt").Confirm
 
 app = Typer()
 

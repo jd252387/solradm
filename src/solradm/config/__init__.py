@@ -2,12 +2,14 @@ import os
 import os.path
 from pathlib import Path
 
-import rich.console
 import yaml
 from dynaconf import Dynaconf
 from platformdirs import user_config_dir
-from rich.console import Console
-from rich.theme import Theme
+from solradm.lazy import lazy_module
+
+rich = lazy_module("rich")
+Console = lazy_module("rich.console").Console
+Theme = lazy_module("rich.theme").Theme
 
 config_path = Path(os.path.join(user_config_dir("solradm", "eclipse"), "settings.yaml"))
 

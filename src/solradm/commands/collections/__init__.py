@@ -6,12 +6,9 @@ from collections import Counter
 from pathlib import Path
 from typing import List, TYPE_CHECKING, Any
 
-import rich
 import typer
 from async_typer import AsyncTyper
 from solradm.lazy import lazy_module
-from rich.prompt import Confirm
-from rich.table import Table
 
 from solradm import completion
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
@@ -25,6 +22,9 @@ from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
 
+rich = lazy_module("rich")
+Confirm = lazy_module("rich.prompt").Confirm
+Table = lazy_module("rich.table").Table
 api_utils = lazy_module("solradm.api.utils")
 api_state = lazy_module("solradm.api.state")
 

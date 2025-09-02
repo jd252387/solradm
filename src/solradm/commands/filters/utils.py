@@ -1,11 +1,11 @@
 import functools
 import inspect
 
-import rich
 import typer
-from rich.panel import Panel
 from solradm.lazy import lazy_module
 
+rich = lazy_module("rich")
+Panel = lazy_module("rich.panel").Panel
 api_utils = lazy_module("solradm.api.utils")
 api_state = lazy_module("solradm.api.state")
 

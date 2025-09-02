@@ -1,11 +1,14 @@
 import os
+import os
 from pathlib import Path
 
-import rich
 import typer
+from solradm.lazy import lazy_module
 
 from solradm.config import settings
 from solradm.config.context import Context
+
+rich = lazy_module("rich")
 
 
 def get_current_context() -> Context:

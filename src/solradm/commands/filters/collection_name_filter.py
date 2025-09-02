@@ -3,10 +3,12 @@ from dataclasses import field, dataclass
 from typing import Optional, List, TYPE_CHECKING
 
 import typer
-from rich.prompt import Confirm
+from solradm.lazy import lazy_module
 
 from solradm import completion
 from solradm.commands.filters.filter import Filter
+
+Confirm = lazy_module("rich.prompt").Confirm
 
 if TYPE_CHECKING:  # pragma: no cover
     from solradm.api.models import Collection

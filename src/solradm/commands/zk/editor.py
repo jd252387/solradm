@@ -7,15 +7,10 @@ import time
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-import rich
 import typer
-from rich.panel import Panel
-from rich.prompt import Confirm
-from rich.table import Table
-from rich.text import Text
+from solradm.lazy import lazy_module
 
 from solradm import completion
-from solradm.lazy import lazy_module
 from solradm.commands.zk.utils import (
     open_vscode,
     create_or_update,
@@ -25,6 +20,11 @@ from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
 from solradm.zk import get_client
 from solradm.config.util import resolve_config_name_to_abs_or_default_directory
 
+rich = lazy_module("rich")
+Panel = lazy_module("rich.panel").Panel
+Confirm = lazy_module("rich.prompt").Confirm
+Table = lazy_module("rich.table").Table
+Text = lazy_module("rich.text").Text
 api = lazy_module("solradm.api")
 api_state = lazy_module("solradm.api.state")
 api_utils = lazy_module("solradm.api.utils")
