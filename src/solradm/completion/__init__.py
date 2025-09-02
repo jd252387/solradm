@@ -50,6 +50,12 @@ def kube_contexts(ctx, args: List[str], incomplete: str) -> List[str]:
 
     return _kube_contexts(ctx, args, incomplete)
 
+
+def context_repo_paths(ctx, args: List[str], incomplete: str) -> List[str]:
+    from .contexts import context_repo_paths as _context_repo_paths
+
+    return _context_repo_paths(ctx, args, incomplete)
+
 __all__ = [
     "collection_names",
     "source_collection_names",
@@ -61,4 +67,5 @@ __all__ = [
     "config_names",
     "context_names",
     "kube_contexts",
+    "context_repo_paths",
 ]

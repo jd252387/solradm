@@ -11,12 +11,19 @@ from rich.pretty import pprint
 from rich.prompt import Confirm
 from typer import Typer
 from pathlib import Path
+from rich.table import Table
 
 from solradm import completion
-from solradm.config import settings, persist, config_path
+from solradm.config import settings, persist, config_path, local_contexts
 from solradm.config.context import Context
 from solradm.config.interactive.setup_context import setup
-from solradm.config.util import get_current_context, validate_config_dir
+from solradm.config.util import (
+    get_current_context,
+    validate_config_dir,
+    is_valid_context_repo,
+    load_repo_contexts,
+    save_repo_contexts,
+)
 from solradm.kube.utils import (
     get_current_kubecontext,
     get_current_kubecontext_namespace,
@@ -25,6 +32,8 @@ from solradm.kube.utils import (
 from solradm.zk import get_client
 
 app = Typer()
+repo_app = Typer(help="Manage context repositories.")
+app.add_typer(repo_app, name="repo")
 
 
 @app.command()
@@ -59,7 +68,18 @@ def switch(
         settings.contexts.current = {"name": name}
         if _verify_zk_connection():
             persist()
-            rich.print(f'Switched to context "{name}"')
+            if name in [c["name"] for c in local_contexts]:
+                location = "local configuration"
+            else:
+                repo_list = list(settings.get("context_repositories") or [])
+                location = "unknown location"
+                for repo in reversed(repo_list):
+                    repo_path = Path(repo)
+                    contexts = load_repo_contexts(repo_path)
+                    if any(c["name"] == name for c in contexts):
+                        location = f"repository {repo_path}"
+                        break
+            rich.print(f'Switched to context "{name}" from {location}')
     else:
         raise typer.BadParameter(f"Context {name} does not exist!")
 
@@ -75,9 +95,88 @@ def open_config():
         subprocess.run(["xdg-open", str(config_path.parent)])
 
 
+@repo_app.command("add")
+def add_repo(
+    path: Path = typer.Argument(
+        ..., exists=True, file_okay=True, dir_okay=False, resolve_path=True, help="Path to context repository"
+    ),
+):
+    """Add a new context repository."""
+
+    repo_list = list(settings.get("context_repositories") or [])
+    path_str = str(path)
+    if path_str in repo_list:
+        raise typer.BadParameter(f"Context repository {path} already exists!")
+
+    if not is_valid_context_repo(path):
+        raise typer.BadParameter(f"{path} is not a valid context repository")
+
+    repo_list.append(path_str)
+    settings.context_repositories = repo_list
+    persist(repo_list)
+    settings.configure(settings_files=repo_list + [config_path])
+    settings.reload()
+    rich.print(f"[success]✅  Added context repository {path}!")
+
+
+@repo_app.command("remove")
+def remove_repo(
+    path: Path = typer.Argument(
+        ..., exists=True, file_okay=True, dir_okay=False, autocompletion=completion.context_repo_paths, help="Path to context repository"
+    ),
+):
+    """Remove a context repository."""
+
+    repo_list = list(settings.get("context_repositories") or [])
+    path_str = str(path)
+    if path_str not in repo_list:
+        raise typer.BadParameter(f"Context repository {path} does not exist!")
+
+    repo_list.remove(path_str)
+    settings.context_repositories = repo_list
+    persist(repo_list)
+    settings.configure(settings_files=repo_list + [config_path])
+    settings.reload()
+    rich.print(f"[success]✅  Deleted context repository {path}!")
+
+
+@repo_app.command("list")
+def list_repos():
+    """List configured context repositories and their contexts."""
+
+    repo_list = list(settings.get("context_repositories") or [])
+    table = Table("Repository", "Contexts")
+    for repo in repo_list:
+        repo_path = Path(repo)
+        contexts = [c["name"] for c in load_repo_contexts(repo_path)]
+        table.add_row(str(repo_path), ", ".join(contexts) if contexts else "-")
+    rich.print(table)
+
+
+@repo_app.command("open")
+def open_repo(
+    path: Path = typer.Argument(
+        ..., exists=True, file_okay=True, dir_okay=False, autocompletion=completion.context_repo_paths, help="Path to context repository"
+    ),
+):
+    """Open the location of a configured context repository."""
+
+    repo_list = list(settings.get("context_repositories") or [])
+    path_str = str(path)
+    if path_str not in repo_list:
+        raise typer.BadParameter(f"Context repository {path} is not configured!")
+
+    if sys.platform.startswith("win"):
+        subprocess.run(["explorer", f"/select,{path}"])
+    elif sys.platform == "darwin":
+        subprocess.run(["open", "-R", str(path)])
+    else:
+        subprocess.run(["xdg-open", str(path.parent)])
+
+
 @app.command("config-dir")
 def config_dir(
-    path: Path = typer.Argument(
+        path: Path = typer.Argument(
         ..., exists=True, file_okay=False, dir_okay=True, resolve_path=True, help="Path to default configsets directory"
     ),
 ):
@@ -192,6 +291,7 @@ def add(
         context = Context(name=name, zk=zk, kubecontext=kubecontext)
 
     settings.contexts.available = settings.contexts.available + [context.as_dict()]
+    local_contexts.append(context.as_dict())
     persist()
     rich.print(f"[success]✅  Added new context {name}!")
 
@@ -212,28 +312,63 @@ def edit(
 ):
     """Modify an existing context."""
 
-    if name not in [context.name for context in settings.contexts.available]:
-        raise typer.BadParameter(f"Context {name} does not exist!")
-
     if zk is None and kubecontext is None:
         raise typer.BadParameter("Please specify --zk and/or --kubecontext")
 
     if kubecontext and not get_kubecontext(kubecontext):
         raise typer.BadParameter(f"Kubecontext {kubecontext} does not exist!")
 
-    for context in settings.contexts.available:
-        if context.name == name:
-            new_context = Context(name, zk=zk if zk else context.zk,
-                                  kubecontext=kubecontext if kubecontext else context.kubecontext)
-            settings.contexts.available = [context for context in settings.contexts.available if
-                                           context.name != name] + [new_context.as_dict()]
-            break
+    if name in [c["name"] for c in local_contexts]:
+        for context in settings.contexts.available:
+            if context.name == name:
+                new_context = Context(
+                    name,
+                    zk=zk if zk else context.zk,
+                    kubecontext=kubecontext if kubecontext else context.get("kubecontext"),
+                )
+                settings.contexts.available = [
+                    c for c in settings.contexts.available if c.name != name
+                ] + [new_context.as_dict()]
+                break
 
-    persist()
-    rich.print(f"[success]✅  Updated context {name}!")
+        for idx, c in enumerate(local_contexts):
+            if c["name"] == name:
+                local_contexts[idx] = new_context.as_dict()
+                break
+
+        persist()
+        rich.print(f"[success]✅  Updated context {name}!")
+    else:
+        repo_list = list(settings.get("context_repositories") or [])
+        target_repo = None
+        repo_contexts = None
+        for repo in reversed(repo_list):
+            repo_path = Path(repo)
+            contexts = load_repo_contexts(repo_path)
+            if any(c["name"] == name for c in contexts):
+                target_repo = repo_path
+                repo_contexts = contexts
+                break
+        if not target_repo:
+            raise typer.BadParameter(f"Context {name} does not exist!")
+
+        existing = next(c for c in repo_contexts if c["name"] == name)
+        new_context = Context(
+            name,
+            zk=zk if zk else existing["zk"],
+            kubecontext=kubecontext if kubecontext else existing.get("kubecontext"),
+        )
+        repo_contexts = [
+            c if c["name"] != name else new_context.as_dict() for c in repo_contexts
+        ]
+        save_repo_contexts(target_repo, repo_contexts)
+        settings.reload()
+        rich.print(f"[success]✅  Updated context {name} in {target_repo}!")
 
 
 @app.command()
+@app.command("remove")
+@app.command("delete")
 def delete(
         name: str = typer.Argument(
             ..., help="Context name", autocompletion=completion.context_names
@@ -241,11 +376,84 @@ def delete(
 ):
     """Remove a saved context."""
 
-    if name not in [context.name for context in settings.contexts.available]:
-        raise typer.BadParameter(f"Context {name} does not exist!")
+    if name in [c["name"] for c in local_contexts]:
+        settings.contexts.available = [
+            context for context in settings.contexts.available if context.name != name
+        ]
+        local_contexts[:] = [c for c in local_contexts if c["name"] != name]
+        persist()
+        rich.print(f"[success]✅  Deleted context {name}!")
+    else:
+        repo_list = list(settings.get("context_repositories") or [])
+        target_repo = None
+        repo_contexts = None
+        for repo in reversed(repo_list):
+            repo_path = Path(repo)
+            contexts = load_repo_contexts(repo_path)
+            if any(c["name"] == name for c in contexts):
+                target_repo = repo_path
+                repo_contexts = contexts
+                break
+        if not target_repo:
+            raise typer.BadParameter(f"Context {name} does not exist!")
 
-    settings.contexts.available = [
-        context for context in settings.contexts.available if context.name != name
-    ]
-    persist()
-    rich.print(f"[success]✅  Deleted context {name}!")
+        repo_contexts = [c for c in repo_contexts if c["name"] != name]
+        save_repo_contexts(target_repo, repo_contexts)
+        settings.reload()
+        rich.print(f"[success]✅  Deleted context {name} from {target_repo}!")
+
+
+@app.command()
+def upload(
+        name: str = typer.Argument(
+            ..., help="Local context name", autocompletion=completion.context_names
+        ),
+        repo: Path = typer.Option(
+            ..., "-r", "--repo", exists=True, file_okay=True, dir_okay=False,
+            autocompletion=completion.context_repo_paths, help="Target context repository"
+        ),
+):
+    """Upload a local context to a repository."""
+
+    if name not in [c["name"] for c in local_contexts]:
+        raise typer.BadParameter(f"Context {name} does not exist in local configuration!")
+
+    repo_list = list(settings.get("context_repositories") or [])
+    if str(repo) not in repo_list:
+        raise typer.BadParameter(f"Context repository {repo} is not configured!")
+
+    contexts = load_repo_contexts(repo)
+    if any(c["name"] == name for c in contexts):
+        raise typer.BadParameter(
+            f"Context {name} already exists in repository {repo}!"
+        )
+
+    context = next(c for c in local_contexts if c["name"] == name)
+    contexts.append(context)
+    save_repo_contexts(repo, contexts)
+    settings.reload()
+    rich.print(f"[success]✅  Uploaded context {name} to {repo}!")
+
+
+@app.command("list")
+def list_contexts():
+    """List all contexts and their locations."""
+
+    repo_list = list(settings.get("context_repositories") or [])
+    ctx_map: dict[str, list[str]] = {}
+
+    for repo in repo_list:
+        repo_path = Path(repo)
+        for ctx in load_repo_contexts(repo_path):
+            ctx_map.setdefault(ctx["name"], []).append(str(repo_path))
+
+    for ctx in local_contexts:
+        ctx_map.setdefault(ctx["name"], []).append(str(config_path))
+
+    table = Table("Context", "Locations")
+    for name, sources in sorted(ctx_map.items()):
+        precedence = sources[-1]
+        disp = [f"{src}{' *' if src == precedence else ''}" for src in sources]
+        table.add_row(name, ", ".join(disp))
+
+    rich.print(table)
