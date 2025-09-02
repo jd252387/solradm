@@ -22,11 +22,12 @@ from solradm.commands.core import reload as reload_cmd
 from solradm.commands.zk.utils import (
     open_vscode,
     create_or_update,
-    get_relative_znode_path,
+    build_files_by_config,
 )
 from solradm.commands.zk.utils.sync_handler import ZooKeeperSyncHandler
 from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
 from solradm.zk import get_client
+from solradm.config.util import get_default_config_dir, validate_config_dir
 
 app = typer.Typer()
 
@@ -135,7 +136,10 @@ def edit(
 @app.command()
 def upload(
     paths: List[Path] = typer.Argument(
-        ..., exists=True, resolve_path=True, help="Paths to copy to ZooKeeper"
+        None,
+        exists=True,
+        resolve_path=True,
+        help="Paths to copy to ZooKeeper (defaults to configsets in the default configuration directory)",
     ),
     znode_path: str = typer.Option("/configs", help="Path of the zNode to copy"),
     only_used: bool = typer.Option(
@@ -156,37 +160,16 @@ def upload(
     ),
 ):
     """Upload local files or directories to a ZooKeeper znode."""
+    if not paths:
+        config_dir = get_default_config_dir()
+        if not config_dir or not validate_config_dir(config_dir):
+            raise typer.BadParameter(
+                "Default configuration directory is not configured or invalid"
+            )
+        configsets_dir = config_dir / "configsets"
+        paths = [p for p in configsets_dir.iterdir() if p.is_dir()]
 
-    files_by_config: Dict[str, List[Tuple[Path, str]]] = {}
-
-    for path in paths:
-        if path.is_file():
-            base = path.parent
-            rel_path = get_relative_znode_path(znode_path, str(base), str(path))
-            parts = rel_path.split("/", 1)
-            if len(parts) == 1:
-                config = base.name
-                zk_path = f"{znode_path.rstrip('/')}/{config}/{parts[0]}"
-            else:
-                config = parts[0]
-                zk_path = f"{znode_path.rstrip('/')}/{rel_path}"
-            files_by_config.setdefault(config, []).append((path, zk_path))
-        elif path.is_dir():
-            for sub_file in path.rglob("*"):
-                if sub_file.is_file():
-                    rel_path = get_relative_znode_path(
-                        znode_path, str(path), str(sub_file)
-                    )
-                    parts = rel_path.split("/", 1)
-                    if len(parts) == 1:
-                        config = path.name
-                        zk_path = f"{znode_path.rstrip('/')}/{config}/{parts[0]}"
-                    else:
-                        config = parts[0]
-                        zk_path = f"{znode_path.rstrip('/')}/{rel_path}"
-                    files_by_config.setdefault(config, []).append(
-                        (sub_file, zk_path)
-                    )
+    files_by_config = build_files_by_config([(p, None) for p in paths], znode_path)
 
     if not files_by_config:
         rich.print("[warning]⚠️ No files to upload")

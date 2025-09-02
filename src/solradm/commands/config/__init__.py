@@ -10,12 +10,13 @@ from kubernetes.config import load_kube_config
 from rich.pretty import pprint
 from rich.prompt import Confirm
 from typer import Typer
+from pathlib import Path
 
 from solradm import completion
 from solradm.config import settings, persist, config_path
 from solradm.config.context import Context
 from solradm.config.interactive.setup_context import setup
-from solradm.config.util import get_current_context
+from solradm.config.util import get_current_context, validate_config_dir
 from solradm.kube.utils import (
     get_current_kubecontext,
     get_current_kubecontext_namespace,
@@ -72,6 +73,23 @@ def open_config():
         subprocess.run(["open", "-R", str(config_path)])
     else:
         subprocess.run(["xdg-open", str(config_path.parent)])
+
+
+@app.command("config-dir")
+def config_dir(
+    path: Path = typer.Argument(
+        ..., exists=True, file_okay=False, dir_okay=True, resolve_path=True, help="Path to default configuration directory"
+    ),
+):
+    """Update the default configuration directory."""
+
+    if not validate_config_dir(path):
+        raise typer.BadParameter(
+            "Directory must contain 'root' and 'configsets' subdirectories"
+        )
+    settings.config_dir = str(path)
+    persist()
+    rich.print(f"[success]✅  Updated default configuration directory to {path}")
 
 
 @app.command()
