@@ -1,3 +1,4 @@
+import os
 import os.path
 from pathlib import Path
 
@@ -9,6 +10,10 @@ from rich.console import Console
 from rich.theme import Theme
 
 config_path = Path(os.path.join(user_config_dir("solradm", "eclipse"), "settings.yaml"))
+
+# Detect if the CLI was invoked for shell completion. When completing we want to
+# avoid any interactive prompts that would block and slow down the shell.
+IS_COMPLETING = any(key.endswith("_COMPLETE") for key in os.environ)
 
 def persist():
     with open(config_path, "w") as f:
@@ -27,8 +32,10 @@ console = Console(style="text", theme=theme)
 
 rich._console = console
 
-if not os.path.exists(config_path):
-    rich.print("""This is your first time running [red bold]solradm[/]! 
+# Skip interactive configuration when running shell completion as it would
+# otherwise block completion for first-time users.
+if not os.path.exists(config_path) and not IS_COMPLETING:
+    rich.print("""This is your first time running [red bold]solradm[/]!
 [magenta]Before proceeding, it is highly recommended to run eclipse-setup.bat so all the supporting tools and configurations are installed on your machine. See the setup section in the documentation website for instructions[/].
 
 Interacting with Solr and ZooKeeper through solradm involves [blue][bold]contexts[/bold][/blue]. They are similar to oc/kubectl contexts, if you are familiar with them.

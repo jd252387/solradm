@@ -1,13 +1,15 @@
 import re
 from dataclasses import field, dataclass
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
 
 import typer
 from rich.prompt import Confirm
 
 from solradm import completion
-from solradm.api.models import Collection
 from solradm.commands.filters.filter import Filter
+
+if TYPE_CHECKING:  # pragma: no cover
+    from solradm.api.models import Collection
 
 
 @dataclass
@@ -38,7 +40,7 @@ class CollectionNameFilter(Filter):
                     "No collection filter was specified, so this command will run across all collections, adhering to any other filters you have placed.\nAre you sure you want to continue?"):
                 raise typer.Exit(0)
 
-    def apply(self, cluster_state: List[Collection]) -> List[Collection]:
+    def apply(self, cluster_state: List["Collection"]) -> List["Collection"]:
         if self.collection_name_filter is not None:
             try:
                 pattern = re.compile(self.collection_name_filter)

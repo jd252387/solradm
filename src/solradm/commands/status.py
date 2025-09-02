@@ -1,12 +1,17 @@
 from typing import List
+from typing import List, TYPE_CHECKING, Any
 
 import rich
 import typer
 from rich.table import Table
+from lazy_loader import load as lazy_load
 
-from solradm.api.models import Collection
-from solradm.api.utils import get_replicas
 from solradm.commands.filters.utils import with_cluster_state
+
+api_utils = lazy_load("solradm.api.utils")
+
+if TYPE_CHECKING:  # pragma: no cover
+    from solradm.api.models import Collection
 
 
 # Mapping of replica states to severity for sorting
@@ -32,7 +37,7 @@ STATE_COLORS = {
 
 @with_cluster_state()
 def status(
-    cluster_state: List[Collection],
+    cluster_state: List[Any],
     severity: List[str] | None = typer.Option(
         None,
         "--severity",
@@ -43,7 +48,7 @@ def status(
 ):
     """Display status table for all replicas across collections."""
 
-    replicas = get_replicas(cluster_state)
+    replicas = api_utils.get_replicas(cluster_state)
 
     if severity:
         allowed = {s.lower() for s in severity}

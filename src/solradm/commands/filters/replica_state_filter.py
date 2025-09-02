@@ -1,11 +1,13 @@
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import List, Optional, TYPE_CHECKING
 
 import typer
 
 from solradm import completion
-from solradm.api.models import Collection
 from solradm.commands.filters.filter import Filter
+
+if TYPE_CHECKING:  # pragma: no cover
+    from solradm.api.models import Collection
 
 
 @dataclass
@@ -38,10 +40,10 @@ class ReplicaStateFilter(Filter):
         valid = {"active", "down", "recovering", "recovery_failed", None}
         if self.replica_state not in valid or self.exclude_replica_state not in valid:
             raise typer.BadParameter(
-                "Replica state must be one of 'active', 'down', 'recovering', 'recovery_failed'"
+                "Replica state must be one of 'active', 'down', 'recovering', 'recovery_failed'",
             )
 
-    def apply(self, cluster_state: List[Collection]) -> List[Collection]:
+    def apply(self, cluster_state: List["Collection"]) -> List["Collection"]:
         filtered_collections = []
         for collection in cluster_state:
             new_shards = []

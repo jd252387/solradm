@@ -8,12 +8,14 @@ import time
 import rich
 from kazoo.client import KazooClient
 from watchdog.events import FileSystemEventHandler
+from lazy_loader import load as lazy_load
 
-from solradm.api import get_initialized_sesssion
-from solradm.api.state import get_collections
-from solradm.api.utils import get_collections_using_config
 from solradm.commands.collections import reload
 from solradm.commands.zk.utils import create_or_update, get_relative_znode_path
+
+api = lazy_load("solradm.api")
+api_state = lazy_load("solradm.api.state")
+api_utils = lazy_load("solradm.api.utils")
 
 
 class ZooKeeperSyncHandler(FileSystemEventHandler):
@@ -95,7 +97,11 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
                 if self.reload:
                     split_path = zk_path.split("/")
                     if split_path[0] == "configs":
-                        to_reload.extend(get_collections_using_config(get_collections(), split_path[1]))
+                        to_reload.extend(
+                            api_utils.get_collections_using_config(
+                                api_state.get_collections(), split_path[1]
+                            )
+                        )
             except Exception as e:
                 rich.print(f"[error]❌ Error syncing {file_path}: {e}")
 
@@ -103,7 +109,7 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
             asyncio.run(reload(
                 collection_name_filter=r"^(" + "|".join(re.escape(collection.name) for collection in to_reload) + r")$",
                 dry_run=False))
-            asyncio.run(get_initialized_sesssion().close())
+            asyncio.run(api.get_initialized_sesssion().close())
 
         self.pending_changes.clear()
         self.modification_hashes.clear()

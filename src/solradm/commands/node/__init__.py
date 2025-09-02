@@ -1,16 +1,13 @@
 import asyncio
 import re
-from typing import List
+from typing import List, TYPE_CHECKING, Any
 
 import rich
 import typer
 from async_typer import AsyncTyper
+from lazy_loader import load as lazy_load
 
-import solradm.api.utils as api_utils
 from solradm import completion
-from solradm.api.models import Collection
-from solradm.api.state import get_nodes_by_role
-from solradm.api.utils import get_cores_from_node, send_request
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
 from solradm.kube.utils import (
@@ -24,6 +21,12 @@ from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
 
+api_utils = lazy_load("solradm.api.utils")
+api_state = lazy_load("solradm.api.state")
+
+if TYPE_CHECKING:  # pragma: no cover
+    from solradm.api.models import Collection
+
 app = AsyncTyper()
 
 
@@ -31,7 +34,7 @@ app = AsyncTyper()
 @with_dry_run
 @with_cluster_state(CollectionNameFilter)
 async def drain(
-    cluster_state: List[Collection],
+    cluster_state: List[Any],
     node: List[str] | None = typer.Option(
         None,
         "--node",
@@ -53,7 +56,7 @@ async def drain(
 
     allowed_collections = {c.name for c in cluster_state}
 
-    data_nodes = get_nodes_by_role("data").get("on", [])
+    data_nodes = api_state.get_nodes_by_role("data").get("on", [])
     include_patterns = [re.compile(p) for p in node] if node else []
     exclude_patterns = [re.compile(p) for p in exclude_node] if exclude_node else []
 
@@ -73,14 +76,14 @@ async def drain(
     # Delete replicas that do not belong to allowed collections
     delete_tasks: List[MetaTask] = []
     for n in selected_nodes:
-        cores = await get_cores_from_node(n)
+        cores = await api_utils.get_cores_from_node(n)
         for core in cores:
             if core.cloud.collection not in allowed_collections:
                 delete_tasks.append(
                     MetaTask(
                         [n, core.cloud.collection, core.cloud.shard, core.cloud.replica],
                         asyncio.create_task(
-                            send_request(
+                            api_utils.send_request(
                                 get_overseer_leader(),
                                 "/admin/collections",
                                 params={
@@ -115,7 +118,7 @@ async def drain(
             continue
         pod_name = pods[0].metadata.name
 
-        remaining_cores = await get_cores_from_node(n)
+        remaining_cores = await api_utils.get_cores_from_node(n)
         core_names = {core.name for core in remaining_cores}
 
         dirs_raw = run_command_in_pod(pod_name, "ls -1 /var/solr/data").split()

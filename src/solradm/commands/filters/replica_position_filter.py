@@ -1,12 +1,14 @@
 import re
-from dataclasses import field, dataclass
-from typing import Optional, List
+from dataclasses import dataclass, field
+from typing import List, Optional, TYPE_CHECKING
 
 import typer
 
 from solradm import completion
-from solradm.api.models import Collection
 from solradm.commands.filters.filter import Filter
+
+if TYPE_CHECKING:  # pragma: no cover
+    from solradm.api.models import Collection
 
 
 @dataclass
@@ -39,7 +41,7 @@ class ReplicaPositionFilter(Filter):
         # nothing required on init
         pass
 
-    def apply(self, cluster_state: List[Collection]) -> List[Collection]:
+    def apply(self, cluster_state: List["Collection"]) -> List["Collection"]:
         filtered_collections = []
         for collection in cluster_state:
             new_shards = []
@@ -51,9 +53,15 @@ class ReplicaPositionFilter(Filter):
                 new_replicas = []
                 for idx, replica in enumerate(sorted_replicas, start=1):
                     match_include = (
-                        (idx == self.replica_position or (
-                                    self.replica_position > idx == len(sorted_replicas)) or (
-                                     self.replica_position < idx == 1)) if self.replica_position is not None else True
+                        (
+                            idx == self.replica_position
+                            or (
+                                self.replica_position > idx == len(sorted_replicas)
+                            )
+                            or (self.replica_position < idx == 1)
+                        )
+                        if self.replica_position is not None
+                        else True
                     )
                     match_exclude = (
                         idx == self.exclude_replica_position

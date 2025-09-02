@@ -1,12 +1,14 @@
 import re
-from dataclasses import field, dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import List, Optional, TYPE_CHECKING
 
 import typer
 
 from solradm import completion
-from solradm.api.models import Collection
 from solradm.commands.filters.filter import Filter
+
+if TYPE_CHECKING:  # pragma: no cover
+    from solradm.api.models import Collection
 
 
 @dataclass
@@ -76,7 +78,7 @@ class ShardFilter(Filter):
                         return True
         return False
 
-    def apply(self, cluster_state: List[Collection]) -> List[Collection]:
+    def apply(self, cluster_state: List["Collection"]) -> List["Collection"]:
         include_rules = self._parse_spec(self.shards) if self.shards else []
         exclude_rules = self._parse_spec(self.exclude_shards) if self.exclude_shards else []
 

@@ -4,19 +4,16 @@ import os
 import re
 from collections import Counter
 from pathlib import Path
-from typing import List
+from typing import List, TYPE_CHECKING, Any
 
 import rich
 import typer
 from async_typer import AsyncTyper
+from lazy_loader import load as lazy_load
 from rich.prompt import Confirm
 from rich.table import Table
 
-import solradm.api.utils as api_utils
 from solradm import completion
-from solradm.api.models import Collection, Replica
-from solradm.api.state import get_nodes_by_role, get_collections
-from solradm.api.utils import validate_num_replicas, get_replicas, send_request
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
 from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
@@ -28,17 +25,23 @@ from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
 
+api_utils = lazy_load("solradm.api.utils")
+api_state = lazy_load("solradm.api.state")
+
+if TYPE_CHECKING:  # pragma: no cover - used only for type hints
+    from solradm.api.models import Collection, Replica
+
 app = AsyncTyper()
 
 @app.async_command(help="Remove replicas for filtered collections")
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def depopulate(
-        cluster_state: List[Collection]
+        cluster_state: List[Any]
 ):
     """Remove replicas from the selected collections."""
 
-    replicas = get_replicas(cluster_state)
+    replicas = api_utils.get_replicas(cluster_state)
 
     table = Table(title="Cluster State", header_style="bold magenta")
     table.add_column("Collection", style="cyan")
@@ -64,14 +67,14 @@ async def depopulate(
     if not Confirm.ask("Proceed with removing replicas?"):
         raise typer.Exit(0)
 
-    replicas = validate_num_replicas(replicas)
+    replicas = api_utils.validate_num_replicas(replicas)
     tasks = [
         MetaTask(
             [replica.shard.collection.name, replica.shard.name, replica.name],
-            asyncio.create_task(send_request(get_overseer_leader(), "/admin/collections",
-                                             params={"action": "DELETEREPLICA",
-                                                     "collection": replica.shard.collection.name,
-                                                     "shard": replica.shard.name, "replica": replica.name})),
+            asyncio.create_task(api_utils.send_request(get_overseer_leader(), "/admin/collections",
+                                                      params={"action": "DELETEREPLICA",
+                                                              "collection": replica.shard.collection.name,
+                                                              "shard": replica.shard.name, "replica": replica.name})),
         )
         for replica in replicas
     ]
@@ -83,7 +86,7 @@ async def depopulate(
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter)
 async def populate(
-        cluster_state: List[Collection],
+        cluster_state: List[Any],
         node: List[str] | None = typer.Option(
             None,
             "--node",
@@ -106,7 +109,7 @@ async def populate(
     collection = cluster_state[0]
     shards = collection.shards
 
-    data_nodes = get_nodes_by_role("data").get("on", [])
+    data_nodes = api_state.get_nodes_by_role("data").get("on", [])
 
     include_patterns = [re.compile(p) for p in node] if node else []
     exclude_patterns = [re.compile(p) for p in exclude_node] if exclude_node else []
@@ -173,7 +176,7 @@ async def populate(
                 MetaTask(
                     [collection.name, shard.name, n],
                     asyncio.create_task(
-                        send_request(
+                        api_utils.send_request(
                             get_overseer_leader(),
                             "/admin/collections",
                             params={
@@ -236,7 +239,7 @@ async def create(
         "collection.configName": conf,
         "createNodeSet": "EMPTY",
     }
-    await send_request(get_overseer_leader(), "/admin/collections", params=params)
+    await api_utils.send_request(get_overseer_leader(), "/admin/collections", params=params)
     rich.print(f"[success] ✅ Created collection {name}!")
 
     if populate_after:
@@ -251,7 +254,7 @@ async def delete(
     """Delete collections and their replicas."""
 
     fil = CollectionNameFilter(collection_name_filter=pattern)
-    cluster_state = fil.apply(get_collections())
+    cluster_state = fil.apply(api_state.get_collections())
     names = [c.name for c in cluster_state]
     if not names:
         rich.print("[error] ❌ No collections match the given pattern")
@@ -262,7 +265,7 @@ async def delete(
         return
 
     for name in names:
-        await send_request(
+        await api_utils.send_request(
             get_overseer_leader(),
             "/admin/collections",
             params={"action": "DELETE", "name": name},
@@ -273,15 +276,17 @@ async def delete(
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def reload(
-        cluster_state: List[Collection],
+        cluster_state: List[Any],
         coordinators: bool = typer.Option(None, help="If unset, reloads both data and coordinator nodes. If set to true, only reload coordinators. If set to false, only reload data nodes.")
 ):
     """Reload the specified cores and optionally coordinators."""
+    from solradm.api.models import Replica
+
     replicas = []
     if coordinators is None or not coordinators:
-        replicas.extend(get_replicas(cluster_state))
+        replicas.extend(api_utils.get_replicas(cluster_state))
     if coordinators is None or coordinators:
-        coordinator_nodes = get_nodes_by_role("coordinator")["on"]
+        coordinator_nodes = api_state.get_nodes_by_role("coordinator")["on"]
         for node in coordinator_nodes:
             cores = await api_utils.get_cores_from_node(node)
             for core in cores:
@@ -289,13 +294,13 @@ async def reload(
                     Replica(name=core.name, core=core.name, node_name=node, type=core.cloud.replicaType,
                             state=core.lastPublished, leader=True, force_set_state=False, base_url=node))
 
-    validate_num_replicas(replicas)
+    api_utils.validate_num_replicas(replicas)
 
     tasks = [
         MetaTask(
             [replica.base_url, replica.core],
-            asyncio.create_task(send_request(replica.base_url, "/admin/cores",
-                                             params={"action": "RELOAD", "core": replica.core})))
+            asyncio.create_task(api_utils.send_request(replica.base_url, "/admin/cores",
+                                                      params={"action": "RELOAD", "core": replica.core})))
         for replica in replicas
     ]
     metatasks = MultiMetaTask(["host", "core"], tasks)
@@ -316,7 +321,7 @@ async def query(
     if debug:
         params["debug"] = "true"
 
-    resp = await send_request(get_overseer_leader(), f"/{collection}/select", params=params)
+    resp = await api_utils.send_request(get_overseer_leader(), f"/{collection}/select", params=params)
 
     docs = resp.get("response", {}).get("docs", [])
     rich.print_json(data=json.dumps(docs))

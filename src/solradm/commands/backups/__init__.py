@@ -1,12 +1,12 @@
 import asyncio
 from pathlib import PurePosixPath
-from typing import List, Collection
+from typing import List, TYPE_CHECKING, Any
 
 import rich
 import typer
 from async_typer import AsyncTyper
+from lazy_loader import load as lazy_load
 
-from solradm.api.utils import validate_num_replicas, get_replicas, send_request
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
 from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
@@ -20,6 +20,11 @@ from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
 
+api_utils = lazy_load("solradm.api.utils")
+
+if TYPE_CHECKING:  # pragma: no cover
+    from solradm.api.models import Collection
+
 app = AsyncTyper()
 
 
@@ -27,7 +32,7 @@ app = AsyncTyper()
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def take(
-        cluster_state: List[Collection],
+        cluster_state: List[Any],
         base_location_str: str = typer.Option("/mnt/backups", "--location",
                                               help="Base location on each node's disk to place the backup. Each backup will be created under location/collection_name/shard_number"),
         number_to_keep=typer.Option(None,
@@ -37,7 +42,7 @@ async def take(
 ):
     """Create backups of the specified shards."""
 
-    replicas = validate_num_replicas(get_replicas(cluster_state))
+    replicas = api_utils.validate_num_replicas(api_utils.get_replicas(cluster_state))
     base_location = PurePosixPath(base_location_str)
 
     if create_directories:
@@ -52,11 +57,18 @@ async def take(
     tasks = [
         MetaTask(
             [replica.shard.collection.name, replica.shard.name, replica.core],
-            asyncio.create_task(send_request(get_overseer_leader(), f"/{replica.core}/replication",
-                                             params={**global_params, "command": "backup",
-                                                     "location": base_location / f"{replica.shard.collection.name}/{replica.shard.name}"}
-                                             ),
-                                ))
+            asyncio.create_task(
+                api_utils.send_request(
+                    get_overseer_leader(),
+                    f"/{replica.core}/replication",
+                    params={
+                        **global_params,
+                        "command": "backup",
+                        "location": base_location / f"{replica.shard.collection.name}/{replica.shard.name}"
+                    },
+                ),
+            ),
+        )
         for replica in replicas
     ]
     metatasks = MultiMetaTask(["collection", "shard", "core"], tasks)
@@ -67,7 +79,7 @@ async def take(
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def restore(
-        cluster_state: List[Collection],
+        cluster_state: List[Any],
         backups_path_str: str = typer.Option(..., "--location",
                                              help="Directory which contains the shard directories. This directory must have subdirectories named shard1, shard2... which contain the backups.")):
     """Restore backups for the selected collection."""
@@ -77,16 +89,23 @@ async def restore(
             "[error] ❌ More than one collection has been filtered, and this command requires a singular collection or a part of it! ")
         raise typer.Exit(1)
 
-    replicas = validate_num_replicas(get_replicas(cluster_state))
+    replicas = api_utils.validate_num_replicas(api_utils.get_replicas(cluster_state))
     backups_path = PurePosixPath(backups_path_str)
 
     tasks = [
         MetaTask(
             [replica.shard.collection.name, replica.shard.name, replica.core],
-            asyncio.create_task(send_request(get_overseer_leader(), f"/{replica.core}/replication",
-                                             params={"command": "restore",
-                                                     "location": backups_path / replica.shard.name}),
-                                ))
+            asyncio.create_task(
+                api_utils.send_request(
+                    get_overseer_leader(),
+                    f"/{replica.core}/replication",
+                    params={
+                        "command": "restore",
+                        "location": backups_path / replica.shard.name,
+                    },
+                ),
+            ),
+        )
         for replica in replicas
     ]
     metatasks = MultiMetaTask(["collection", "shard", "core"], tasks)

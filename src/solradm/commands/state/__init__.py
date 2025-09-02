@@ -1,17 +1,21 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import List
+from typing import List, TYPE_CHECKING
 
 from async_typer import AsyncTyper
 import rich
 import typer
 import yaml
+from lazy_loader import load as lazy_load
 
-from solradm.api.models import Collection
-from solradm.api.state import get_collections
-from solradm.api.utils import send_request
 from solradm.zk.utils import get_overseer_leader
+
+api_state = lazy_load("solradm.api.state")
+api_utils = lazy_load("solradm.api.utils")
+
+if TYPE_CHECKING:  # pragma: no cover
+    from solradm.api.models import Collection
 
 app = AsyncTyper()
 
@@ -19,7 +23,7 @@ app = AsyncTyper()
 @app.command(help="Export cluster state to a file")
 def export(file: Path = typer.Argument(..., help="Destination file")) -> None:
     """Serialize the cluster state to a JSON or YAML file."""
-    collections = get_collections()
+    collections = api_state.get_collections()
     data = [c.model_dump() for c in collections]
     if file.suffix.lower() in {".yaml", ".yml"}:
         file.write_text(yaml.safe_dump(data, sort_keys=False))
@@ -39,8 +43,10 @@ async def import_state(file: Path = typer.Argument(..., help="Snapshot file")) -
     else:
         data = json.loads(file.read_text())
 
-    snapshot: List[Collection] = [Collection.model_validate(c) for c in data]
-    current = {c.name: c for c in get_collections()}
+    from solradm.api.models import Collection
+
+    snapshot: List["Collection"] = [Collection.model_validate(c) for c in data]
+    current = {c.name: c for c in api_state.get_collections()}
     overseer = get_overseer_leader()
 
     for coll in snapshot:
@@ -57,7 +63,7 @@ async def import_state(file: Path = typer.Argument(..., help="Snapshot file")) -
                 "replicationFactor": coll.replicationFactor,
                 "createNodeSet": "EMPTY",
             }
-            await send_request(overseer, "/admin/collections", params=params)
+            await api_utils.send_request(overseer, "/admin/collections", params=params)
             existing_shards = {}
         else:
             existing_shards = {s.name: s for s in existing_coll.shards}
@@ -76,6 +82,6 @@ async def import_state(file: Path = typer.Argument(..., help="Snapshot file")) -
                     "node": replica.node_name,
                     "type": replica.type,
                 }
-                await send_request(overseer, "/admin/collections", params=params)
+                await api_utils.send_request(overseer, "/admin/collections", params=params)
 
     rich.print(f"[success]✅  Imported state from {file}")

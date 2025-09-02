@@ -1,11 +1,13 @@
-from dataclasses import field, dataclass
-from typing import Optional, List
+from dataclasses import dataclass, field
+from typing import List, Optional, TYPE_CHECKING
 
 import typer
 
 from solradm import completion
-from solradm.api.models import Collection
 from solradm.commands.filters.filter import Filter
+
+if TYPE_CHECKING:  # pragma: no cover
+    from solradm.api.models import Collection
 
 
 @dataclass
@@ -46,7 +48,7 @@ class ReplicaTypeFilter(Filter):
             return not replica.leader
         return False
 
-    def apply(self, cluster_state: List[Collection]) -> List[Collection]:
+    def apply(self, cluster_state: List["Collection"]) -> List["Collection"]:
         filtered_collections = []
         for collection in cluster_state:
             new_shards = []

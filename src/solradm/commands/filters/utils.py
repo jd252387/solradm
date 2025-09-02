@@ -4,9 +4,10 @@ import inspect
 import rich
 import typer
 from rich.panel import Panel
+from lazy_loader import load as lazy_load
 
-import solradm.api.utils
-from solradm.api.state import get_collections
+api_utils = lazy_load("solradm.api.utils")
+api_state = lazy_load("solradm.api.state")
 
 
 def with_dry_run(func):
@@ -19,7 +20,7 @@ def with_dry_run(func):
     @functools.wraps(func)
     def wrapper(dry_run, *args, **kwargs):
         if dry_run:
-            solradm.api.utils.is_dry_run = True
+            api_utils.is_dry_run = True
             rich.print(Panel("Dry Run", style="bold green"))
 
         return func(*args, **kwargs)
@@ -73,7 +74,7 @@ def with_cluster_state(*filter_classes):
                 if any(filter_params.values()):
                     filter_instances.append(filter_instance)
             try:
-                cluster_state = get_collections()
+                cluster_state = api_state.get_collections()
             except Exception as e:
                 raise typer.BadParameter(f"Failed to fetch cluster state: {e}")
 
@@ -81,7 +82,7 @@ def with_cluster_state(*filter_classes):
                 cluster_state = filter_instance.apply(cluster_state)
 
             if len(cluster_state) == 0:
-                if solradm.api.utils.is_dry_run:
+                if api_utils.is_dry_run:
                     rich.print(f"[warning][green bold]💡 EXITING DRY RUN - [/] CLI command \"{func.__qualname__}\" has been called, but the filters didn't match any collections. This may be OK as you are running with dry run, as the previous command did not actually edit the cluster. This command was called with parameters \"{args if args else ""}{kwargs if kwargs else ""}")
                 else:
                     rich.print("[error] ❌ No collections in the cluster have matched the specified filters!")

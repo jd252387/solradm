@@ -16,9 +16,7 @@ from rich.text import Text
 from watchdog.observers import Observer
 
 from solradm import completion
-from solradm.api import get_initialized_sesssion
-from solradm.api.state import get_collections
-from solradm.api.utils import get_collections_using_config
+from lazy_loader import load as lazy_load
 from solradm.commands.zk.utils import (
     open_vscode,
     create_or_update,
@@ -28,6 +26,10 @@ from solradm.commands.zk.utils.sync_handler import ZooKeeperSyncHandler
 from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
 from solradm.zk import get_client
 from solradm.config.util import resolve_config_name_to_abs_or_default_directory
+
+api = lazy_load("solradm.api")
+api_state = lazy_load("solradm.api.state")
+api_utils = lazy_load("solradm.api.utils")
 
 app = typer.Typer()
 
@@ -180,11 +182,11 @@ def upload(
             rich.print("[warning]⚠️ No files to upload")
             raise typer.Exit(1)
 
-        cluster_state = get_collections()
+        cluster_state = api_state.get_collections()
 
         if only_used or not skip_checks or reload:
             config_usage = {
-                cfg: get_collections_using_config(cluster_state, cfg)
+                cfg: api_utils.get_collections_using_config(cluster_state, cfg)
                 for cfg in files_by_config
             }
 
@@ -246,5 +248,5 @@ def upload(
                     dry_run=False, coordinators=None
                 )
             )
-            asyncio.run(get_initialized_sesssion().close())
+            asyncio.run(api.get_initialized_sesssion().close())
 

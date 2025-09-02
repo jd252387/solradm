@@ -1,17 +1,17 @@
 import logging
 
+import os
+
 import rich
 from async_typer import AsyncTyper
 from rich.logging import RichHandler
 
-from solradm.api import get_initialized_sesssion
 from solradm.commands import config, collections, backups, auth, node, state
 from solradm.commands import kube
 from solradm.commands.status import status as status_cmd
 from solradm.commands.zk import editor
 from solradm.exceptions.adm_exception import AdmException
 from solradm.exceptions.solr_exception import SolrException
-from solradm.update import notify_if_outdated
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,6 +21,11 @@ logging.basicConfig(
 )
 
 app = AsyncTyper()
+
+
+def _is_completing() -> bool:
+    """Return True when the CLI runs in shell-completion mode."""
+    return any(key.endswith("_COMPLETE") for key in os.environ)
 
 app.add_typer(collections.app, name="coll", help="Interact with the Collections API")
 app.add_typer(backups.app, name="backup", help="Take or restore backups using the Replication API")
@@ -50,10 +55,14 @@ def run():
     except AdmException as e:
         logging.error("Internal error:: %s", e)
     finally:
-        notify_if_outdated()
-        import asyncio
-        if get_initialized_sesssion():
-            asyncio.run(get_initialized_sesssion().close())
+        if not _is_completing():
+            from solradm.update import notify_if_outdated
+            from solradm.api import get_initialized_sesssion
+
+            notify_if_outdated()
+            import asyncio
+            if get_initialized_sesssion():
+                asyncio.run(get_initialized_sesssion().close())
 
 
 if __name__ == "__main__":
