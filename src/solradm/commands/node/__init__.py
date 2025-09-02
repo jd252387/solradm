@@ -7,12 +7,12 @@ import typer
 from async_typer import AsyncTyper
 
 import solradm.api.utils as api_utils
-from solradm import completion
 from solradm.api.models import Collection
 from solradm.api.state import get_nodes_by_role
 from solradm.api.utils import get_cores_from_node, send_request
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
+from solradm.completion.nodes import node_names
 from solradm.kube.utils import (
     find_pods_by_node_name,
     get_configured_kubecontext,
@@ -31,19 +31,19 @@ app = AsyncTyper()
 @with_dry_run
 @with_cluster_state(CollectionNameFilter)
 async def drain(
-    cluster_state: List[Collection],
-    node: List[str] | None = typer.Option(
-        None,
-        "--node",
-        help="Regex to select nodes",
-        autocompletion=completion.node_names,
-    ),
-    exclude_node: List[str] | None = typer.Option(
-        None,
-        "--exclude-node",
-        help="Regex to exclude nodes",
-        autocompletion=completion.node_names,
-    ),
+        cluster_state: List[Collection],
+        node: List[str] | None = typer.Option(
+            None,
+            "--node",
+            help="Regex to select nodes",
+            autocompletion=node_names,
+        ),
+        exclude_node: List[str] | None = typer.Option(
+            None,
+            "--exclude-node",
+            help="Regex to exclude nodes",
+            autocompletion=node_names,
+        ),
 ):
     """Drain a node of cores that do not belong to the selected collections.
 
@@ -122,14 +122,13 @@ async def drain(
         for d in dirs_raw:
             if d not in core_names:
                 has_index = (
-                    run_command_in_pod(
-                        pod_name,
-                        f"test -d /var/solr/data/{d}/index && echo yes || echo no",
-                    ).strip()
-                    == "yes"
+                        run_command_in_pod(
+                            pod_name,
+                            f"test -d /var/solr/data/{d}/index && echo yes || echo no",
+                        ).strip()
+                        == "yes"
                 )
                 if has_index:
                     rich.print(f"[text] Removing directory {d} from node {n}")
                     if not api_utils.is_dry_run:
                         run_command_in_pod(pod_name, f"rm -rf /var/solr/data/{d}")
-

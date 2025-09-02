@@ -1,18 +1,20 @@
 import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, computed_field, field_serializer, field_validator, ConfigDict, Field
+from pydantic import BaseModel, computed_field, field_validator, ConfigDict, Field
 
 
 class Router(BaseModel):
     name: str
     field: str | None = None
 
+
 class CoreCloudDescriptor(BaseModel):
     collection: str
     shard: str | None
     replica: str | None
     replicaType: str
+
 
 class Core(BaseModel):
     name: str
@@ -27,6 +29,7 @@ class Core(BaseModel):
     cloud: CoreCloudDescriptor
     # index information may come in the core json
     model_config = ConfigDict(extra="ignore")
+
 
 class Replica(BaseModel):
     name: str
@@ -43,6 +46,7 @@ class Replica(BaseModel):
     @property
     def shard_name(self) -> Optional[str]:
         return self.shard.name if self.shard else None
+
 
 class Shard(BaseModel):
     name: str
@@ -67,12 +71,13 @@ class Shard(BaseModel):
         for r in self.replicas:
             r.shard = self
 
+
 class Collection(BaseModel):
     name: str
     pullReplicas: int
     configName: str
     replicationFactor: int
-    router: 'Router'             # your existing type
+    router: 'Router'  # your existing type
     nrtReplicas: int
     tlogReplicas: int
     shards: List[Shard] = Field(default_factory=list)

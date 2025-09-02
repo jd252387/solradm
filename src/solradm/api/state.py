@@ -10,6 +10,7 @@ def get_collection_names() -> List[str]:
     collections = zk.get_children("/collections")
     return collections
 
+
 def get_collection_state(collection: str) -> Collection:
     zk = get_client()
     collection_path = f"/collections/{collection}/state.json"
@@ -19,9 +20,11 @@ def get_collection_state(collection: str) -> Collection:
     state["name"] = collection
     return Collection.model_validate(state)
 
+
 def get_collections() -> List[Collection]:
     collection_names = get_collection_names()
     return [get_collection_state(collection) for collection in collection_names]
+
 
 def get_nodes_by_role(role: Literal["coordinator", "data", "overseer"]) -> Dict[str, str]:
     states = get_client().get_children(f"/node_roles/{role}")

@@ -8,7 +8,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 
 def copy_znode_to_local(
-    zk: KazooClient, znode_path: str, local_dir: str, include_data: bool = True
+        zk: KazooClient, znode_path: str, local_dir: str, include_data: bool = True
 ):
     """
     Copy a parent zNode and all its children to a local directory.
@@ -25,8 +25,8 @@ def copy_znode_to_local(
 
     # Copy the zNode and its children
     with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
     ) as progress:
         task = progress.add_task(f"Copying zNode {znode_path}...", total=None)
         success = _copy_znode_recursive(
@@ -42,7 +42,7 @@ def copy_znode_to_local(
 
 
 def _copy_znode_recursive(
-    zk: KazooClient, znode_path: str, local_dir: str, include_data: bool, progress, task
+        zk: KazooClient, znode_path: str, local_dir: str, include_data: bool, progress, task
 ):
     """Recursively copy a zNode and its children."""
     try:

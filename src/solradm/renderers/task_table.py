@@ -16,6 +16,7 @@ class TaskResult(Enum):
     DONE = "✅ Done"
     FAILED = "❌ Failed"
 
+
 class MultiTaskTable(Renderer):
     def __exit__(self, exc_type, exc_value, traceback, /):
         pass

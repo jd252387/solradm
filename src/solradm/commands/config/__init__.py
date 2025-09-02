@@ -1,5 +1,6 @@
 import subprocess
 import sys
+from pathlib import Path
 from urllib.parse import urlparse
 
 import rich
@@ -9,11 +10,11 @@ from kubernetes.client import CoreV1Api, Configuration
 from kubernetes.config import load_kube_config
 from rich.pretty import pprint
 from rich.prompt import Confirm
-from typer import Typer
-from pathlib import Path
 from rich.table import Table
+from typer import Typer
 
 from solradm import completion
+from solradm.completion.contexts import context_names, context_repo_paths, kube_contexts
 from solradm.config import settings, persist, config_path, local_contexts
 from solradm.config.context import Context
 from solradm.config.interactive.setup_context import setup
@@ -59,7 +60,7 @@ def _verify_zk_connection() -> bool:
 @app.command()
 def switch(
         name: str = typer.Argument(
-            ..., help="Context name", autocompletion=completion.context_names
+            ..., help="Context name", autocompletion=context_names
         )
 ):
     """Switch to an existing context."""
@@ -97,9 +98,9 @@ def open_config():
 
 @repo_app.command("add")
 def add_repo(
-    path: Path = typer.Argument(
-        ..., exists=True, file_okay=True, dir_okay=False, resolve_path=True, help="Path to context repository"
-    ),
+        path: Path = typer.Argument(
+            ..., exists=True, file_okay=True, dir_okay=False, resolve_path=True, help="Path to context repository"
+        ),
 ):
     """Add a new context repository."""
 
@@ -121,9 +122,10 @@ def add_repo(
 
 @repo_app.command("remove")
 def remove_repo(
-    path: Path = typer.Argument(
-        ..., exists=True, file_okay=True, dir_okay=False, autocompletion=completion.context_repo_paths, help="Path to context repository"
-    ),
+        path: Path = typer.Argument(
+            ..., exists=True, file_okay=True, dir_okay=False, autocompletion=context_repo_paths,
+            help="Path to context repository"
+        ),
 ):
     """Remove a context repository."""
 
@@ -155,9 +157,10 @@ def list_repos():
 
 @repo_app.command("open")
 def open_repo(
-    path: Path = typer.Argument(
-        ..., exists=True, file_okay=True, dir_okay=False, autocompletion=completion.context_repo_paths, help="Path to context repository"
-    ),
+        path: Path = typer.Argument(
+            ..., exists=True, file_okay=True, dir_okay=False, autocompletion=context_repo_paths,
+            help="Path to context repository"
+        ),
 ):
     """Open the location of a configured context repository."""
 
@@ -177,8 +180,9 @@ def open_repo(
 @app.command("config-dir")
 def config_dir(
         path: Path = typer.Argument(
-        ..., exists=True, file_okay=False, dir_okay=True, resolve_path=True, help="Path to default configsets directory"
-    ),
+            ..., exists=True, file_okay=False, dir_okay=True, resolve_path=True,
+            help="Path to default configsets directory"
+        ),
 ):
     """Update the default solradm configuration directory."""
 
@@ -195,7 +199,7 @@ def config_dir(
 def connect(
         zk: str = typer.Argument(..., help="ZooKeeper Host"),
         kubecontext: str = typer.Option(
-            None, help="Kubernetes context", autocompletion=completion.kube_contexts
+            None, help="Kubernetes context", autocompletion=kube_contexts
         ),
 ):
     """Temporarily connect to a ZooKeeper host."""
@@ -299,7 +303,7 @@ def add(
 @app.command()
 def edit(
         name: str = typer.Argument(
-            ..., help="Context name", autocompletion=completion.context_names
+            ..., help="Context name", autocompletion=context_names
         ),
         zk: str = typer.Option(None, "-z", "--zk", help="ZooKeeper address"),
         kubecontext: str = typer.Option(
@@ -307,7 +311,7 @@ def edit(
             "-k",
             "--kubecontext",
             help="Target Kubecontext",
-            autocompletion=completion.kube_contexts,
+            autocompletion=kube_contexts,
         ),
 ):
     """Modify an existing context."""
@@ -327,8 +331,8 @@ def edit(
                     kubecontext=kubecontext if kubecontext else context.get("kubecontext"),
                 )
                 settings.contexts.available = [
-                    c for c in settings.contexts.available if c.name != name
-                ] + [new_context.as_dict()]
+                                                  c for c in settings.contexts.available if c.name != name
+                                              ] + [new_context.as_dict()]
                 break
 
         for idx, c in enumerate(local_contexts):
@@ -371,7 +375,7 @@ def edit(
 @app.command("delete")
 def delete(
         name: str = typer.Argument(
-            ..., help="Context name", autocompletion=completion.context_names
+            ..., help="Context name", autocompletion=context_names
         )
 ):
     """Remove a saved context."""
@@ -406,11 +410,11 @@ def delete(
 @app.command()
 def upload(
         name: str = typer.Argument(
-            ..., help="Local context name", autocompletion=completion.context_names
+            ..., help="Local context name", autocompletion=context_names
         ),
         repo: Path = typer.Option(
             ..., "-r", "--repo", exists=True, file_okay=True, dir_okay=False,
-            autocompletion=completion.context_repo_paths, help="Target context repository"
+            autocompletion=context_repo_paths, help="Target context repository"
         ),
 ):
     """Upload a local context to a repository."""

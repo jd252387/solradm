@@ -4,9 +4,9 @@ from typing import Optional, List
 
 import typer
 
-from solradm import completion
 from solradm.api.models import Collection
 from solradm.commands.filters.filter import Filter
+from solradm.completion.collections import replica_positions
 
 
 @dataclass
@@ -19,7 +19,7 @@ class ReplicaPositionFilter(Filter):
                 None,
                 "--replica-position",
                 help="Select only the replica at this 1-indexed position",
-                autocompletion=completion.replica_positions,
+                autocompletion=replica_positions,
             )
         },
     )
@@ -30,7 +30,7 @@ class ReplicaPositionFilter(Filter):
                 None,
                 "--exclude-replica-position",
                 help="Exclude the replica at this 1-indexed position",
-                autocompletion=completion.replica_positions,
+                autocompletion=replica_positions,
             )
         },
     )
@@ -52,8 +52,8 @@ class ReplicaPositionFilter(Filter):
                 for idx, replica in enumerate(sorted_replicas, start=1):
                     match_include = (
                         (idx == self.replica_position or (
-                                    self.replica_position > idx == len(sorted_replicas)) or (
-                                     self.replica_position < idx == 1)) if self.replica_position is not None else True
+                                self.replica_position > idx == len(sorted_replicas)) or (
+                                 self.replica_position < idx == 1)) if self.replica_position is not None else True
                     )
                     match_exclude = (
                         idx == self.exclude_replica_position

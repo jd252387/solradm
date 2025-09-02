@@ -12,4 +12,3 @@ class Context:
         if self.kubecontext is not None:
             dumped["kubecontext"] = self.kubecontext
         return dumped
-

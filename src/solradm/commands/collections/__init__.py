@@ -9,31 +9,34 @@ from typing import List
 import rich
 import typer
 from async_typer import AsyncTyper
+from kazoo.client import KazooClient
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn
 from rich.prompt import Confirm
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn
-
-from kazoo.client import KazooClient
 
 import solradm.api.utils as api_utils
-from solradm import completion
 from solradm.api.models import Collection, Replica, Shard
 from solradm.api.state import get_nodes_by_role, get_collections
 from solradm.api.utils import validate_num_replicas, get_replicas, send_request
-from solradm.config import settings
-from solradm.config.util import get_current_context
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
 from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
 from solradm.commands.filters.replica_type_filter import ReplicaTypeFilter
 from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
+from solradm.completion.collections import collection_names, source_collection_names
+from solradm.completion.configs import config_names
+from solradm.completion.contexts import context_names
+from solradm.completion.nodes import node_names
+from solradm.config import settings
+from solradm.config.util import get_current_context
 from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
 
 app = AsyncTyper()
+
 
 @app.async_command(help="Remove replicas for filtered collections")
 @with_dry_run
@@ -93,19 +96,20 @@ async def populate(
             None,
             "--node",
             help="Regex to select nodes",
-            autocompletion=completion.node_names,
+            autocompletion=node_names,
         ),
         exclude_node: List[str] | None = typer.Option(
             None,
             "--exclude-node",
             help="Regex to exclude nodes",
-            autocompletion=completion.node_names,
+            autocompletion=node_names,
         ),
 ):
     """Populate a single collection with replicas across nodes."""
 
     if len(cluster_state) != 1:
-        rich.print("[error] ❌ More than one collection has been filtered, and this command requires a singular collection!")
+        rich.print(
+            "[error] ❌ More than one collection has been filtered, and this command requires a singular collection!")
         raise typer.Exit(1)
 
     collection = cluster_state[0]
@@ -205,7 +209,7 @@ async def create(
             None,
             "--conf",
             help="Configuration name in ZooKeeper",
-            autocompletion=completion.config_names,
+            autocompletion=config_names,
         ),
         upload_conf: Path | None = typer.Option(
             None,
@@ -219,7 +223,7 @@ async def create(
             None,
             "--node",
             help="Regex to select nodes for populate",
-            autocompletion=completion.node_names,
+            autocompletion=node_names,
         ),
 ):
     """Create a collection in Solr."""
@@ -228,7 +232,8 @@ async def create(
         if conf:
             raise typer.BadParameter("You can't specify both --conf and --upload-conf!")
         from solradm.commands.zk.editor import upload
-        upload(paths=[upload_conf], znode_path="/configs", only_used=False, reload=False, exclude=None, skip_checks=True)
+        upload(paths=[upload_conf], znode_path="/configs", only_used=False, reload=False, exclude=None,
+               skip_checks=True)
         conf = os.path.basename(os.path.normpath(upload_conf))
     else:
         if not conf:
@@ -245,7 +250,8 @@ async def create(
     rich.print(f"[success] ✅ Created collection {name}!")
 
     if populate_after:
-        await populate(dry_run=api_utils.is_dry_run, collection_name_filter=f"^{name}$", node=[node] if node else None, exclude_node=None)
+        await populate(dry_run=api_utils.is_dry_run, collection_name_filter=f"^{name}$", node=[node] if node else None,
+                       exclude_node=None)
 
 
 @app.async_command(help="Delete collections matching a pattern")
@@ -274,12 +280,14 @@ async def delete(
         )
         rich.print(f"[success]✅  Deleted collection {name}!")
 
+
 @app.async_command(help="Reload cores for filtered replicas")
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def reload(
         cluster_state: List[Collection],
-        coordinators: bool = typer.Option(None, help="If unset, reloads both data and coordinator nodes. If set to true, only reload coordinators. If set to false, only reload data nodes.")
+        coordinators: bool = typer.Option(None,
+                                          help="If unset, reloads both data and coordinator nodes. If set to true, only reload coordinators. If set to false, only reload data nodes.")
 ):
     """Reload the specified cores and optionally coordinators."""
     replicas = []
@@ -309,7 +317,7 @@ async def reload(
 
 @app.async_command(help="Execute a query against a collection")
 async def query(
-        collection: str = typer.Argument(..., help="Collection to query", autocompletion=completion.collection_names),
+        collection: str = typer.Argument(..., help="Collection to query", autocompletion=collection_names),
         q: str = typer.Argument(..., help="Lucene query string"),
         rows: int = typer.Option(10, help="Number of rows to return"),
         fl: str = typer.Option("*", help="Fields to return"),
@@ -365,13 +373,16 @@ def _get_collection_from_context(context_zk: str, collection: str) -> Collection
     return Collection.model_validate(state)
 
 
-@app.async_command(help="Reindex documents from a source collection into a target collection using the dataimport handler")
+@app.async_command(
+    help="Reindex documents from a source collection into a target collection using the dataimport handler")
 async def reindex(
         source_collection: str = typer.Option(
-            ..., "--source", help="Collection to reindex from", autocompletion=completion.source_collection_names
+            ..., "--source", help="Collection to reindex from", autocompletion=source_collection_names
         ),
-        target_collection: str = typer.Option(..., "--target", help="Collection to reindex into", autocompletion=completion.collection_names),
-        source_context: str | None = typer.Option(None, "--source-context", help="Context of the source collection", autocompletion=completion.context_names),
+        target_collection: str = typer.Option(..., "--target", help="Collection to reindex into",
+                                              autocompletion=collection_names),
+        source_context: str | None = typer.Option(None, "--source-context", help="Context of the source collection",
+                                                  autocompletion=context_names),
         handler: str = typer.Option("/dataimport", "--handler", help="Path of the dataimport handler"),
         fq: List[str] | None = typer.Option(None, "--fq", help="Filter query to pass to the dataimport handler"),
         source_shard: List[str] | None = typer.Option(None, "--source-shard", help="Source shards to reindex"),
@@ -418,18 +429,21 @@ async def reindex(
     for name, rep in leaders.items():
         if rep is None:
             continue
-        status = await send_request(rep.base_url, f"/{target_collection}{handler}", params={"command": "status", "wt": "json"})
+        status = await send_request(rep.base_url, f"/{target_collection}{handler}",
+                                    params={"command": "status", "wt": "json"})
         if status.get("status") == "busy":
             busy.append((name, rep))
 
     if busy:
         rich.print("[warning]⚠️  Dataimport already running on some shards. Monitoring progress...")
-        with Progress(SpinnerColumn(), TextColumn("{task.description}"), BarColumn(), TimeRemainingColumn()) as progress:
+        with Progress(SpinnerColumn(), TextColumn("{task.description}"), BarColumn(),
+                      TimeRemainingColumn()) as progress:
             tasks = {name: progress.add_task(name, total=100) for name, _ in busy}
 
             async def monitor(replica: Replica, name: str):
                 while True:
-                    stat = await send_request(replica.base_url, f"/{target_collection}{handler}", params={"command": "status", "wt": "json"})
+                    stat = await send_request(replica.base_url, f"/{target_collection}{handler}",
+                                              params={"command": "status", "wt": "json"})
                     done, total, st = _parse_status(stat)
                     if total:
                         progress.update(tasks[name], total=total, completed=done)
@@ -463,7 +477,8 @@ async def reindex(
                 await send_request(leader.base_url, f"/{target_collection}{handler}", params=params)
 
                 while True:
-                    stat = await send_request(leader.base_url, f"/{target_collection}{handler}", params={"command": "status", "wt": "json"})
+                    stat = await send_request(leader.base_url, f"/{target_collection}{handler}",
+                                              params={"command": "status", "wt": "json"})
                     done, total, st = _parse_status(stat)
                     if total:
                         progress.update(task_id, total=total, completed=done)

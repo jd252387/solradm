@@ -82,7 +82,8 @@ def with_cluster_state(*filter_classes):
 
             if len(cluster_state) == 0:
                 if solradm.api.utils.is_dry_run:
-                    rich.print(f"[warning][green bold]💡 EXITING DRY RUN - [/] CLI command \"{func.__qualname__}\" has been called, but the filters didn't match any collections. This may be OK as you are running with dry run, as the previous command did not actually edit the cluster. This command was called with parameters \"{args if args else ""}{kwargs if kwargs else ""}")
+                    rich.print(
+                        f"[warning][green bold]💡 EXITING DRY RUN - [/] CLI command \"{func.__qualname__}\" has been called, but the filters didn't match any collections. This may be OK as you are running with dry run, as the previous command did not actually edit the cluster. This command was called with parameters \"{args if args else ""}{kwargs if kwargs else ""}")
                 else:
                     rich.print("[error] ❌ No collections in the cluster have matched the specified filters!")
                 raise typer.Exit(1)

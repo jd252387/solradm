@@ -1,19 +1,20 @@
 import asyncio
 import json
 import re
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import rich
 import typer
+from async_typer import AsyncTyper
 from kubernetes.client import AppsV1Api
 from kubernetes.client import CoreV1Api
+from kubernetes.stream import stream
+from platformdirs import user_config_dir
 from rich.prompt import Confirm
 from rich.table import Table
-from platformdirs import user_config_dir
-from async_typer import AsyncTyper
-from kubernetes.stream import stream
 
+from solradm.completion.nodes import node_names
 from solradm.kube.utils import (
     get_configured_kubecontext,
     find_pods,
@@ -62,9 +63,9 @@ def _print_workloads(deployments, statefulsets):
 
 @app.async_command(help="Stream logs for matching pods")
 async def logs(
-    pattern: str = typer.Argument(..., help="Regex of pod or node name"),
-    node: bool = typer.Option(False, "--node", help="Treat pattern as node name"),
-    container: str | None = typer.Option(None, "--container", "-c", help="Container name"),
+        pattern: str = typer.Argument(..., help="Regex of pod or node name"),
+        node: bool = typer.Option(False, "--node", help="Treat pattern as node name", autocompletion=node_names),
+        container: str | None = typer.Option(None, "--container", "-c", help="Container name"),
 ):
     """Stream Kubernetes logs from pods matching PATTERN."""
 
@@ -101,8 +102,8 @@ async def logs(
 
 @app.async_command(help="Show /var/solr disk usage for matching pods")
 async def disk(
-    pattern: str = typer.Argument(..., help="Regex of pod or node name"),
-    node: bool = typer.Option(False, "--node", help="Treat pattern as node name"),
+        pattern: str = typer.Argument(..., help="Regex of pod or node name"),
+        node: bool = typer.Option(False, "--node", help="Treat pattern as node name"),
 ):
     """Display disk usage of /var/solr for pods matching PATTERN."""
 
@@ -137,10 +138,11 @@ async def disk(
 
     rich.print(table)
 
+
 @app.command(help="Scale workloads matching a regex down to zero and save their replicas")
 def suspend(
-    name_regex: str = typer.Argument(..., help="Regex for deployment/statefulset names"),
-    state_file: Path = typer.Option(None, "--state-file", help="File to store replica state", dir_okay=False),
+        name_regex: str = typer.Argument(..., help="Regex for deployment/statefulset names"),
+        state_file: Path = typer.Option(None, "--state-file", help="File to store replica state", dir_okay=False),
 ):
     """Scale matching deployments and statefulsets to zero replicas."""
 
@@ -176,7 +178,7 @@ def suspend(
 
 @app.command(help="Restore replicas from a saved state file")
 def resume(
-    state_file: Path = typer.Option(None, "--state-file", help="State file to load", dir_okay=False),
+        state_file: Path = typer.Option(None, "--state-file", help="State file to load", dir_okay=False),
 ):
     """Scale previously suspended workloads back to their original replicas."""
 

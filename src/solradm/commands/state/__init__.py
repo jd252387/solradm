@@ -1,12 +1,11 @@
-import asyncio
 import json
 from pathlib import Path
 from typing import List
 
-from async_typer import AsyncTyper
 import rich
 import typer
 import yaml
+from async_typer import AsyncTyper
 
 from solradm.api.models import Collection
 from solradm.api.state import get_collections

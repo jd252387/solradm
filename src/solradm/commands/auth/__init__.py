@@ -16,6 +16,7 @@ def edit():
     persist()
     rich.print("[success]✅  Updated Solr credentials!")
 
+
 @app.command()
 def view():
     """View stored Solr credentials"""

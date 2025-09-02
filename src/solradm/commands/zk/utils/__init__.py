@@ -1,11 +1,11 @@
 import os
 import shutil
 import subprocess
+from pathlib import Path
+from typing import Dict, List, Tuple
 
 import rich
 from kazoo.client import KazooClient
-from pathlib import Path
-from typing import Dict, List, Tuple
 
 
 def open_vscode(directory: str):
@@ -31,6 +31,7 @@ def open_vscode(directory: str):
         )
         return None
 
+
 def create_or_update(zk: KazooClient, path: str, data: bytes) -> None:
     if not zk.exists(path):
         zk.create(path, data, makepath=True)
@@ -39,8 +40,9 @@ def create_or_update(zk: KazooClient, path: str, data: bytes) -> None:
         zk.set(path, data)
         rich.print(f"[blue]📝 Updated: {path}")
 
+
 def get_relative_znode_path(base_znode_path: str, base_dir_path: str, target_file_path: str
-) -> str:
+                            ) -> str:
     rel_path = os.path.relpath(target_file_path, base_dir_path)
 
     return rel_path.replace("\\", "/")

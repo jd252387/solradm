@@ -91,4 +91,3 @@ async def restore(
     ]
     metatasks = MultiMetaTask(["collection", "shard", "core"], tasks)
     await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
-

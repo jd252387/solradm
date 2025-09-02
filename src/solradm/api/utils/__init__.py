@@ -12,6 +12,7 @@ from solradm.exceptions.solr_exception import SolrException
 def get_collections_using_config(cluster_state: List[Collection], config_name: str) -> List[Collection]:
     return [collection for collection in cluster_state if collection.configName == config_name]
 
+
 def get_replicas(cluster_state: List[Collection]) -> List[Replica]:
     replicas = []
 
@@ -22,6 +23,7 @@ def get_replicas(cluster_state: List[Collection]) -> List[Replica]:
 
     return replicas
 
+
 def validate_num_replicas(replicas: List[Replica]) -> List[Replica]:
     if len(replicas) == 0:
         rich.print("[error]❌ No replicas found!")
@@ -29,15 +31,19 @@ def validate_num_replicas(replicas: List[Replica]) -> List[Replica]:
 
     return replicas
 
+
 def get_host_with_scheme(host: str, scheme: str) -> str:
     parsed = urlparse(host if "://" in host else f"http://{host}")
     new_parsed = parsed._replace(scheme=scheme)
 
     return str(urlunparse(new_parsed)).removesuffix("_solr")
 
+
 is_dry_run = False
 
-async def send_request(host: str, endpoint: str, params: dict = None, dry_output: Any | None = None, dry_run_override: bool = None) -> Any:
+
+async def send_request(host: str, endpoint: str, params: dict = None, dry_output: Any | None = None,
+                       dry_run_override: bool = None) -> Any:
     if dry_run_override is not None:
         if dry_run_override:
             return dry_output
@@ -53,11 +59,13 @@ async def send_request(host: str, endpoint: str, params: dict = None, dry_output
         raise e
     json = await resp.json()
     if not resp.ok or not json["responseHeader"]["status"] == 0:
-        rich.print(f"[error]❌  Error received from Solr for request to {url} with params {params}:\n[yellow]{json["error"]["msg"]}")
+        rich.print(
+            f"[error]❌  Error received from Solr for request to {url} with params {params}:\n[yellow]{json["error"]["msg"]}")
         raise SolrException(json["responseHeader"]["status"] == 0, json["error"]["msg"])
 
     return json
 
+
 async def get_cores_from_node(host: str) -> List[Core]:
-    json = await send_request(host,  "/admin/cores", params={"indexInfo": "false"}, dry_run_override=False)
+    json = await send_request(host, "/admin/cores", params={"indexInfo": "false"}, dry_run_override=False)
     return [Core.model_validate(json["status"][key]) for key in json["status"].keys()]

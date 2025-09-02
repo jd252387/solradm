@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import List
 
 import rich
 import typer
@@ -15,7 +15,6 @@ from rich.table import Table
 from rich.text import Text
 from watchdog.observers import Observer
 
-from solradm import completion
 from solradm.api import get_initialized_sesssion
 from solradm.api.state import get_collections
 from solradm.api.utils import get_collections_using_config
@@ -26,23 +25,25 @@ from solradm.commands.zk.utils import (
 )
 from solradm.commands.zk.utils.sync_handler import ZooKeeperSyncHandler
 from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
-from solradm.zk import get_client
+from solradm.completion.collections import collection_names
 from solradm.config.util import resolve_config_name_to_abs_or_default_directory
+from solradm.zk import get_client
 
 app = typer.Typer()
 
 
 @app.command()
 def edit(
-    znode_path: str = typer.Argument("/configs", help="Path of the zNode to edit"),
-    sync_interval: int = typer.Option(
-        5, "--sync-interval", "-s", help="Sync interval in seconds"
-    ),
-    no_data: bool = typer.Option(False, "--no-data", help="Skip copying zNode data"),
-    no_vscode: bool = typer.Option(
-        False, "--no-vscode", help="Don't open VSCode automatically"
-    ),
-    reload: bool = typer.Option(False, "--reload", help="Automatically reloads collections whose configs have been edited, in real-time up to sync-interval")
+        znode_path: str = typer.Argument("/configs", help="Path of the zNode to edit"),
+        sync_interval: int = typer.Option(
+            5, "--sync-interval", "-s", help="Sync interval in seconds"
+        ),
+        no_data: bool = typer.Option(False, "--no-data", help="Skip copying zNode data"),
+        no_vscode: bool = typer.Option(
+            False, "--no-vscode", help="Don't open VSCode automatically"
+        ),
+        reload: bool = typer.Option(False, "--reload",
+                                    help="Automatically reloads collections whose configs have been edited, in real-time up to sync-interval")
 ):
     """Interactively view and edit ZooKeeper."""
 
@@ -61,10 +62,10 @@ def edit(
             # Copy zNode to temporary directory
             rich.print(f"[blue]📋 Copying zNode {znode_path} to temporary directory...")
             if not copy_znode_to_local(
-                zk=get_client(),
-                znode_path=znode_path,
-                local_dir=temp_dir,
-                include_data=not no_data,
+                    zk=get_client(),
+                    znode_path=znode_path,
+                    local_dir=temp_dir,
+                    include_data=not no_data,
             ):
                 raise typer.Exit(1)
 
@@ -133,32 +134,33 @@ def edit(
                 "[success]🧹 Temporary directory will be automatically cleaned up"
             )
 
+
 @app.command()
 def upload(
-    paths: List[Path] = typer.Argument(
-        ...,
-        exists=False,
-        resolve_path=False,
-        help="Paths to copy to ZooKeeper (defaults to configsets in the default configuration directory)",
-    ),
-    znode_path: str = typer.Option("/configs", help="Path of the zNode to copy"),
-    only_used: bool = typer.Option(
-        True,
-        "--only-used/--all",
-        help="Upload only configs referenced by collections",
-    ),
-    reload: bool = typer.Option(
-        False,
-        "--reload",
-        help="Reload collections whose configs were uploaded",
-    ),
-    exclude: List[str] | None = typer.Option(
-        None,
-        "--exclude",
-        help="Collections to exclude from reloading",
-        autocompletion=completion.collection_names,
-    ),
-    skip_checks: bool = typer.Option(False, "--skip-confirm", "-y", help="Skip confirmation prompt"),
+        paths: List[Path] = typer.Argument(
+            ...,
+            exists=False,
+            resolve_path=False,
+            help="Paths to copy to ZooKeeper (defaults to configsets in the default configuration directory)",
+        ),
+        znode_path: str = typer.Option("/configs", help="Path of the zNode to copy"),
+        only_used: bool = typer.Option(
+            True,
+            "--only-used/--all",
+            help="Upload only configs referenced by collections",
+        ),
+        reload: bool = typer.Option(
+            False,
+            "--reload",
+            help="Reload collections whose configs were uploaded",
+        ),
+        exclude: List[str] | None = typer.Option(
+            None,
+            "--exclude",
+            help="Collections to exclude from reloading",
+            autocompletion=collection_names,
+        ),
+        skip_checks: bool = typer.Option(False, "--skip-confirm", "-y", help="Skip confirmation prompt"),
 ):
     if only_used and znode_path != "/configs":
         rich.print("[error] ❌ You cannot use only_used when the znode_path is not /configs!")
@@ -247,4 +249,3 @@ def upload(
                 )
             )
             asyncio.run(get_initialized_sesssion().close())
-

@@ -13,6 +13,6 @@ def get_overseer_leader() -> str:
     data, stat = get_client().get("/overseer_elect/leader")
 
     parsed = json.loads(data)
-    election : str = parsed["id"]
+    election: str = parsed["id"]
 
     return "http://" + election[election.find("-") + 1:election.rfind("_", 0, election.rfind("_", ))]
