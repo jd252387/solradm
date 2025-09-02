@@ -88,7 +88,7 @@ share them, create temporary ones, and so on...
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
     create_ctx = Confirm.ask(
-        "Would you like to set up an initial context?", default=True
+        "[question][underline]Would you like to set up an initial context?[/] [yellow bold italic]If you don't setup an initial context, you can instead just use a shared context repository, which is the recommended way to work in a team! These will be explained later...", default=True
     )
 
     contexts_avail: list[dict] = []
@@ -101,8 +101,11 @@ share them, create temporary ones, and so on...
         contexts_avail.append(new_context.as_dict())
         current_context = {"name": new_context.name}
 
+    rich.print("[text]Context repositories are files located on your machine or more commonly, on a network drive. These can store additional contexts that you may connect to. If they are stored on a network drive, any user using solradm can edit them, and those changes will be replicated to all other users using the repository. ")
+    rich.print("[text bold]Your team most likely has already setup a common repository on a network drive, so it is recommended to ask them for it and set it up here. ")
+    rich.print("[yellow bold]Note that it is possible to use a context repository without declaring local contexts, and only use contexts found in repostories.")
     create_repo = Confirm.ask(
-        "Would you like to add a context repository?", default=False
+        "[question]Would you like to add a context repository?", default=False
     )
 
     if not create_ctx and not create_repo:
@@ -115,13 +118,17 @@ share them, create temporary ones, and so on...
 
     repo_path = None
     if create_repo:
-        repo_path_str = Prompt.ask("Path to context repository")
-        repo_path = Path(repo_path_str)
-        if not is_valid_context_repo(repo_path):
-            rich.print(
-                f"[error]Context repository {repo_path} is invalid."
-            )
-            exit(1)
+        is_valid_repo = False
+        while not is_valid_repo:
+            repo_path_str = Prompt.ask("Enter the path to context repository -> ")
+            repo_path = Path(repo_path_str)
+            if not is_valid_context_repo(repo_path):
+                rich.print(
+                    f"[error]Context repository {repo_path} is invalid!"
+                )
+            else: 
+                is_valid_repo = True
+
         repo_str = str(repo_path)
         settings.set("context_repositories", [repo_str])
         context_repositories.append(repo_str)
