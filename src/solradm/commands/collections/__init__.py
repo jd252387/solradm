@@ -21,12 +21,13 @@ from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
 from solradm.commands.filters.replica_type_filter import ReplicaTypeFilter
 from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
-from solradm.commands.zk.utils import create_or_update, get_relative_znode_path
+from solradm.commands.zk.utils import create_or_update, build_files_by_config
 from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk import get_client
 from solradm.zk.utils import get_overseer_leader
+from solradm.config.util import get_default_config_dir, validate_config_dir
 
 app = AsyncTyper()
 
@@ -202,9 +203,10 @@ async def create(
             help="Configuration name in ZooKeeper",
             autocompletion=completion.config_names,
         ),
-        upload_conf: Path | None = typer.Option(
-            None, "--upload-conf", exists=True, file_okay=False, dir_okay=True, resolve_path=True,
-            help="Path to configuration directory to upload before creation"
+        upload_conf: str | None = typer.Option(
+            None,
+            "--upload-conf",
+            help="Path or configset name to upload before creation",
         ),
         populate_after: bool = typer.Option(False, "--populate", help="Populate the collection after creation"),
         node: str | None = typer.Option(
@@ -217,14 +219,23 @@ async def create(
     """Create a collection in Solr."""
 
     if upload_conf:
-        for f in Path(upload_conf).rglob("*"):
-            if f.is_file():
-                with open(f, "rb") as fh:
-                    create_or_update(
-                        get_client(),
-                        get_relative_znode_path(f"/configs/{conf}", str(upload_conf), str(f)),
-                        fh.read(),
-                    )
+        path = Path(upload_conf)
+        if not path.exists():
+            config_dir = get_default_config_dir()
+            if not config_dir or not validate_config_dir(config_dir):
+                raise typer.BadParameter(
+                    "Default configuration directory is not configured or invalid"
+                )
+            path = config_dir / "configsets" / upload_conf
+        if not path.exists() or not path.is_dir():
+            raise typer.BadParameter(
+                f"Configuration path '{upload_conf}' does not exist"
+            )
+        files_by_config = build_files_by_config([(path, conf)], "/configs")
+        for file_list in files_by_config.values():
+            for local_path, zk_path in file_list:
+                with open(local_path, "rb") as fh:
+                    create_or_update(get_client(), zk_path, fh.read())
 
     params = {
         "action": "CREATE",

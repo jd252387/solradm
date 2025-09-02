@@ -4,6 +4,8 @@ import subprocess
 
 import rich
 from kazoo.client import KazooClient
+from pathlib import Path
+from typing import Dict, List, Tuple
 
 
 def open_vscode(directory: str):
@@ -42,3 +44,20 @@ def get_relative_znode_path(base_znode_path: str, base_dir_path: str, target_fil
     rel_path = os.path.relpath(target_file_path, base_dir_path)
 
     return rel_path.replace("\\", "/")
+
+
+def build_files_by_config(paths: List[Tuple[Path, str | None]], znode_path: str) -> Dict[str, List[Tuple[Path, str]]]:
+    files_by_config: Dict[str, List[Tuple[Path, str]]] = {}
+    for path, override in paths:
+        config = override or path.name
+        if path.is_file():
+            rel_path = path.name
+            zk_path = f"{znode_path.rstrip('/')}/{config}/{rel_path}"
+            files_by_config.setdefault(config, []).append((path, zk_path))
+        elif path.is_dir():
+            for sub_file in path.rglob("*"):
+                if sub_file.is_file():
+                    rel_path = os.path.relpath(sub_file, path).replace("\\", "/")
+                    zk_path = f"{znode_path.rstrip('/')}/{config}/{rel_path}"
+                    files_by_config.setdefault(config, []).append((sub_file, zk_path))
+    return files_by_config
