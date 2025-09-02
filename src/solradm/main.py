@@ -4,7 +4,7 @@ from async_typer import AsyncTyper
 from rich.logging import RichHandler
 
 from solradm.api import get_initialized_sesssion
-from solradm.commands import config, core, collections, backups, auth, node
+from solradm.commands import config, core, collections, backups, auth, node, state
 from solradm.commands import kube
 from solradm.commands.status import status as status_cmd
 from solradm.commands.zk import editor
@@ -29,6 +29,7 @@ app.add_typer(editor.app, name="zoo", help="Manage ZooKeeper")
 app.add_typer(auth.app, name="auth", help="Manage Solr authentication")
 app.add_typer(kube.app, name="kube", help="Manage Kubernetes workloads")
 app.add_typer(node.app, name="node", help="Manage Solr nodes")
+app.add_typer(state.app, name="state", help="Export or restore cluster state")
 app.command()(status_cmd)
 
 
