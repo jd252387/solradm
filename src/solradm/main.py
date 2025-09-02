@@ -36,6 +36,22 @@ def _is_completing() -> bool:
     return any(key.endswith("_COMPLETE") for key in os.environ)
 
 
+def _get_cli_args() -> list[str]:
+    """Return the CLI arguments, accounting for shell completion."""
+
+    import shlex
+    if _is_completing():
+        for var in ("COMP_WORDS", "COMP_LINE"):
+            value = os.environ.get(var)
+            if value:
+                try:
+                    return shlex.split(value)
+                except ValueError:
+                    return value.split()
+    import sys
+    return sys.argv
+
+
 # Mapping of CLI command names to their implementing modules and help text.
 LAZY_TYPERS: dict[str, tuple[str, str]] = {
     "coll": ("solradm.commands.collections", "Interact with the Collections API"),
@@ -103,7 +119,7 @@ def _load_command(name: str) -> None:
 def run() -> None:  # pragma: no cover - entrypoint executed via CLI
     ran_app = False
     try:
-        import sys
+        args = _get_cli_args()
 
         if not _is_completing():
             # Import rich and configure logging only when not completing to
@@ -120,11 +136,11 @@ def run() -> None:  # pragma: no cover - entrypoint executed via CLI
 
         top_commands = set(LAZY_TYPERS) | set(LAZY_COMMANDS)
 
-        if len(sys.argv) >= 2 and not sys.argv[1].startswith("-"):
-            cmd = sys.argv[1]
+        if len(args) >= 2 and not args[1].startswith("-"):
+            cmd = args[1]
             if cmd in top_commands:
                 _load_command(cmd)
-            else:
+            elif not _is_completing():
                 try:
                     config.switch(cmd)
                 except Exception:
@@ -132,7 +148,7 @@ def run() -> None:  # pragma: no cover - entrypoint executed via CLI
 
                     rich.print(f"Context [magenta]{cmd}[/] doesn't exist!")
                 return
-        elif not _is_completing() and "--help" not in sys.argv and "-h" not in sys.argv:
+        elif not _is_completing() and "--help" not in args and "-h" not in args:
             # Pre-load commands when running the CLI without specifying a
             # command to provide full help and validation.
             for name in top_commands:
