@@ -14,6 +14,35 @@ def collection_names(ctx, args: List[str], incomplete: str) -> List[str]:
     return _filter(sorted(names), incomplete)
 
 
+def source_collection_names(ctx, args: List[str], incomplete: str) -> List[str]:
+    try:
+        context = ctx.params.get("source_context")
+        if context:
+            from kazoo.client import KazooClient
+            from solradm.config import settings
+
+            ctx_obj = next(
+                (c for c in settings.contexts.available if c.name == context), None
+            )
+            if not ctx_obj:
+                names = []
+            else:
+                zk = KazooClient(hosts=ctx_obj.zk, timeout=5)
+                zk.start()
+                try:
+                    names = zk.get_children("/collections")
+                finally:
+                    zk.stop()
+                    zk.close()
+        else:
+            from solradm.api.state import get_collection_names
+
+            names = get_collection_names()
+    except Exception:
+        names = []
+    return _filter(sorted(names), incomplete)
+
+
 def shard_numbers(ctx, args: List[str], incomplete: str) -> List[str]:
     try:
         from solradm.api.state import get_collections

@@ -9,6 +9,12 @@ def collection_names(ctx, args: List[str], incomplete: str) -> List[str]:
     return _collection_names(ctx, args, incomplete)
 
 
+def source_collection_names(ctx, args: List[str], incomplete: str) -> List[str]:
+    from .collections import source_collection_names as _source_collection_names
+
+    return _source_collection_names(ctx, args, incomplete)
+
+
 def shard_numbers(ctx, args: List[str], incomplete: str) -> List[str]:
     from .collections import shard_numbers as _shard_numbers
 
@@ -46,6 +52,7 @@ def kube_contexts(ctx, args: List[str], incomplete: str) -> List[str]:
 
 __all__ = [
     "collection_names",
+    "source_collection_names",
     "shard_numbers",
     "replica_types",
     "replica_states",
