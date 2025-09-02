@@ -7,8 +7,6 @@ from typer.main import get_command
 
 from solradm.exceptions.adm_exception import AdmException
 from solradm.exceptions.solr_exception import SolrException
-from solradm.commands.status import status as status_cmd
-
 lazy_subcommands = {
     "core": "solradm.commands.core",
     "coll": "solradm.commands.collections",
@@ -19,6 +17,7 @@ lazy_subcommands = {
     "kube": "solradm.commands.kube",
     "node": "solradm.commands.node",
     "state": "solradm.commands.state",
+    "status": "solradm.commands.status",
 }
 
 
@@ -58,8 +57,13 @@ class LazyGroup(TyperGroup):
     def get_command(self, ctx, cmd_name):
         if cmd_name in lazy_subcommands:
             module = importlib.import_module(lazy_subcommands[cmd_name])
-            sub_app = getattr(module, "app")
-            return get_command(sub_app)
+            sub_app = getattr(module, "app", None)
+            if sub_app is None:
+                sub_app = AsyncTyper()
+                sub_app.command()(getattr(module, cmd_name))
+            command = get_command(sub_app)
+            command.name = cmd_name
+            return command
         return super().get_command(ctx, cmd_name)
 
 
@@ -72,9 +76,6 @@ def app_callback():
     pass
 
 
-app.command(name="status")(status_cmd)
-
-
 def run():
     try:
         from rich.logging import RichHandler
@@ -85,7 +86,7 @@ def run():
             handlers=[RichHandler(rich_tracebacks=True)],
         )
         import sys
-        top_commands = set(lazy_subcommands) | {"status"}
+        top_commands = set(lazy_subcommands)
         if len(sys.argv) >= 2 and not sys.argv[1].startswith("-") and sys.argv[1] not in top_commands:
             try:
                 cfg = importlib.import_module("solradm.commands.config")
