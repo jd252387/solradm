@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
 from importlib import import_module
 
 from async_typer import AsyncTyper
@@ -120,11 +121,23 @@ def run() -> None:  # pragma: no cover - entrypoint executed via CLI
 
         top_commands = set(LAZY_TYPERS) | set(LAZY_COMMANDS)
 
+        cmd = None
         if len(sys.argv) >= 2 and not sys.argv[1].startswith("-"):
             cmd = sys.argv[1]
+        elif _is_completing():
+            words = os.environ.get("COMP_WORDS")
+            if words:
+                parts = shlex.split(words)[1:]
+            else:
+                comp_args = os.environ.get("CLICK_COMPLETE_ARGS")
+                parts = comp_args.split("\x1e") if comp_args else []
+            if parts and not parts[0].startswith("-"):
+                cmd = parts[0]
+
+        if cmd:
             if cmd in top_commands:
                 _load_command(cmd)
-            else:
+            elif not _is_completing():
                 try:
                     config.switch(cmd)
                 except Exception:
