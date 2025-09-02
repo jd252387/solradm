@@ -29,6 +29,6 @@ def get_session() -> "aiohttp.ClientSession":
     return _session
 
 
-def get_initialized_sesssion() -> "aiohttp.ClientSession | None":
+def get_initialized_session() -> "aiohttp.ClientSession | None":
     """Return the session if it has been created."""
     return _session

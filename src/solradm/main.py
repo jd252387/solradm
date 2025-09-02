@@ -5,11 +5,17 @@ import os
 import rich
 from async_typer import AsyncTyper
 from rich.logging import RichHandler
+from lazy_loader import load as lazy_load
 
-from solradm.commands import config, collections, backups, auth, node, state
-from solradm.commands import kube
+config = lazy_load("solradm.commands.config")
+collections = lazy_load("solradm.commands.collections")
+backups = lazy_load("solradm.commands.backups")
+auth = lazy_load("solradm.commands.auth")
+node = lazy_load("solradm.commands.node")
+state = lazy_load("solradm.commands.state")
+kube = lazy_load("solradm.commands.kube")
+editor = lazy_load("solradm.commands.zk.editor")
 from solradm.commands.status import status as status_cmd
-from solradm.commands.zk import editor
 from solradm.exceptions.adm_exception import AdmException
 from solradm.exceptions.solr_exception import SolrException
 
@@ -57,12 +63,12 @@ def run():
     finally:
         if not _is_completing():
             from solradm.update import notify_if_outdated
-            from solradm.api import get_initialized_sesssion
+            from solradm.api import get_initialized_session
 
             notify_if_outdated()
             import asyncio
-            if get_initialized_sesssion():
-                asyncio.run(get_initialized_sesssion().close())
+            if get_initialized_session():
+                asyncio.run(get_initialized_session().close())
 
 
 if __name__ == "__main__":

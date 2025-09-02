@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 from solradm import completion
 from solradm.config import settings, persist, config_path
 from solradm.config.context import Context
-from solradm.config.interactive.setup_context import setup
 from solradm.config.util import get_current_context, validate_config_dir
 from solradm.kube.utils import (
     get_current_kubecontext,
@@ -190,6 +189,7 @@ def add(
         raise typer.BadParameter(f"Context {name} already exists!")
 
     if interactive:
+        from solradm.config.interactive.setup_context import setup
         context = setup()
     else:
         if kubecontext and not get_kubecontext(kubecontext):

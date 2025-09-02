@@ -13,7 +13,6 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.table import Table
 from rich.text import Text
-from watchdog.observers import Observer
 
 from solradm import completion
 from lazy_loader import load as lazy_load
@@ -22,7 +21,6 @@ from solradm.commands.zk.utils import (
     create_or_update,
     build_files_by_config,
 )
-from solradm.commands.zk.utils.sync_handler import ZooKeeperSyncHandler
 from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
 from solradm.zk import get_client
 from solradm.config.util import resolve_config_name_to_abs_or_default_directory
@@ -90,9 +88,13 @@ def edit(
                 rich.print("[yellow]💡 Press Ctrl+C to stop watching.")
 
             # Create watchdog observer
+            from solradm.commands.zk.utils.sync_handler import ZooKeeperSyncHandler
+
             event_handler = ZooKeeperSyncHandler(
                 get_client(), temp_dir, znode_path, sync_interval, reload=True
             )
+            from watchdog.observers import Observer
+
             observer = Observer()
             observer.schedule(event_handler, temp_dir, recursive=True)
             observer.start()
@@ -248,5 +250,5 @@ def upload(
                     dry_run=False, coordinators=None
                 )
             )
-            asyncio.run(api.get_initialized_sesssion().close())
+            asyncio.run(api.get_initialized_session().close())
 
