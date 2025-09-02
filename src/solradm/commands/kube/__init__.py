@@ -75,7 +75,7 @@ async def logs(
 
     for pod in pods:
         resp = stream(
-            CoreV1Api().connect_get_namespaced_pod_log,
+            CoreV1Api().read_namespaced_pod_log,
             pod.metadata.name,
             namespace,
             container=container,
