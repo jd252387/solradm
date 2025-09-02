@@ -5,7 +5,7 @@ from async_typer import AsyncTyper
 from rich.logging import RichHandler
 
 from solradm.api import get_initialized_sesssion
-from solradm.commands import config, core, collections, backups, auth, node, state
+from solradm.commands import config, collections, backups, auth, node, state
 from solradm.commands import kube
 from solradm.commands.status import status as status_cmd
 from solradm.commands.zk import editor
@@ -22,7 +22,6 @@ logging.basicConfig(
 
 app = AsyncTyper()
 
-app.add_typer(core.app, name="core", help="Interact with the Core API")
 app.add_typer(collections.app, name="coll", help="Interact with the Collections API")
 app.add_typer(backups.app, name="backup", help="Take or restore backups using the Replication API")
 app.add_typer(config.app, name="context", help="Manage solradm Contexts")

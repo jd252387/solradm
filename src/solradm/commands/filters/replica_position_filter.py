@@ -51,7 +51,9 @@ class ReplicaPositionFilter(Filter):
                 new_replicas = []
                 for idx, replica in enumerate(sorted_replicas, start=1):
                     match_include = (
-                        idx == self.replica_position if self.replica_position is not None else True
+                        (idx == self.replica_position or (
+                                    self.replica_position > idx == len(sorted_replicas)) or (
+                                     self.replica_position < idx == 1)) if self.replica_position is not None else True
                     )
                     match_exclude = (
                         idx == self.exclude_replica_position

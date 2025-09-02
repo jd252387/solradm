@@ -10,8 +10,8 @@ class Router(BaseModel):
 
 class CoreCloudDescriptor(BaseModel):
     collection: str
-    shard: str
-    replica: str
+    shard: str | None
+    replica: str | None
     replicaType: str
 
 class Core(BaseModel):

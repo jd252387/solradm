@@ -78,10 +78,10 @@ def open_config():
 @app.command("config-dir")
 def config_dir(
     path: Path = typer.Argument(
-        ..., exists=True, file_okay=False, dir_okay=True, resolve_path=True, help="Path to default configuration directory"
+        ..., exists=True, file_okay=False, dir_okay=True, resolve_path=True, help="Path to default configsets directory"
     ),
 ):
-    """Update the default configuration directory."""
+    """Update the default solradm configuration directory."""
 
     if not validate_config_dir(path):
         raise typer.BadParameter(

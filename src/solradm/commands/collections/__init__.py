@@ -1,4 +1,6 @@
 import asyncio
+import json
+import os
 import re
 from collections import Counter
 from pathlib import Path
@@ -12,7 +14,7 @@ from rich.table import Table
 
 import solradm.api.utils as api_utils
 from solradm import completion
-from solradm.api.models import Collection
+from solradm.api.models import Collection, Replica
 from solradm.api.state import get_nodes_by_role, get_collections
 from solradm.api.utils import validate_num_replicas, get_replicas, send_request
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
@@ -21,13 +23,10 @@ from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
 from solradm.commands.filters.replica_type_filter import ReplicaTypeFilter
 from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
-from solradm.commands.zk.utils import create_or_update, build_files_by_config
 from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
-from solradm.zk import get_client
 from solradm.zk.utils import get_overseer_leader
-from solradm.config.util import get_default_config_dir, validate_config_dir
 
 app = AsyncTyper()
 
@@ -198,14 +197,16 @@ async def create(
         name: str = typer.Argument(..., help="Name of the collection"),
         shards: int = typer.Option(..., "--shards", help="Number of shards"),
         conf: str = typer.Option(
-            ...,
+            None,
             "--conf",
             help="Configuration name in ZooKeeper",
             autocompletion=completion.config_names,
         ),
-        upload_conf: str | None = typer.Option(
+        upload_conf: Path | None = typer.Option(
             None,
             "--upload-conf",
+            exists=False,
+            resolve_path=False,
             help="Path or configset name to upload before creation",
         ),
         populate_after: bool = typer.Option(False, "--populate", help="Populate the collection after creation"),
@@ -219,23 +220,14 @@ async def create(
     """Create a collection in Solr."""
 
     if upload_conf:
-        path = Path(upload_conf)
-        if not path.exists():
-            config_dir = get_default_config_dir()
-            if not config_dir or not validate_config_dir(config_dir):
-                raise typer.BadParameter(
-                    "Default configuration directory is not configured or invalid"
-                )
-            path = config_dir / "configsets" / upload_conf
-        if not path.exists() or not path.is_dir():
-            raise typer.BadParameter(
-                f"Configuration path '{upload_conf}' does not exist"
-            )
-        files_by_config = build_files_by_config([(path, conf)], "/configs")
-        for file_list in files_by_config.values():
-            for local_path, zk_path in file_list:
-                with open(local_path, "rb") as fh:
-                    create_or_update(get_client(), zk_path, fh.read())
+        if conf:
+            raise typer.BadParameter("You can't specify both --conf and --upload-conf!")
+        from solradm.commands.zk.editor import upload
+        upload(paths=[upload_conf], znode_path="/configs", only_used=False, reload=False, exclude=None, skip_checks=True)
+        conf = os.path.basename(os.path.normpath(upload_conf))
+    else:
+        if not conf:
+            raise typer.BadParameter("Either --conf or --upload-conf must be specified!")
 
     params = {
         "action": "CREATE",
@@ -245,10 +237,10 @@ async def create(
         "createNodeSet": "EMPTY",
     }
     await send_request(get_overseer_leader(), "/admin/collections", params=params)
-    rich.print(f"[success]✅  Created collection {name}!")
+    rich.print(f"[success] ✅ Created collection {name}!")
 
     if populate_after:
-        await populate(dry_run=api_utils.is_dry_run, collection_name_filter=name, node=[node] if node else None, exclude_node=None)
+        await populate(dry_run=api_utils.is_dry_run, collection_name_filter=f"^{name}$", node=[node] if node else None, exclude_node=None)
 
 
 @app.async_command(help="Delete collections matching a pattern")
@@ -258,8 +250,8 @@ async def delete(
 ):
     """Delete collections and their replicas."""
 
-    filt = CollectionNameFilter(collection_name_filter=pattern)
-    cluster_state = filt.apply(get_collections())
+    fil = CollectionNameFilter(collection_name_filter=pattern)
+    cluster_state = fil.apply(get_collections())
     names = [c.name for c in cluster_state]
     if not names:
         rich.print("[error] ❌ No collections match the given pattern")
@@ -277,3 +269,57 @@ async def delete(
         )
         rich.print(f"[success]✅  Deleted collection {name}!")
 
+@app.async_command(help="Reload cores for filtered replicas")
+@with_dry_run
+@with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
+async def reload(
+        cluster_state: List[Collection],
+        coordinators: bool = typer.Option(None, help="If unset, reloads both data and coordinator nodes. If set to true, only reload coordinators. If set to false, only reload data nodes.")
+):
+    """Reload the specified cores and optionally coordinators."""
+    replicas = []
+    if coordinators is None or not coordinators:
+        replicas.extend(get_replicas(cluster_state))
+    if coordinators is None or coordinators:
+        coordinator_nodes = get_nodes_by_role("coordinator")["on"]
+        for node in coordinator_nodes:
+            cores = await api_utils.get_cores_from_node(node)
+            for core in cores:
+                replicas.append(
+                    Replica(name=core.name, core=core.name, node_name=node, type=core.cloud.replicaType,
+                            state=core.lastPublished, leader=True, force_set_state=False, base_url=node))
+
+    validate_num_replicas(replicas)
+
+    tasks = [
+        MetaTask(
+            [replica.base_url, replica.core],
+            asyncio.create_task(send_request(replica.base_url, "/admin/cores",
+                                             params={"action": "RELOAD", "core": replica.core})))
+        for replica in replicas
+    ]
+    metatasks = MultiMetaTask(["host", "core"], tasks)
+    await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
+
+
+@app.async_command(help="Execute a query against a collection")
+async def query(
+        collection: str = typer.Argument(..., help="Collection to query", autocompletion=completion.collection_names),
+        q: str = typer.Argument(..., help="Lucene query string"),
+        rows: int = typer.Option(10, help="Number of rows to return"),
+        fl: str = typer.Option("*", help="Fields to return"),
+        debug: bool = typer.Option(False, help="Include debug information"),
+):
+    """Query a collection and pretty-print the top results."""
+
+    params = {"q": q, "rows": rows, "fl": fl}
+    if debug:
+        params["debug"] = "true"
+
+    resp = await send_request(get_overseer_leader(), f"/{collection}/select", params=params)
+
+    docs = resp.get("response", {}).get("docs", [])
+    rich.print_json(data=json.dumps(docs))
+
+    if debug and "debug" in resp:
+        rich.print_json(data=json.dumps(resp["debug"]))

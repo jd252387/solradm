@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 import subprocess
 import tempfile
@@ -18,7 +19,6 @@ from solradm import completion
 from solradm.api import get_initialized_sesssion
 from solradm.api.state import get_collections
 from solradm.api.utils import get_collections_using_config
-from solradm.commands.core import reload as reload_cmd
 from solradm.commands.zk.utils import (
     open_vscode,
     create_or_update,
@@ -27,7 +27,7 @@ from solradm.commands.zk.utils import (
 from solradm.commands.zk.utils.sync_handler import ZooKeeperSyncHandler
 from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
 from solradm.zk import get_client
-from solradm.config.util import get_default_config_dir, validate_config_dir
+from solradm.config.util import resolve_config_name_to_abs_or_default_directory
 
 app = typer.Typer()
 
@@ -136,9 +136,9 @@ def edit(
 @app.command()
 def upload(
     paths: List[Path] = typer.Argument(
-        None,
-        exists=True,
-        resolve_path=True,
+        ...,
+        exists=False,
+        resolve_path=False,
         help="Paths to copy to ZooKeeper (defaults to configsets in the default configuration directory)",
     ),
     znode_path: str = typer.Option("/configs", help="Path of the zNode to copy"),
@@ -152,62 +152,85 @@ def upload(
         "--reload",
         help="Reload collections whose configs were uploaded",
     ),
-    exclude: List[str] = typer.Option(
+    exclude: List[str] | None = typer.Option(
         None,
         "--exclude",
         help="Collections to exclude from reloading",
         autocompletion=completion.collection_names,
     ),
+    skip_checks: bool = typer.Option(False, "--skip-confirm", "-y", help="Skip confirmation prompt"),
 ):
+    if only_used and znode_path != "/configs":
+        rich.print("[error] ❌ You cannot use only_used when the znode_path is not /configs!")
+        raise typer.Exit(1)
+
     """Upload local files or directories to a ZooKeeper znode."""
-    if not paths:
-        config_dir = get_default_config_dir()
-        if not config_dir or not validate_config_dir(config_dir):
-            raise typer.BadParameter(
-                "Default configuration directory is not configured or invalid"
-            )
-        configsets_dir = config_dir / "configsets"
-        paths = [p for p in configsets_dir.iterdir() if p.is_dir()]
+    resolved_paths = []
+    for path in paths:
+        resolved_paths.append(resolve_config_name_to_abs_or_default_directory(path))
 
-    files_by_config = build_files_by_config([(p, None) for p in paths], znode_path)
+    if znode_path == "/configs":
+        files_by_config = build_files_by_config([(p, None) for p in resolved_paths], znode_path)
+        files_to_upload = []
 
-    if not files_by_config:
-        rich.print("[warning]⚠️ No files to upload")
-        raise typer.Exit()
+        for cfg, files_to_upload in files_by_config.items():
+            files_to_upload.extend(files_to_upload)
 
-    cluster_state = get_collections()
-    config_usage = {
-        cfg: get_collections_using_config(cluster_state, cfg)
-        for cfg in files_by_config
-    }
-
-    if only_used:
-        files_by_config = {
-            cfg: files
-            for cfg, files in files_by_config.items()
-            if config_usage[cfg]
-        }
-        config_usage = {cfg: config_usage[cfg] for cfg in files_by_config}
         if not files_by_config:
-            rich.print("[warning]⚠️ No configurations used by any collection")
-            raise typer.Exit()
+            rich.print("[warning]⚠️ No files to upload")
+            raise typer.Exit(1)
 
-    table = Table(title="Configurations to upload")
-    table.add_column("Config")
-    table.add_column("Collections using config")
-    for cfg, cols in config_usage.items():
-        table.add_row(cfg, ", ".join(c.name for c in cols) if cols else "-")
-    rich.print(table)
+        cluster_state = get_collections()
 
-    if not Confirm.ask("Proceed with upload?"):
+        if only_used or not skip_checks or reload:
+            config_usage = {
+                cfg: get_collections_using_config(cluster_state, cfg)
+                for cfg in files_by_config
+            }
+
+            if only_used:
+                files_by_config = {
+                    cfg: files
+                    for cfg, files in files_by_config.items()
+                    if config_usage[cfg]
+                }
+                config_usage = {cfg: config_usage[cfg] for cfg in files_by_config}
+                if not files_by_config:
+                    rich.print("[warning]⚠️ No configurations used by any collection")
+                    raise typer.Exit()
+
+            if not skip_checks:
+                table = Table(title="Configurations to upload")
+                table.add_column("Config")
+                table.add_column("Collections using config")
+                for cfg, cols in config_usage.items():
+                    table.add_row(cfg, ", ".join(c.name for c in cols) if cols else "-")
+                rich.print(table)
+    else:
+        files_to_upload = []
+        for path in resolved_paths:
+            for root, _, files_to_upload in os.walk(path):
+                for file in files_to_upload:
+                    files_to_upload.append((os.path.join(root, file), znode_path))
+
+        if not skip_checks:
+            table = Table(title="Files to upload")
+            table.add_column("Local File")
+            table.add_column("zNode Path")
+
+            for file in files_to_upload:
+                table.add_row(file, znode_path)
+
+            rich.print(table)
+
+    if not skip_checks and not Confirm.ask("Proceed with upload?"):
         raise typer.Exit()
 
-    for cfg, file_list in files_by_config.items():
-        for local_path, zk_path in file_list:
-            with open(local_path, "rb") as f:
-                create_or_update(get_client(), zk_path, f.read())
+    for local_path, zk_path in files_to_upload:
+        with open(local_path, "rb") as f:
+            create_or_update(get_client(), zk_path, f.read())
 
-    if reload:
+    if reload and znode_path == "/configs":
         to_reload = set()
         for cfg, cols in config_usage.items():
             for col in cols:
@@ -215,6 +238,7 @@ def upload(
                     continue
                 to_reload.add(col.name)
         if to_reload:
+            from solradm.commands.collections import reload as reload_cmd
             asyncio.run(
                 reload_cmd(
                     collection_name_filter=

@@ -37,9 +37,13 @@ def get_host_with_scheme(host: str, scheme: str) -> str:
 
 is_dry_run = False
 
-async def send_request(host: str, endpoint: str, params: dict = None, dry_output: Any | None = None) -> Any:
-    if is_dry_run:
-        return dry_output
+async def send_request(host: str, endpoint: str, params: dict = None, dry_output: Any | None = None, dry_run_override: bool = None) -> Any:
+    if dry_run_override is not None:
+        if dry_run_override:
+            return dry_output
+    else:
+        if is_dry_run:
+            return dry_output
 
     url = urljoin(get_host_with_scheme(host, "http"), "/solr" + endpoint)
     try:
@@ -55,5 +59,5 @@ async def send_request(host: str, endpoint: str, params: dict = None, dry_output
     return json
 
 async def get_cores_from_node(host: str) -> List[Core]:
-    json = await send_request(host,  "/admin/cores", params={"indexInfo": "false"})
+    json = await send_request(host,  "/admin/cores", params={"indexInfo": "false"}, dry_run_override=False)
     return [Core.model_validate(json["status"][key]) for key in json["status"].keys()]
