@@ -1,9 +1,12 @@
 import subprocess
 import sys
+from urllib.parse import urlparse
 
 import rich
 import typer
 from kazoo.handlers.threading import KazooTimeoutError
+from kubernetes.client import CoreV1Api, Configuration
+from kubernetes.config import load_kube_config
 from rich.pretty import pprint
 from rich.prompt import Confirm
 from typer import Typer
@@ -13,7 +16,11 @@ from solradm.config import settings, persist, config_path
 from solradm.config.context import Context
 from solradm.config.interactive.setup_context import setup
 from solradm.config.util import get_current_context
-from solradm.kube.utils import get_kubecontext
+from solradm.kube.utils import (
+    get_current_kubecontext,
+    get_current_kubecontext_namespace,
+    get_kubecontext,
+)
 from solradm.zk import get_client
 
 app = Typer()
@@ -41,10 +48,10 @@ def _verify_zk_connection() -> bool:
 
 @app.command()
 def switch(
-    name: str = typer.Argument(
-        ..., help="Context name", autocompletion=completion.context_names
-    )
-) -> bool:
+        name: str = typer.Argument(
+            ..., help="Context name", autocompletion=completion.context_names
+        )
+):
     """Switch to an existing context."""
 
     if name in [context.name for context in settings.contexts.available]:
@@ -69,10 +76,10 @@ def open_config():
 
 @app.command()
 def connect(
-    zk: str = typer.Argument(..., help="ZooKeeper Host"),
-    kubecontext: str = typer.Option(
-        None, help="Kubernetes context", autocompletion=completion.kube_contexts
-    ),
+        zk: str = typer.Argument(..., help="ZooKeeper Host"),
+        kubecontext: str = typer.Option(
+            None, help="Kubernetes context", autocompletion=completion.kube_contexts
+        ),
 ):
     """Temporarily connect to a ZooKeeper host."""
 
@@ -88,6 +95,41 @@ def connect(
         rich.print(
             "Switched to temporary context. Use [italic]context persist[/] to save the context permanently."
         )
+
+
+@app.command()
+def connect_current():
+    """Connect using the active kubecontext and NodePort service."""
+
+    current = get_current_kubecontext()
+    if not current:
+        raise typer.BadParameter("No current kubecontext configured!")
+
+    namespace = get_current_kubecontext_namespace()
+    if not namespace:
+        raise typer.BadParameter(
+            "The current kubecontext does not map to a specific namespace!"
+        )
+
+    load_kube_config()
+    services = CoreV1Api().list_namespaced_service(namespace).items
+    zk_svc = next(
+        (svc for svc in services if "zk-nodeport" in svc.metadata.name),
+        None,
+    )
+
+    if not zk_svc or not zk_svc.spec.ports:
+        raise typer.BadParameter(
+            'Could not find service with "zk-nodeport" in current namespace'
+        )
+
+    node_port = zk_svc.spec.ports[0].node_port
+    api_host = urlparse(Configuration.get_default_copy().host).hostname
+    if not api_host:
+        raise typer.BadParameter("Unable to determine API server host")
+
+    zk_address = f"{api_host}:{node_port}"
+    connect(zk_address, current["name"])
 
 
 @app.command()
@@ -108,16 +150,16 @@ def save(name: str = typer.Argument(..., help="Context name")):
 
 @app.command()
 def add(
-    name: str = typer.Argument(..., help="Context name"),
-    zk: str = typer.Option(..., "-z", "--zk", help="ZooKeeper address"),
-    kubecontext: str = typer.Option(
-        None,
-        "-k",
-        "--kubecontext",
-        help="Target Kubecontext",
-        autocompletion=completion.kube_contexts,
-    ),
-    interactive: bool = typer.Option(False, help="Interactive setup mode"),
+        name: str = typer.Argument(..., help="Context name"),
+        zk: str = typer.Option(..., "-z", "--zk", help="ZooKeeper address"),
+        kubecontext: str = typer.Option(
+            None,
+            "-k",
+            "--kubecontext",
+            help="Target Kubecontext",
+            autocompletion=completion.kube_contexts,
+        ),
+        interactive: bool = typer.Option(False, help="Interactive setup mode"),
 ):
     """Add a new named context."""
 
@@ -138,17 +180,17 @@ def add(
 
 @app.command()
 def edit(
-    name: str = typer.Argument(
-        ..., help="Context name", autocompletion=completion.context_names
-    ),
-    zk: str = typer.Option(None, "-z", "--zk", help="ZooKeeper address"),
-    kubecontext: str = typer.Option(
-        None,
-        "-k",
-        "--kubecontext",
-        help="Target Kubecontext",
-        autocompletion=completion.kube_contexts,
-    ),
+        name: str = typer.Argument(
+            ..., help="Context name", autocompletion=completion.context_names
+        ),
+        zk: str = typer.Option(None, "-z", "--zk", help="ZooKeeper address"),
+        kubecontext: str = typer.Option(
+            None,
+            "-k",
+            "--kubecontext",
+            help="Target Kubecontext",
+            autocompletion=completion.kube_contexts,
+        ),
 ):
     """Modify an existing context."""
 
@@ -163,8 +205,10 @@ def edit(
 
     for context in settings.contexts.available:
         if context.name == name:
-            new_context = Context(name, zk=zk if zk else context.zk, kubecontext=kubecontext if kubecontext else context.kubecontext)
-            settings.contexts.available = [context for context in settings.contexts.available if context.name != name] + [new_context.as_dict()]
+            new_context = Context(name, zk=zk if zk else context.zk,
+                                  kubecontext=kubecontext if kubecontext else context.kubecontext)
+            settings.contexts.available = [context for context in settings.contexts.available if
+                                           context.name != name] + [new_context.as_dict()]
             break
 
     persist()
@@ -173,9 +217,9 @@ def edit(
 
 @app.command()
 def delete(
-    name: str = typer.Argument(
-        ..., help="Context name", autocompletion=completion.context_names
-    )
+        name: str = typer.Argument(
+            ..., help="Context name", autocompletion=completion.context_names
+        )
 ):
     """Remove a saved context."""
 
@@ -187,4 +231,3 @@ def delete(
     ]
     persist()
     rich.print(f"[success]✅  Deleted context {name}!")
-
