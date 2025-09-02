@@ -71,7 +71,7 @@ def test_add_and_delete_repo(monkeypatch, tmp_path):
     assert str(repo) in cfg.settings.get("context_repositories")
     assert "r1" in [c["name"] for c in cfg.settings.contexts.available]
 
-    config_cmd.del_repo(repo)
+    config_cmd.remove_repo(repo)
     importlib.reload(cfg)
     importlib.reload(config_cmd)
     import yaml
@@ -186,4 +186,28 @@ def test_list_repos(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert str(repo) in out
     assert "r1" in out
+
+
+def test_open_repo(monkeypatch, tmp_path):
+    repo_content = """contexts:\n  available: []\n"""
+    settings_content = (
+        """context_repositories:\n  - {repo}\ncontexts:\n  available: []\n  current: {{}}\n"""
+    )
+    repo, cfg, config_cmd = _prepare(
+        monkeypatch,
+        tmp_path,
+        repo_content,
+        settings_content.format(repo=tmp_path / "repo.yaml"),
+    )
+
+    called = {}
+
+    def fake_run(cmd):
+        called["cmd"] = cmd
+
+    monkeypatch.setattr(config_cmd.subprocess, "run", fake_run)
+
+    config_cmd.open_repo(repo)
+    assert called["cmd"][0] == "xdg-open"
+    assert called["cmd"][1] == str(repo.parent)
 

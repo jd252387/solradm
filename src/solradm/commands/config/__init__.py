@@ -32,6 +32,8 @@ from solradm.kube.utils import (
 from solradm.zk import get_client
 
 app = Typer()
+repo_app = Typer(help="Manage context repositories.")
+app.add_typer(repo_app, name="repo")
 
 
 @app.command()
@@ -93,7 +95,7 @@ def open_config():
         subprocess.run(["xdg-open", str(config_path.parent)])
 
 
-@app.command("add-repo")
+@repo_app.command("add")
 def add_repo(
     path: Path = typer.Argument(
         ..., exists=True, file_okay=True, dir_okay=False, resolve_path=True, help="Path to context repository"
@@ -117,8 +119,8 @@ def add_repo(
     rich.print(f"[success]✅  Added context repository {path}!")
 
 
-@app.command("del-repo")
-def del_repo(
+@repo_app.command("remove")
+def remove_repo(
     path: Path = typer.Argument(
         ..., exists=True, file_okay=True, dir_okay=False, autocompletion=completion.context_repo_paths, help="Path to context repository"
     ),
@@ -138,7 +140,7 @@ def del_repo(
     rich.print(f"[success]✅  Deleted context repository {path}!")
 
 
-@app.command("repos")
+@repo_app.command("list")
 def list_repos():
     """List configured context repositories and their contexts."""
 
@@ -149,6 +151,27 @@ def list_repos():
         contexts = [c["name"] for c in load_repo_contexts(repo_path)]
         table.add_row(str(repo_path), ", ".join(contexts) if contexts else "-")
     rich.print(table)
+
+
+@repo_app.command("open")
+def open_repo(
+    path: Path = typer.Argument(
+        ..., exists=True, file_okay=True, dir_okay=False, autocompletion=completion.context_repo_paths, help="Path to context repository"
+    ),
+):
+    """Open the location of a configured context repository."""
+
+    repo_list = list(settings.get("context_repositories") or [])
+    path_str = str(path)
+    if path_str not in repo_list:
+        raise typer.BadParameter(f"Context repository {path} is not configured!")
+
+    if sys.platform.startswith("win"):
+        subprocess.run(["explorer", f"/select,{path}"])
+    elif sys.platform == "darwin":
+        subprocess.run(["open", "-R", str(path)])
+    else:
+        subprocess.run(["xdg-open", str(path.parent)])
 
 
 @app.command("config-dir")
