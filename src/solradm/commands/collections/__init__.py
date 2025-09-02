@@ -11,12 +11,17 @@ import typer
 from async_typer import AsyncTyper
 from rich.prompt import Confirm
 from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn
+
+from kazoo.client import KazooClient
 
 import solradm.api.utils as api_utils
 from solradm import completion
 from solradm.api.models import Collection, Replica
 from solradm.api.state import get_nodes_by_role, get_collections
 from solradm.api.utils import validate_num_replicas, get_replicas, send_request
+from solradm.config import settings
+from solradm.config.util import get_current_context
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
 from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
@@ -323,3 +328,150 @@ async def query(
 
     if debug and "debug" in resp:
         rich.print_json(data=json.dumps(resp["debug"]))
+
+
+def _parse_status(json_resp):
+    msgs = json_resp.get("statusMessages", {})
+    percent = None
+    processed = None
+    total = None
+    for k, v in msgs.items():
+        match = re.search(r"(\d+)", str(v))
+        if not match:
+            continue
+        num = int(match.group(1))
+        lk = k.lower()
+        if "percent" in lk:
+            percent = num
+        elif "processed" in lk:
+            processed = num
+        elif "total" in lk:
+            total = num
+    if percent is not None:
+        return percent, 100, json_resp.get("status")
+    return processed or 0, total, json_resp.get("status")
+
+
+def _get_collection_from_context(context_zk: str, collection: str) -> Collection:
+    zk = KazooClient(hosts=context_zk, timeout=5)
+    zk.start()
+    try:
+        data, _ = zk.get(f"/collections/{collection}/state.json")
+    finally:
+        zk.stop()
+        zk.close()
+    state = json.loads(data.decode("utf-8"))[collection]
+    state["name"] = collection
+    return Collection.model_validate(state)
+
+
+@app.async_command(help="Reindex documents from a source collection into a target collection using the dataimport handler")
+async def reindex(
+        source_collection: str = typer.Option(..., "--source", help="Collection to reindex from"),
+        target_collection: str = typer.Option(..., "--target", help="Collection to reindex into", autocompletion=completion.collection_names),
+        source_context: str | None = typer.Option(None, "--source-context", help="Context of the source collection", autocompletion=completion.context_names),
+        handler: str = typer.Option("/dataimport", "--handler", help="Path of the dataimport handler"),
+        fq: List[str] | None = typer.Option(None, "--fq", help="Filter query to pass to the dataimport handler"),
+        source_shard: List[str] | None = typer.Option(None, "--source-shard", help="Source shards to reindex"),
+):
+    current_ctx = get_current_context()
+    cluster_state = get_collections()
+    target_coll = next((c for c in cluster_state if c.name == target_collection), None)
+    if not target_coll:
+        rich.print(f"[error]❌  Target collection {target_collection} not found")
+        raise typer.Exit(1)
+
+    if source_context:
+        ctx = next((c for c in settings.contexts.available if c.name == source_context), None)
+        if not ctx:
+            rich.print(f"[error]❌  Source context {source_context} not found")
+            raise typer.Exit(1)
+        source_coll = _get_collection_from_context(ctx.zk, source_collection)
+        source_zk = ctx.zk
+    else:
+        source_coll = next((c for c in cluster_state if c.name == source_collection), None)
+        if not source_coll:
+            rich.print(f"[error]❌  Source collection {source_collection} not found")
+            raise typer.Exit(1)
+        source_zk = current_ctx.zk
+
+    src_shards = [s for s in source_coll.shards if not source_shard or s.name in source_shard]
+    if not src_shards:
+        rich.print("[error]❌  No source shards matched")
+        raise typer.Exit(1)
+
+    tgt_shards = sorted(target_coll.shards, key=lambda s: s.name)
+    src_shards_sorted = sorted(src_shards, key=lambda s: s.name)
+
+    shard_map: dict = {}
+    if len(tgt_shards) >= len(src_shards_sorted):
+        for idx, src in enumerate(src_shards_sorted):
+            shard_map.setdefault(tgt_shards[idx], []).append(src)
+    else:
+        for idx, src in enumerate(src_shards_sorted):
+            shard_map.setdefault(tgt_shards[idx % len(tgt_shards)], []).append(src)
+
+    leaders = {shard.name: next((r for r in shard.replicas if r.leader), None) for shard in target_coll.shards}
+    busy = []
+    for name, rep in leaders.items():
+        if rep is None:
+            continue
+        status = await send_request(rep.base_url, f"/{target_collection}{handler}", params={"command": "status", "wt": "json"})
+        if status.get("status") == "busy":
+            busy.append((name, rep))
+
+    if busy:
+        rich.print("[warning]⚠️  Dataimport already running on some shards. Monitoring progress...")
+        with Progress(SpinnerColumn(), TextColumn("{task.description}"), BarColumn(), TimeRemainingColumn()) as progress:
+            tasks = {name: progress.add_task(name, total=100) for name, _ in busy}
+
+            async def monitor(replica: Replica, name: str):
+                while True:
+                    stat = await send_request(replica.base_url, f"/{target_collection}{handler}", params={"command": "status", "wt": "json"})
+                    done, total, st = _parse_status(stat)
+                    if total:
+                        progress.update(tasks[name], total=total, completed=done)
+                    else:
+                        progress.update(tasks[name], completed=done)
+                    if st != "busy":
+                        break
+                    await asyncio.sleep(1)
+
+            await asyncio.gather(*(monitor(rep, name) for name, rep in busy))
+        raise typer.Exit(1)
+
+    with Progress(SpinnerColumn(), TextColumn("{task.description}"), BarColumn(), TimeRemainingColumn()) as progress:
+
+        async def run_target(shard, src_list):
+            leader = leaders[shard.name]
+            task_id = progress.add_task(shard.name, total=100)
+            for src in src_list:
+                params = {
+                    "command": "full-import",
+                    "clean": "false",
+                    "commit": "true",
+                    "distrib": "false",
+                    "wt": "json",
+                    "sourceZkHost": source_zk,
+                    "sourceCollection": source_collection,
+                    "sourceShard": src.name,
+                }
+                if fq:
+                    params["fq"] = fq
+                await send_request(leader.base_url, f"/{target_collection}{handler}", params=params)
+
+                while True:
+                    stat = await send_request(leader.base_url, f"/{target_collection}{handler}", params={"command": "status", "wt": "json"})
+                    done, total, st = _parse_status(stat)
+                    if total:
+                        progress.update(task_id, total=total, completed=done)
+                    else:
+                        progress.update(task_id, completed=done)
+                    if st != "busy":
+                        break
+                    await asyncio.sleep(1)
+            progress.update(task_id, completed=progress.tasks[task_id].total or progress.tasks[task_id].completed)
+
+        await asyncio.gather(*(run_target(t, s) for t, s in shard_map.items()))
+
+    rich.print("[success]✅  Reindex completed")
