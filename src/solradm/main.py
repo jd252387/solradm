@@ -64,7 +64,15 @@ class LazyGroup(TyperGroup):
 
 
 app = AsyncTyper(cls=LazyGroup)
-app.command()(status_cmd)
+
+
+@app.callback()
+def app_callback():
+    """Base CLI application."""
+    pass
+
+
+app.command(name="status")(status_cmd)
 
 
 def run():
