@@ -2,11 +2,11 @@ import logging
 
 from async_typer import AsyncTyper
 from rich.logging import RichHandler
-from solradm.commands.status import status as status_cmd
 
 from solradm.api import get_initialized_sesssion
-from solradm.commands import config, core, collections, backups, auth, kube
 from solradm.commands import config, core, collections, backups, auth, node
+from solradm.commands import kube
+from solradm.commands.status import status as status_cmd
 from solradm.commands.zk import editor
 from solradm.exceptions.adm_exception import AdmException
 from solradm.exceptions.solr_exception import SolrException
@@ -31,6 +31,7 @@ app.add_typer(kube.app, name="kube", help="Manage Kubernetes workloads")
 app.add_typer(node.app, name="node", help="Manage Solr nodes")
 app.command()(status_cmd)
 
+
 def run():
     try:
         app()
@@ -43,6 +44,7 @@ def run():
         import asyncio
         if get_initialized_sesssion():
             asyncio.run(get_initialized_sesssion().close())
+
 
 if __name__ == "__main__":
     run()
