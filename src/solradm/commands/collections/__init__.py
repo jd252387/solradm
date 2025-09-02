@@ -367,7 +367,9 @@ def _get_collection_from_context(context_zk: str, collection: str) -> Collection
 
 @app.async_command(help="Reindex documents from a source collection into a target collection using the dataimport handler")
 async def reindex(
-        source_collection: str = typer.Option(..., "--source", help="Collection to reindex from"),
+        source_collection: str = typer.Option(
+            ..., "--source", help="Collection to reindex from", autocompletion=completion.source_collection_names
+        ),
         target_collection: str = typer.Option(..., "--target", help="Collection to reindex into", autocompletion=completion.collection_names),
         source_context: str | None = typer.Option(None, "--source-context", help="Context of the source collection", autocompletion=completion.context_names),
         handler: str = typer.Option("/dataimport", "--handler", help="Path of the dataimport handler"),
