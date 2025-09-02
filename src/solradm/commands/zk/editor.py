@@ -1,15 +1,24 @@
+import asyncio
+import re
 import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import rich
 import typer
 from rich.panel import Panel
+from rich.prompt import Confirm
+from rich.table import Table
 from rich.text import Text
 from watchdog.observers import Observer
 
+from solradm import completion
+from solradm.api import get_initialized_sesssion
+from solradm.api.state import get_collections
+from solradm.api.utils import get_collections_using_config
+from solradm.commands.core import reload as reload_cmd
 from solradm.commands.zk.utils import (
     open_vscode,
     create_or_update,
@@ -129,24 +138,106 @@ def upload(
         ..., exists=True, resolve_path=True, help="Paths to copy to ZooKeeper"
     ),
     znode_path: str = typer.Option("/configs", help="Path of the zNode to copy"),
+    only_used: bool = typer.Option(
+        True,
+        "--only-used/--all",
+        help="Upload only configs referenced by collections",
+    ),
+    reload: bool = typer.Option(
+        False,
+        "--reload",
+        help="Reload collections whose configs were uploaded",
+    ),
+    exclude: List[str] = typer.Option(
+        None,
+        "--exclude",
+        help="Collections to exclude from reloading",
+        autocompletion=completion.collection_names,
+    ),
 ):
     """Upload local files or directories to a ZooKeeper znode."""
 
-    file_paths: List[Tuple[Path, Path]] = []
+    files_by_config: Dict[str, List[Tuple[Path, str]]] = {}
 
     for path in paths:
         if path.is_file():
-            file_paths.append((path, path))
+            base = path.parent
+            rel_path = get_relative_znode_path(znode_path, str(base), str(path))
+            parts = rel_path.split("/", 1)
+            if len(parts) == 1:
+                config = base.name
+                zk_path = f"{znode_path.rstrip('/')}/{config}/{parts[0]}"
+            else:
+                config = parts[0]
+                zk_path = f"{znode_path.rstrip('/')}/{rel_path}"
+            files_by_config.setdefault(config, []).append((path, zk_path))
         elif path.is_dir():
             for sub_file in path.rglob("*"):
                 if sub_file.is_file():
-                    file_paths.append((path, sub_file))
+                    rel_path = get_relative_znode_path(
+                        znode_path, str(path), str(sub_file)
+                    )
+                    parts = rel_path.split("/", 1)
+                    if len(parts) == 1:
+                        config = path.name
+                        zk_path = f"{znode_path.rstrip('/')}/{config}/{parts[0]}"
+                    else:
+                        config = parts[0]
+                        zk_path = f"{znode_path.rstrip('/')}/{rel_path}"
+                    files_by_config.setdefault(config, []).append(
+                        (sub_file, zk_path)
+                    )
 
-    for file_path in file_paths:
-        with open(file_path[1], "rb") as f:
-            create_or_update(
-                get_client(),
-                get_relative_znode_path(znode_path, str(file_path[0]), str(file_path[1])),
-                f.read(),
+    if not files_by_config:
+        rich.print("[warning]⚠️ No files to upload")
+        raise typer.Exit()
+
+    cluster_state = get_collections()
+    config_usage = {
+        cfg: get_collections_using_config(cluster_state, cfg)
+        for cfg in files_by_config
+    }
+
+    if only_used:
+        files_by_config = {
+            cfg: files
+            for cfg, files in files_by_config.items()
+            if config_usage[cfg]
+        }
+        config_usage = {cfg: config_usage[cfg] for cfg in files_by_config}
+        if not files_by_config:
+            rich.print("[warning]⚠️ No configurations used by any collection")
+            raise typer.Exit()
+
+    table = Table(title="Configurations to upload")
+    table.add_column("Config")
+    table.add_column("Collections using config")
+    for cfg, cols in config_usage.items():
+        table.add_row(cfg, ", ".join(c.name for c in cols) if cols else "-")
+    rich.print(table)
+
+    if not Confirm.ask("Proceed with upload?"):
+        raise typer.Exit()
+
+    for cfg, file_list in files_by_config.items():
+        for local_path, zk_path in file_list:
+            with open(local_path, "rb") as f:
+                create_or_update(get_client(), zk_path, f.read())
+
+    if reload:
+        to_reload = set()
+        for cfg, cols in config_usage.items():
+            for col in cols:
+                if exclude and col.name in exclude:
+                    continue
+                to_reload.add(col.name)
+        if to_reload:
+            asyncio.run(
+                reload_cmd(
+                    collection_name_filter=
+                    r"^(" + "|".join(re.escape(c) for c in to_reload) + r")$",
+                    dry_run=False,
+                )
             )
+            asyncio.run(get_initialized_sesssion().close())
 
