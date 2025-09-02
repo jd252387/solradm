@@ -16,7 +16,11 @@ from solradm import completion
 from solradm.config import settings, persist, config_path, local_contexts
 from solradm.config.context import Context
 from solradm.config.interactive.setup_context import setup
-from solradm.config.util import get_current_context, validate_config_dir
+from solradm.config.util import (
+    get_current_context,
+    validate_config_dir,
+    is_valid_context_repo,
+)
 from solradm.kube.utils import (
     get_current_kubecontext,
     get_current_kubecontext_namespace,
@@ -87,6 +91,9 @@ def add_repo(
     path_str = str(path)
     if path_str in repo_list:
         raise typer.BadParameter(f"Context repository {path} already exists!")
+
+    if not is_valid_context_repo(path):
+        raise typer.BadParameter(f"{path} is not a valid context repository")
 
     repo_list.append(path_str)
     settings.context_repositories = repo_list

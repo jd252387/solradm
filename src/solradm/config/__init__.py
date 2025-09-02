@@ -7,6 +7,7 @@ from dynaconf import Dynaconf
 from platformdirs import user_config_dir
 from rich.console import Console
 from rich.theme import Theme
+from solradm.config.util import is_valid_context_repo
 
 config_path = Path(os.path.join(user_config_dir("solradm", "eclipse"), "settings.yaml"))
 
@@ -86,15 +87,6 @@ share them, create temporary ones, and so on...
     create_ctx = Confirm.ask(
         "Would you like to set up an initial context?", default=True
     )
-    create_repo = Confirm.ask(
-        "Would you like to add a context repository?", default=False
-    )
-
-    if not create_ctx and not create_repo:
-        rich.print(
-            "[error]You must set up at least an initial context or a context repository."
-        )
-        exit(1)
 
     contexts_avail: list[dict] = []
     current_context: dict = {}
@@ -106,13 +98,30 @@ share them, create temporary ones, and so on...
         contexts_avail.append(new_context.as_dict())
         current_context = {"name": new_context.name}
 
+    create_repo = Confirm.ask(
+        "Would you like to add a context repository?", default=False
+    )
+
+    if not create_ctx and not create_repo:
+        rich.print(
+            "[error]You must set up at least an initial context or a context repository."
+        )
+        exit(1)
+
     settings.set("contexts", {"available": contexts_avail, "current": current_context})
 
     repo_path = None
     if create_repo:
-        repo_path = Prompt.ask("Path to context repository")
-        settings.set("context_repositories", [repo_path])
-        context_repositories.append(repo_path)
+        repo_path_str = Prompt.ask("Path to context repository")
+        repo_path = Path(repo_path_str)
+        if not is_valid_context_repo(repo_path):
+            rich.print(
+                f"[error]Context repository {repo_path} is invalid."
+            )
+            exit(1)
+        repo_str = str(repo_path)
+        settings.set("context_repositories", [repo_str])
+        context_repositories.append(repo_str)
         settings.configure(settings_files=context_repositories + [config_path])
     else:
         settings.set("context_repositories", [])

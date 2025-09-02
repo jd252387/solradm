@@ -1,6 +1,9 @@
 import importlib
 from pathlib import Path
 
+import pytest
+import typer
+
 
 def _prepare(monkeypatch, tmp_path: Path, repo_content: str, settings_content: str):
     repo = tmp_path / "repo.yaml"
@@ -75,3 +78,19 @@ def test_add_and_delete_repo(monkeypatch, tmp_path):
     with open(cfg.config_path) as f:
         data = yaml.safe_load(f) or {}
     assert str(repo) not in data.get("context_repositories", [])
+
+
+def test_add_repo_invalid(monkeypatch, tmp_path):
+    repo_content = """contexts:\n  available: []\n"""
+    settings_content = """contexts:\n  available: []\n  current: {}\n"""
+    repo, cfg, config_cmd = _prepare(
+        monkeypatch,
+        tmp_path,
+        repo_content,
+        settings_content,
+    )
+
+    bad_repo = tmp_path / "bad.yaml"
+    bad_repo.write_text("bad: true")
+    with pytest.raises(typer.BadParameter):
+        config_cmd.add_repo(bad_repo)

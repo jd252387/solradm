@@ -3,12 +3,14 @@ from pathlib import Path
 
 import rich
 import typer
+import yaml
 
-from solradm.config import settings
 from solradm.config.context import Context
 
 
 def get_current_context() -> Context:
+    from solradm.config import settings
+
     current = settings.contexts.current
 
     if "name" in current:
@@ -20,6 +22,8 @@ def get_current_context() -> Context:
 
 
 def _get_default_znode_dir() -> Path | None:
+    from solradm.config import settings
+
     path = settings.get("config_dir")
     return Path(path) if path else None
 
@@ -39,6 +43,18 @@ def resolve_config_name_to_abs_or_default_directory(path: Path) -> Path | None:
         raise typer.Exit(1)
 
     return path
+
+
+def is_valid_context_repo(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:
+        return False
+    contexts = data.get("contexts", {}).get("available")
+    return isinstance(contexts, list)
 
 def _validate_config_dir(path: Path) -> bool:
     return path.is_dir() and (path / "root").is_dir() and (path / "configsets").is_dir()
