@@ -13,7 +13,7 @@ from typer import Typer
 from pathlib import Path
 
 from solradm import completion
-from solradm.config import settings, persist, config_path
+from solradm.config import settings, persist, config_path, local_contexts
 from solradm.config.context import Context
 from solradm.config.interactive.setup_context import setup
 from solradm.config.util import get_current_context, validate_config_dir
@@ -73,6 +73,48 @@ def open_config():
         subprocess.run(["open", "-R", str(config_path)])
     else:
         subprocess.run(["xdg-open", str(config_path.parent)])
+
+
+@app.command("add-repo")
+def add_repo(
+    path: Path = typer.Argument(
+        ..., exists=True, file_okay=True, dir_okay=False, resolve_path=True, help="Path to context repository"
+    ),
+):
+    """Add a new context repository."""
+
+    repo_list = list(settings.get("context_repositories") or [])
+    path_str = str(path)
+    if path_str in repo_list:
+        raise typer.BadParameter(f"Context repository {path} already exists!")
+
+    repo_list.append(path_str)
+    settings.context_repositories = repo_list
+    persist(repo_list)
+    settings.configure(settings_files=repo_list + [config_path])
+    settings.reload()
+    rich.print(f"[success]✅  Added context repository {path}!")
+
+
+@app.command("del-repo")
+def del_repo(
+    path: Path = typer.Argument(
+        ..., exists=True, file_okay=True, dir_okay=False, autocompletion=completion.context_repo_paths, help="Path to context repository"
+    ),
+):
+    """Remove a context repository."""
+
+    repo_list = list(settings.get("context_repositories") or [])
+    path_str = str(path)
+    if path_str not in repo_list:
+        raise typer.BadParameter(f"Context repository {path} does not exist!")
+
+    repo_list.remove(path_str)
+    settings.context_repositories = repo_list
+    persist(repo_list)
+    settings.configure(settings_files=repo_list + [config_path])
+    settings.reload()
+    rich.print(f"[success]✅  Deleted context repository {path}!")
 
 
 @app.command("config-dir")
@@ -192,6 +234,7 @@ def add(
         context = Context(name=name, zk=zk, kubecontext=kubecontext)
 
     settings.contexts.available = settings.contexts.available + [context.as_dict()]
+    local_contexts.append(context.as_dict())
     persist()
     rich.print(f"[success]✅  Added new context {name}!")
 
@@ -212,8 +255,8 @@ def edit(
 ):
     """Modify an existing context."""
 
-    if name not in [context.name for context in settings.contexts.available]:
-        raise typer.BadParameter(f"Context {name} does not exist!")
+    if name not in [c["name"] for c in local_contexts]:
+        raise typer.BadParameter(f"Context {name} does not exist in local configuration!")
 
     if zk is None and kubecontext is None:
         raise typer.BadParameter("Please specify --zk and/or --kubecontext")
@@ -223,10 +266,19 @@ def edit(
 
     for context in settings.contexts.available:
         if context.name == name:
-            new_context = Context(name, zk=zk if zk else context.zk,
-                                  kubecontext=kubecontext if kubecontext else context.kubecontext)
-            settings.contexts.available = [context for context in settings.contexts.available if
-                                           context.name != name] + [new_context.as_dict()]
+            new_context = Context(
+                name,
+                zk=zk if zk else context.zk,
+                kubecontext=kubecontext if kubecontext else context.kubecontext,
+            )
+            settings.contexts.available = [
+                c for c in settings.contexts.available if c.name != name
+            ] + [new_context.as_dict()]
+            break
+
+    for idx, c in enumerate(local_contexts):
+        if c["name"] == name:
+            local_contexts[idx] = new_context.as_dict()
             break
 
     persist()
@@ -241,11 +293,12 @@ def delete(
 ):
     """Remove a saved context."""
 
-    if name not in [context.name for context in settings.contexts.available]:
-        raise typer.BadParameter(f"Context {name} does not exist!")
+    if name not in [c["name"] for c in local_contexts]:
+        raise typer.BadParameter(f"Context {name} does not exist in local configuration!")
 
     settings.contexts.available = [
         context for context in settings.contexts.available if context.name != name
     ]
+    local_contexts[:] = [c for c in local_contexts if c["name"] != name]
     persist()
     rich.print(f"[success]✅  Deleted context {name}!")

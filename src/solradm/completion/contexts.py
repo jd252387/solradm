@@ -22,3 +22,13 @@ def kube_contexts(ctx, args: List[str], incomplete: str) -> List[str]:
     except Exception:
         names = []
     return _filter(sorted(names), incomplete)
+
+
+def context_repo_paths(ctx, args: List[str], incomplete: str) -> List[str]:
+    try:
+        from solradm.config import settings
+
+        names = settings.get("context_repositories") or []
+    except Exception:
+        names = []
+    return _filter(sorted(names), incomplete)
