@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from pathlib import Path
@@ -18,6 +19,7 @@ from solradm.kube.utils import (
     find_pods,
     find_pods_by_node_name,
     get_current_kubecontext_namespace,
+    run_command_in_pod,
     switch_current_kubecontext,
 )
 
@@ -95,6 +97,45 @@ async def logs(
                         print(err, end="", file=sys.stderr)
         finally:
             resp.close()
+
+
+@app.async_command(help="Show /var/solr disk usage for matching pods")
+async def disk(
+    pattern: str = typer.Argument(..., help="Regex of pod or node name"),
+    node: bool = typer.Option(False, "--node", help="Treat pattern as node name"),
+):
+    """Display disk usage of /var/solr for pods matching PATTERN."""
+
+    _load_kube_config()
+    pods = find_pods_by_node_name(pattern) if node else find_pods(re.compile(pattern))
+
+    if not pods:
+        raise typer.BadParameter("No pods matched the given pattern")
+
+    table = Table(title="Disk usage", header_style="bold magenta")
+    table.add_column("Pod")
+    table.add_column("Size", justify="right")
+    table.add_column("Used", justify="right")
+    table.add_column("Avail", justify="right")
+    table.add_column("Use%", justify="right")
+
+    async def _df(pod_name: str):
+        output = await asyncio.to_thread(run_command_in_pod, pod_name, "df -h /var/solr")
+        return pod_name, output
+
+    results = await asyncio.gather(*(_df(p.metadata.name) for p in pods))
+
+    for pod_name, output in results:
+        lines = [l for l in output.strip().splitlines() if l]
+        if len(lines) >= 2:
+            parts = lines[1].split()
+            if len(parts) >= 5:
+                size, used, avail, pct = parts[1:5]
+                table.add_row(pod_name, size, used, avail, pct)
+                continue
+        table.add_row(pod_name, "-", "-", "-", "-")
+
+    rich.print(table)
 
 @app.command(help="Scale workloads matching a regex down to zero and save their replicas")
 def suspend(
