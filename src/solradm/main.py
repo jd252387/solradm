@@ -5,7 +5,7 @@ from rich.logging import RichHandler
 from solradm.commands.status import status as status_cmd
 
 from solradm.api import get_initialized_sesssion
-from solradm.commands import config, core, collections, backups, auth
+from solradm.commands import config, core, collections, backups, auth, kube
 from solradm.commands.zk import editor
 from solradm.exceptions.adm_exception import AdmException
 from solradm.exceptions.solr_exception import SolrException
