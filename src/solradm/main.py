@@ -120,8 +120,18 @@ def run() -> None:  # pragma: no cover - entrypoint executed via CLI
 
         top_commands = set(LAZY_TYPERS) | set(LAZY_COMMANDS)
 
+        cmd: str | None = None
         if len(sys.argv) >= 2 and not sys.argv[1].startswith("-"):
             cmd = sys.argv[1]
+        elif _is_completing():
+            from click.shell_completion import split_arg_string
+
+            comp_words = os.environ.get("COMP_WORDS", "")
+            words = split_arg_string(comp_words)
+            if len(words) >= 2:
+                cmd = words[1]
+
+        if cmd:
             if cmd in top_commands:
                 _load_command(cmd)
             else:
