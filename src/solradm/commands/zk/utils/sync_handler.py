@@ -9,7 +9,7 @@ import rich
 from kazoo.client import KazooClient
 from watchdog.events import FileSystemEventHandler
 
-from solradm.api import get_initialized_sesssion
+from solradm.api import get_initialized_session
 from solradm.api.state import get_collections
 from solradm.api.utils import get_collections_using_config
 from solradm.commands.collections import reload
@@ -103,7 +103,7 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
             asyncio.run(reload(
                 collection_name_filter=r"^(" + "|".join(re.escape(collection.name) for collection in to_reload) + r")$",
                 dry_run=False))
-            asyncio.run(get_initialized_sesssion().close())
+            asyncio.run(get_initialized_session().close())
 
         self.pending_changes.clear()
         self.modification_hashes.clear()
