@@ -14,7 +14,6 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from typer import Typer
 
-from solradm import completion
 from solradm.completion.contexts import context_names, context_repo_paths, kube_contexts
 from solradm.config import settings, persist, config_path, local_contexts
 from solradm.config.context import Context

@@ -16,9 +16,7 @@ from solradm.commands.kube import load_configured_kubecontext
 from solradm.completion.nodes import node_names
 from solradm.kube.utils import (
     find_pods_by_node_name,
-    get_configured_kubecontext,
     run_command_in_pod,
-    switch_current_kubecontext,
 )
 from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
