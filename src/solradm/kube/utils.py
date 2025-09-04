@@ -3,7 +3,6 @@ from typing import Any, List
 
 from kubernetes.client import CoreV1Api, V1PodList, V1Pod
 from kubernetes.config import list_kube_config_contexts, load_kube_config
-from kubernetes.stream import stream
 
 from solradm.config.util import get_current_context
 from solradm.exceptions.adm_exception import AdmException
@@ -53,11 +52,12 @@ def find_pods_by_node_name(node_name: str):
 
 
 def run_command_in_pod(pod_name: str, command: str) -> str:
-    return stream(
-        CoreV1Api().connect_get_namespaced_pod_exec,
-        pod_name,
-        get_current_kubecontext_namespace(),
+    return CoreV1Api().connect_get_namespaced_pod_exec(
+        name=pod_name,
+        namespace=get_current_kubecontext_namespace(),
         command=["/bin/sh", "-c", command],
-        stderr=True, stdin=False,
-        stdout=True, tty=False
+        stderr=True,
+        stdin=False,
+        stdout=True,
+        tty=False,
     )
