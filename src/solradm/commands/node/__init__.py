@@ -134,7 +134,7 @@ async def drain(
 
 
 @app.command(help="Open the overseer-elected node's Solr UI in a browser")
-def open_ui():
+def ui():
     """Open the current overseer node in the default browser."""
     url = get_host_with_scheme(get_overseer_leader(), "http") + "/solr/#/"
     webbrowser.open(url)
