@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 import rich
 import typer
+import yaml
 from kazoo.handlers.threading import KazooTimeoutError
 from kubernetes.client import CoreV1Api, Configuration
 from kubernetes.config import load_kube_config
@@ -111,6 +112,32 @@ def open_config():
         subprocess.run(["open", "-R", str(config_path)])
     else:
         subprocess.run(["xdg-open", str(config_path.parent)])
+
+
+@repo_app.command("create")
+def create_repo(
+        path: Path = typer.Argument(
+            ..., exists=False, file_okay=True, dir_okay=False, resolve_path=True,
+            help="Path to new context repository",
+        ),
+):
+    """Create a new context repository."""
+
+    if path.exists():
+        raise typer.BadParameter(f"Context repository {path} already exists!")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        yaml.safe_dump({"contexts": {"available": []}}, f, sort_keys=False)
+
+    repo_list = list(settings.get("context_repositories") or [])
+    path_str = str(path)
+    repo_list.append(path_str)
+    settings.context_repositories = repo_list
+    persist(repo_list)
+    settings.configure(settings_files=repo_list + [config_path])
+    settings.reload()
+    rich.print(f"[success]✅  Created context repository {path}!")
 
 
 @repo_app.command("add")
