@@ -248,4 +248,4 @@ def upload(
                     dry_run=False, coordinators=None
                 )
             )
-            asyncio.run(get_initialized_sesssion().close())
+            asyncio.run(get_initialized_session().close())

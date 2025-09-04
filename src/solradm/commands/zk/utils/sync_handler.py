@@ -103,7 +103,7 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
             asyncio.run(reload(
                 collection_name_filter=r"^(" + "|".join(re.escape(collection.name) for collection in to_reload) + r")$",
                 dry_run=False))
-            asyncio.run(get_initialized_sesssion().close())
+            asyncio.run(get_initialized_session().close())
 
         self.pending_changes.clear()
         self.modification_hashes.clear()

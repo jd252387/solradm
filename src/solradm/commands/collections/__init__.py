@@ -52,9 +52,13 @@ async def depopulate(
     table.add_column("Collection", style="cyan")
     table.add_column("Active Shards", justify="right", style="green")
     table.add_column("Active Replicas", justify="right", style="green")
+    table.add_column("Problematic Shards", justify="right", style="yellow")
+    table.add_column("Problematic Replicas", justify="right", style="yellow")
 
     total_active_shards = 0
     total_active_replicas = 0
+    total_non_active_shards = 0
+    total_non_active_replicas = 0
     for coll in cluster_state:
         active_shards = sum(
             1 for shard in coll.shards if any(r.state == "active" for r in shard.replicas)
@@ -62,11 +66,19 @@ async def depopulate(
         active_replicas = sum(
             1 for shard in coll.shards for r in shard.replicas if r.state == "active"
         )
+        non_active_shards = sum(
+            1 for shard in coll.shards if any(r.state != "active" for r in shard.replicas)
+        )
+        non_active_replicas = sum(
+            1 for shard in coll.shards for r in shard.replicas if r.state != "active"
+        )
         total_active_shards += active_shards
         total_active_replicas += active_replicas
-        table.add_row(coll.name, str(active_shards), str(active_replicas))
+        total_non_active_shards += non_active_shards
+        total_non_active_replicas += non_active_replicas
+        table.add_row(coll.name, str(active_shards), str(active_replicas), str(non_active_shards), str(non_active_replicas))
 
-    table.add_row("[bold]TOTAL[/bold]", str(total_active_shards), str(total_active_replicas), style="bold")
+    table.add_row("[bold]TOTAL[/bold]", str(total_active_shards), str(total_active_replicas), str(total_non_active_shards), str(total_non_active_replicas), style="bold")
     rich.print(table)
 
     if not Confirm.ask("Proceed with removing replicas?"):

@@ -29,7 +29,7 @@ app = AsyncTyper()
 STATE_FILE = Path(user_config_dir("solradm", "eclipse")) / "kube-scale-state.json"
 
 
-def _load_kube_config():
+def load_kube_config():
     switch_current_kubecontext(get_configured_kubecontext())
 
 
@@ -96,14 +96,14 @@ async def logs(
     )
 
 
-@app.async_command(help="Show /var/solr disk usage for matching pods")
+@app.async_command(help="Show /var/solr/data disk usage for matching pods")
 async def disk(
         pattern: str = typer.Argument(..., help="Regex of pod or node name"),
         node: bool = typer.Option(False, "--node", help="Treat pattern as node name"),
 ):
     """Display disk usage of /var/solr for pods matching PATTERN."""
 
-    _load_kube_config()
+    load_kube_config()
     pods = find_pods_by_node_name(pattern) if node else find_pods(re.compile(pattern))
 
     if not pods:
@@ -117,7 +117,7 @@ async def disk(
     table.add_column("Use%", justify="right")
 
     async def _df(pod_name: str):
-        output = await asyncio.to_thread(run_command_in_pod, pod_name, "df -h /var/solr")
+        output = await asyncio.to_thread(run_command_in_pod, pod_name, "df -h /var/solr/data")
         return pod_name, output
 
     results = await asyncio.gather(*(_df(p.metadata.name) for p in pods))
@@ -142,7 +142,7 @@ def suspend(
 ):
     """Scale matching deployments and statefulsets to zero replicas."""
 
-    _load_kube_config()
+    load_kube_config()
     pattern = re.compile(name_regex)
     deployments, statefulsets = _get_workloads(pattern)
     if not deployments and not statefulsets:
@@ -178,7 +178,7 @@ def resume(
 ):
     """Scale previously suspended workloads back to their original replicas."""
 
-    _load_kube_config()
+    load_kube_config()
     sf = state_file or STATE_FILE
     if not sf.exists():
         rich.print(f"[error] ❌ State file {sf} does not exist")
