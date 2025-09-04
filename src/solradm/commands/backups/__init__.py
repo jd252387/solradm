@@ -7,6 +7,7 @@ import typer
 from async_typer import AsyncTyper
 
 from solradm.api.utils import validate_num_replicas, get_replicas, send_request
+from solradm.commands.callbacks import add_verbosity_option
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
 from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
@@ -19,8 +20,11 @@ from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
+from solradm.config import settings
+from solradm.completion.backups import backup_paths
 
 app = AsyncTyper()
+add_verbosity_option(app)
 
 
 @app.async_command(help="Create backups for filtered replicas")
@@ -28,8 +32,9 @@ app = AsyncTyper()
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def take(
         cluster_state: List[Collection],
-        base_location_str: str = typer.Option("/mnt/backups", "--location",
-                                              help="Base location on each node's disk to place the backup. Each backup will be created under location/collection_name/shard_number"),
+        base_location_str: str = typer.Option(settings.get("backup_base_location", "/mnt/backups"), "--location",
+                                              help="Base location on each node's disk to place the backup. Each backup will be created under location/collection_name/shard_number",
+                                              autocompletion=backup_paths),
         number_to_keep=typer.Option(None,
                                     help="Number of previous backups to keep. If more backups than the specified number exist in the directory, the oldest ones will be deleted."),
         create_directories=typer.Option(True,
@@ -69,7 +74,8 @@ async def take(
 async def restore(
         cluster_state: List[Collection],
         backups_path_str: str = typer.Option(..., "--location",
-                                             help="Directory which contains the shard directories. This directory must have subdirectories named shard1, shard2... which contain the backups.")):
+                                             help="Directory which contains the shard directories. This directory must have subdirectories named shard1, shard2... which contain the backups.",
+                                             autocompletion=backup_paths)):
     """Restore backups for the selected collection."""
 
     if len(cluster_state) > 1:

@@ -31,8 +31,10 @@ from solradm.kube.utils import (
     get_kubecontext,
 )
 from solradm.zk import get_client
+from solradm.commands.callbacks import add_verbosity_option
 
 app = Typer()
+add_verbosity_option(app)
 repo_app = Typer(help="Manage context repositories.")
 app.add_typer(repo_app, name="repo")
 
@@ -507,6 +509,7 @@ def view_config():
         "auth": _to_dict(settings.get("auth") or {}),
         "context_repositories": repo_list,
         "merged_contexts": _to_dict(list(merged.values())),
+        "backup_base_location": settings.get("backup_base_location"),
     }
 
     print(json.dumps(cfg, indent=2))

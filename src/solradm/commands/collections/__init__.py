@@ -34,8 +34,10 @@ from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
+from solradm.commands.callbacks import add_verbosity_option
 
 app = AsyncTyper()
+add_verbosity_option(app)
 
 
 @app.async_command(help="Remove replicas for filtered collections")

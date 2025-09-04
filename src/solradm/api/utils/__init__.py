@@ -40,6 +40,7 @@ def get_host_with_scheme(host: str, scheme: str) -> str:
 
 
 is_dry_run = False
+log_requests = False
 
 
 async def send_request(host: str, endpoint: str, params: dict = None, dry_output: Any | None = None,
@@ -52,6 +53,8 @@ async def send_request(host: str, endpoint: str, params: dict = None, dry_output
             return dry_output
 
     url = urljoin(get_host_with_scheme(host, "http"), "/solr" + endpoint)
+    if log_requests:
+        rich.print(f"[text]Requesting {url} params={params}")
     try:
         resp = await get_session().get(url, params=params)
     except Exception as e:
@@ -60,7 +63,7 @@ async def send_request(host: str, endpoint: str, params: dict = None, dry_output
     json = await resp.json()
     if not resp.ok or not json["responseHeader"]["status"] == 0:
         rich.print(
-            f"[error]❌  Error received from Solr for request to {url} with params {params}:\n[yellow]{json["error"]["msg"]}")
+            f"[error]❌  Error received from Solr for request to {url} with params {params}:\n[yellow]{json['error']['msg']}")
         raise SolrException(json["responseHeader"]["status"] == 0, json["error"]["msg"])
 
     return json
@@ -69,3 +72,4 @@ async def send_request(host: str, endpoint: str, params: dict = None, dry_output
 async def get_cores_from_node(host: str) -> List[Core]:
     json = await send_request(host, "/admin/cores", params={"indexInfo": "false"}, dry_run_override=False)
     return [Core.model_validate(json["status"][key]) for key in json["status"].keys()]
+

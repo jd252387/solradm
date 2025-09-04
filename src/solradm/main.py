@@ -7,6 +7,7 @@ from rich.logging import RichHandler
 from solradm.api import get_initialized_session
 from solradm.commands import config, collections, backups, auth, node, state
 from solradm.commands import kube
+from solradm.commands.callbacks import add_verbosity_option
 from solradm.commands.status import status as status_cmd
 from solradm.commands.zk import editor
 from solradm.exceptions.adm_exception import AdmException
@@ -21,6 +22,7 @@ logging.basicConfig(
 )
 
 app = AsyncTyper()
+add_verbosity_option(app)
 
 app.add_typer(collections.app, name="coll", help="Interact with the Collections API")
 app.add_typer(backups.app, name="backup", help="Take or restore backups using the Replication API")
