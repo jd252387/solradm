@@ -140,7 +140,7 @@ def edit(
 
 @app.command()
 def upload(
-        paths: List[Path] = typer.Argument(
+        paths: List[str] = typer.Argument(
             ...,
             exists=False,
             resolve_path=False,

@@ -38,8 +38,10 @@ def get_default_configsets_root_dir() -> Path | None:
     return _get_default_znode_dir() / "root"
 
 
-def resolve_config_name_to_abs_or_default_directory(path: Path) -> Path | None:
-    if not os.path.isabs(path):
+def resolve_config_name_to_abs_or_default_directory(path: str) -> Path | None:
+    try:
+        path = Path(path)
+    except Exception:
         config_dir = get_default_configsets_config_dir()
         path = config_dir / path
 
