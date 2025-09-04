@@ -30,6 +30,7 @@ from solradm.completion.collections import collection_names
 from solradm.completion.znodes import znode_paths
 from solradm.config.util import resolve_config_name_to_abs_or_default_directory
 from solradm.zk import get_client
+from solradm.zk.utils import win_path_to_zk_path
 
 app = typer.Typer()
 add_verbosity_option(app)
@@ -218,9 +219,9 @@ def upload(
                 for dirname, _, file_names in os.walk(path):
                     for file in file_names:
                         full_path = os.path.join(dirname, file)
-                        files_to_upload.append((full_path, os.path.relpath(str(full_path), path)))
+                        files_to_upload.append((full_path, win_path_to_zk_path(os.path.relpath(str(full_path), path))))
             else:
-                files_to_upload.append((os.path.join(os.path.dirname(path), path),  znode_path + os.path.basename(path)))
+                files_to_upload.append((os.path.join(os.path.dirname(path), path), win_path_to_zk_path(os.path.basename(path), znode_path)))
 
 
         if not skip_checks:
