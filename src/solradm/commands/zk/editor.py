@@ -141,9 +141,9 @@ def upload(
             ...,
             exists=False,
             resolve_path=False,
-            help="Paths to copy to ZooKeeper (defaults to configsets in the default configuration directory)",
+            help="Local paths to copy to ZooKeeper. This may also just be a config name (it will be uploaded from the default configuration directory)",
         ),
-        znode_path: str = typer.Option("/configs", help="Path of the zNode to copy"),
+        znode_path: str = typer.Option("/configs", help="zNode path to copy to"),
         only_used: bool = typer.Option(
             True,
             "--only-used/--all",
