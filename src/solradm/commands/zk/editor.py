@@ -214,17 +214,22 @@ def upload(
     else:
         files_to_upload = []
         for path in resolved_paths:
-            for root, _, files_to_upload in os.walk(path):
-                for file in files_to_upload:
-                    files_to_upload.append((os.path.join(root, file), znode_path))
+            if path.is_dir():
+                for dirname, _, file_names in os.walk(path):
+                    for file in file_names:
+                        full_path = os.path.join(dirname, file)
+                        files_to_upload.append((full_path, os.path.relpath(str(full_path), path)))
+            else:
+                files_to_upload.append((os.path.join(os.path.dirname(path), path),  znode_path + os.path.basename(path)))
+
 
         if not skip_checks:
             table = Table(title="Files to upload")
             table.add_column("Local File")
             table.add_column("zNode Path")
 
-            for file in files_to_upload:
-                table.add_row(file, znode_path)
+            for file, zk_path in files_to_upload:
+                table.add_row(file, zk_path)
 
             rich.print(table)
 
