@@ -10,7 +10,7 @@ import typer
 import urllib3
 from async_typer import AsyncTyper
 from kubernetes import client
-from kubernetes.client import ApiClient, Configuration
+from kubernetes.client import ApiClient, Configuration, ApiException
 from kubernetes.client import AppsV1Api
 from kubernetes.client import CoreV1Api
 from kubernetes.client import CustomObjectsApi
@@ -49,6 +49,18 @@ def load_configured_kubecontext(client_configuration: Configuration = None) -> b
 
     return True
 
+def is_openshift_cluster() -> bool:
+    try:
+        groups = client.ApisApi().get_api_versions().groups
+
+        for group in groups:
+            if group.name == "route.openshift.io":
+                return True
+    except ApiException as e:
+        rich.print(f"[error] ❌ ApiExtensions request failed: {e}")
+        return False
+
+    return False
 
 def _get_workloads(pattern: re.Pattern):
     namespace = get_current_kubecontext_namespace()
@@ -255,22 +267,18 @@ def resume(
 def console():
     """Open the OpenShift web console in a browser for the current namespace."""
 
-    cfg = client.Configuration()
-    load_configured_kubecontext(client_configuration=cfg)
-    api_client = ApiClient(configuration=cfg)
-    try:
-        api_client.call_api("/apis/project.openshift.io/v1/projects", "GET")
-    except Exception:
-        rich.print("[error] ❌ Current kubecontext is not an OpenShift cluster")
-        raise typer.Exit(1)
+    load_configured_kubecontext()
+    if not is_openshift_cluster():
+        rich.print("[error] ❌ The current Kubernetes cluster is not of the OpenShift distribution.")
 
+    api = client.CustomObjectsApi()
     namespace = get_current_kubecontext_namespace()
     if not namespace:
         rich.print("[error] ❌ The kubecontext does not map to a specific namespace!")
         raise typer.Exit(1)
 
     try:
-        route = CustomObjectsApi(api_client).get_namespaced_custom_object(
+        route = api.get_namespaced_custom_object(
             group="route.openshift.io",
             version="v1",
             namespace="openshift-console",
