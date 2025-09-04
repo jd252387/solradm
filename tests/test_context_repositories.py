@@ -96,6 +96,28 @@ def test_add_repo_invalid(monkeypatch, tmp_path):
         config_cmd.add_repo(bad_repo)
 
 
+def test_create_repo(monkeypatch, tmp_path):
+    repo_content = """contexts:\n  available: []\n"""
+    settings_content = """contexts:\n  available: []\n  current: {}\n"""
+    _, cfg, config_cmd = _prepare(
+        monkeypatch,
+        tmp_path,
+        repo_content,
+        settings_content,
+    )
+
+    new_repo = tmp_path / "new_repo.yaml"
+    config_cmd.create_repo(new_repo)
+    importlib.reload(cfg)
+    importlib.reload(config_cmd)
+
+    assert new_repo.exists()
+    import yaml
+    data = yaml.safe_load(new_repo.read_text())
+    assert data.get("contexts", {}).get("available") == []
+    assert str(new_repo) in cfg.settings.get("context_repositories")
+
+
 def test_upload_and_edit_delete_repo_context(monkeypatch, tmp_path):
     repo_content = """contexts:\n  available: []\n"""
     settings_content = """context_repositories:\n  - {repo}\ncontexts:\n  available:\n    - name: local\n      zk: lzk\n  current: {{name: local}}\n"""

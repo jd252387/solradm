@@ -20,6 +20,10 @@ Open the configuration directory in your operating system's file explorer and hi
 ### Repository management
 The nested `repo` commands handle context repositories shared across users.
 
+#### `repo create <path>`
+Create a new repository file and register it.
+- `<path>` – filesystem path where the repository YAML will be created.
+
 #### `repo add <path>`
 Register a new repository file.
 - `<path>` – filesystem path to a repository YAML file. Must exist and contain a `contexts.available` list.

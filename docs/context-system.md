@@ -46,7 +46,8 @@ Repositories make collaboration painless: when one administrator adds or edits a
 
 You can manage repositories with `solradm context repo` subcommands:
 
-- `repo add <path>` registers a repository file. The command validates that the file is structured correctly before enabling it.
+- `repo create <path>` creates a new repository file and registers it for use.
+- `repo add <path>` registers an existing repository file. The command validates that the file is structured correctly before enabling it.
 - `repo list` prints each configured repository and the contexts it exposes.
 - `repo remove <path>` unregisters a repository.
 - `repo open <path>` opens the repository location in your file explorer so it can be edited.
