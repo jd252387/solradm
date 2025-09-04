@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -37,6 +38,18 @@ repo_app = Typer(help="Manage context repositories.")
 app.add_typer(repo_app, name="repo")
 
 
+def _to_dict(obj):
+    if hasattr(obj, "as_dict"):
+        return obj.as_dict()
+    if hasattr(obj, "to_dict"):
+        return obj.to_dict()
+    if isinstance(obj, list):
+        return [_to_dict(o) for o in obj]
+    if isinstance(obj, dict):
+        return {k: _to_dict(v) for k, v in obj.items()}
+    return obj
+
+
 @app.command()
 def current():
     """Show the currently active context."""
@@ -44,7 +57,7 @@ def current():
     pprint(get_current_context())
 
 
-def verify_zk_connection() -> bool:
+def _verify_zk_connection() -> bool:
     try:
         get_client()
         rich.print(
@@ -57,6 +70,9 @@ def verify_zk_connection() -> bool:
         )
 
 
+verify_zk_connection = _verify_zk_connection
+
+
 @app.command()
 def switch(
         name: str = typer.Argument(
@@ -67,7 +83,7 @@ def switch(
 
     if name in [context.name for context in settings.contexts.available]:
         settings.contexts.current = {"name": name}
-        if verify_zk_connection():
+        if _verify_zk_connection():
             persist()
             if name in [c["name"] for c in local_contexts]:
                 location = "local configuration"
@@ -211,7 +227,7 @@ def connect(
             raise typer.BadParameter(f"Kubecontext {kubecontext} does not exist!")
         settings.contexts.current["kubecontext"] = kubecontext
 
-    if verify_zk_connection():
+    if _verify_zk_connection():
         persist()
         rich.print(
             "Switched to temporary context. Use [italic]context persist[/] to save the context permanently."
@@ -467,3 +483,31 @@ def list_contexts():
         table.add_row(name, ", ".join(disp))
 
     rich.print(table)
+
+
+@app.command("view")
+def view_config():
+    """Show the entire configuration and merged contexts."""
+
+    repo_list = list(settings.get("context_repositories") or [])
+    merged: dict[str, dict] = {}
+    for repo in repo_list:
+        repo_path = Path(repo)
+        if repo_path.exists():
+            for ctx in load_repo_contexts(repo_path):
+                merged[ctx["name"]] = ctx
+    for ctx in local_contexts:
+        merged[ctx["name"]] = ctx
+
+    cfg = {
+        "contexts": {
+            "current": _to_dict(settings.contexts.current),
+            "available": _to_dict(settings.contexts.available),
+        },
+        "config_dir": str(settings.get("config_dir")) if settings.get("config_dir") else None,
+        "auth": _to_dict(settings.get("auth") or {}),
+        "context_repositories": repo_list,
+        "merged_contexts": _to_dict(list(merged.values())),
+    }
+
+    print(json.dumps(cfg, indent=2))

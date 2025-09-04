@@ -15,7 +15,7 @@ from rich.table import Table
 from rich.text import Text
 from watchdog.observers import Observer
 
-from solradm.api import get_initialized_sesssion
+from solradm.api import get_initialized_session
 from solradm.api.state import get_collections
 from solradm.api.utils import get_collections_using_config
 from solradm.commands.zk.utils import (

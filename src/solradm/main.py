@@ -4,7 +4,7 @@ import rich
 from async_typer import AsyncTyper
 from rich.logging import RichHandler
 
-from solradm.api import get_initialized_sesssion
+from solradm.api import get_initialized_session
 from solradm.commands import config, collections, backups, auth, node, state
 from solradm.commands import kube
 from solradm.commands.status import status as status_cmd
@@ -52,8 +52,8 @@ def run():
     finally:
         notify_if_outdated()
         import asyncio
-        if get_initialized_sesssion():
-            asyncio.run(get_initialized_sesssion().close())
+        if get_initialized_session():
+            asyncio.run(get_initialized_session().close())
 
 
 if __name__ == "__main__":
