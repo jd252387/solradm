@@ -14,7 +14,8 @@ from rich.console import Console
 from rich.prompt import Confirm
 from rich.table import Table
 
-from solradm.completion.nodes import node_names
+from solradm.completion.kube import pod_names, container_names, workload_names
+from solradm.commands.callbacks import add_verbosity_option
 from solradm.exceptions.adm_exception import AdmException
 from solradm.kube.utils import (
     get_configured_kubecontext,
@@ -26,6 +27,7 @@ from solradm.kube.utils import (
 )
 
 app = AsyncTyper()
+add_verbosity_option(app)
 
 STATE_FILE = Path(user_config_dir("solradm", "eclipse")) / "kube-scale-state.json"
 
@@ -64,9 +66,9 @@ def _print_workloads(deployments, statefulsets):
 
 @app.async_command(help="Stream logs for matching pods")
 async def logs(
-        pattern: str = typer.Argument(..., help="Regex of pod or node name"),
-        node: bool = typer.Option(False, "--node", help="Treat pattern as node name", autocompletion=node_names),
-        container: str | None = typer.Option(None, "--container", "-c", help="Container name"),
+        pattern: str = typer.Argument(..., help="Regex of pod or node name", autocompletion=pod_names),
+        node: bool = typer.Option(False, "--node", help="Treat pattern as node name"),
+        container: str | None = typer.Option(None, "--container", "-c", help="Container name", autocompletion=container_names),
 ):
     """Stream Kubernetes logs from pods matching PATTERN."""
 
@@ -99,8 +101,9 @@ async def logs(
 
 @app.async_command(help="Show /var/solr/data disk usage for matching pods")
 async def disk(
-        pattern: str = typer.Argument(..., help="Regex of pod or node name"),
+        pattern: str = typer.Argument(..., help="Regex of pod or node name", autocompletion=pod_names),
         node: bool = typer.Option(False, "--node", help="Treat pattern as node name"),
+        ascending: bool = typer.Option(False, "--ascending", "-a", help="Sort ascending by used space"),
 ):
     """Display disk usage of /var/solr for pods matching PATTERN."""
 
@@ -123,22 +126,36 @@ async def disk(
 
     results = await asyncio.gather(*(_df(p.metadata.name) for p in pods))
 
+    def _parse_size(s: str) -> float:
+        units = {"K": 1, "M": 2, "G": 3, "T": 4, "P": 5}
+        try:
+            num = float(re.sub("[^0-9.]+", "", s))
+            unit = re.sub("[0-9.]+", "", s).strip().upper()[:1]
+            return num * (1024 ** units.get(unit, 0))
+        except Exception:
+            return 0
+
+    rows = []
     for pod_name, output in results:
         lines = [l for l in output.strip().splitlines() if l]
         if len(lines) >= 2:
             parts = lines[1].split()
             if len(parts) >= 5:
                 size, used, avail, pct = parts[1:5]
-                table.add_row(pod_name, size, used, avail, pct)
+                rows.append((pod_name, size, used, avail, pct, _parse_size(used)))
                 continue
-        table.add_row(pod_name, "-", "-", "-", "-")
+        rows.append((pod_name, "-", "-", "-", "-", 0))
+
+    rows.sort(key=lambda r: r[5], reverse=not ascending)
+    for pod_name, size, used, avail, pct, _ in rows:
+        table.add_row(pod_name, size, used, avail, pct)
 
     rich.print(table)
 
 
 @app.command(help="Scale workloads matching a regex down to zero and save their replicas")
 def suspend(
-        name_regex: str = typer.Argument(..., help="Regex for deployment/statefulset names"),
+        name_regex: str = typer.Argument(..., help="Regex for deployment/statefulset names", autocompletion=workload_names),
         state_file: Path = typer.Option(None, "--state-file", help="File to store replica state", dir_okay=False),
 ):
     """Scale matching deployments and statefulsets to zero replicas."""

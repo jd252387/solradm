@@ -4,8 +4,10 @@ from typer import Typer
 
 from solradm.config import settings, persist
 from solradm.config.interactive import setup_solrauth
+from solradm.commands.callbacks import add_verbosity_option
 
 app = Typer()
+add_verbosity_option(app)
 
 
 @app.command()
