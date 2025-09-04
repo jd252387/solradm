@@ -8,7 +8,7 @@ from platformdirs import user_config_dir
 from rich.console import Console
 from rich.theme import Theme
 
-from solradm.config.util import is_valid_context_repo
+from solradm.config.util import is_valid_context_repo, load_repo_contexts
 
 config_path = Path(os.path.join(user_config_dir("solradm", "eclipse"), "settings.yaml"))
 
@@ -129,9 +129,8 @@ share them, create temporary ones, and so on...
         )
         exit(1)
 
-    settings.set("contexts", {"available": contexts_avail, "current": current_context})
-
     repo_path = None
+    repo_contexts: list[dict] = []
     if create_repo:
         is_valid_repo = False
         while not is_valid_repo:
@@ -145,11 +144,17 @@ share them, create temporary ones, and so on...
                 is_valid_repo = True
 
         repo_str = str(repo_path)
-        settings.set("context_repositories", [repo_str])
         context_repositories.append(repo_str)
         settings.configure(settings_files=context_repositories + [config_path])
+        repo_contexts = load_repo_contexts(repo_path)
+        settings.set("context_repositories", context_repositories)
     else:
         settings.set("context_repositories", [])
+
+    all_contexts = contexts_avail + repo_contexts
+    if not create_ctx and repo_contexts:
+        current_context = {"name": repo_contexts[0]["name"]}
+    settings.set("contexts", {"available": all_contexts, "current": current_context}, merge=False)
 
     local_contexts[:] = contexts_avail
 
