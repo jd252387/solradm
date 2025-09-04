@@ -78,9 +78,11 @@ async def depopulate(
         total_active_replicas += active_replicas
         total_non_active_shards += non_active_shards
         total_non_active_replicas += non_active_replicas
-        table.add_row(coll.name, str(active_shards), str(active_replicas), str(non_active_shards), str(non_active_replicas))
+        table.add_row(coll.name, str(active_shards), str(active_replicas), str(non_active_shards),
+                      str(non_active_replicas))
 
-    table.add_row("[bold]TOTAL[/bold]", str(total_active_shards), str(total_active_replicas), str(total_non_active_shards), str(total_non_active_replicas), style="bold")
+    table.add_row("[bold]TOTAL[/bold]", str(total_active_shards), str(total_active_replicas),
+                  str(total_non_active_shards), str(total_non_active_replicas), style="bold")
     rich.print(table)
 
     if not Confirm.ask("Proceed with removing replicas?"):

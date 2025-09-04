@@ -310,7 +310,8 @@ def add(
         context = setup(context_name)
     else:
         if not name or not zk:
-            raise typer.BadParameter("You must specify both a name and a ZooKeeper address! Alternatively, use --interactive to enter interactive setup mode.")
+            raise typer.BadParameter(
+                "You must specify both a name and a ZooKeeper address! Alternatively, use --interactive to enter interactive setup mode.")
         if name in [context.name for context in settings.contexts.available]:
             raise typer.BadParameter(f"Context {name} already exists!")
         if kubecontext and not get_kubecontext(kubecontext):

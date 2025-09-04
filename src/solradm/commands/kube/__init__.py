@@ -6,6 +6,7 @@ from pathlib import Path
 
 import rich
 import typer
+import urllib3
 from async_typer import AsyncTyper
 from kubernetes.client import AppsV1Api
 from kubernetes.client import CoreV1Api
@@ -14,6 +15,7 @@ from rich.console import Console
 from rich.prompt import Confirm
 from rich.table import Table
 
+from solradm.completion.nodes import node_names
 from solradm.completion.kube import pod_names, container_names, workload_names
 from solradm.commands.callbacks import add_verbosity_option
 from solradm.exceptions.adm_exception import AdmException
@@ -25,6 +27,8 @@ from solradm.kube.utils import (
     run_command_in_pod,
     switch_current_kubecontext,
 )
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = AsyncTyper()
 add_verbosity_option(app)
@@ -67,7 +71,7 @@ def _print_workloads(deployments, statefulsets):
 @app.async_command(help="Stream logs for matching pods")
 async def logs(
         pattern: str = typer.Argument(..., help="Regex of pod or node name", autocompletion=pod_names),
-        node: bool = typer.Option(False, "--node", help="Treat pattern as node name"),
+        node: bool = typer.Option(False, "--node", help="Treat pattern as node name", autocompletion=node_names),
         container: str | None = typer.Option(None, "--container", "-c", help="Container name", autocompletion=container_names),
 ):
     """Stream Kubernetes logs from pods matching PATTERN."""
