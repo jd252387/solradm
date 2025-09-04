@@ -22,8 +22,12 @@ from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
+from solradm.commands.callbacks import add_verbosity_option
+from solradm.api.utils import get_host_with_scheme
+import webbrowser
 
 app = AsyncTyper()
+add_verbosity_option(app)
 
 
 @app.async_command(help="Remove cores not belonging to selected collections from nodes")
@@ -127,3 +131,11 @@ async def drain(
                     rich.print(f"[text] Removing directory {d} from node {n}")
                     if not api_utils.is_dry_run:
                         run_command_in_pod(pod_name, f"rm -rf /var/solr/data/{d}")
+
+
+@app.command(help="Open the overseer-elected node's Solr UI in a browser")
+def open_ui():
+    """Open the current overseer node in the default browser."""
+    url = get_host_with_scheme(get_overseer_leader(), "http") + "/solr/#/"
+    webbrowser.open(url)
+    rich.print(f"[success]✅  Opened {url}")

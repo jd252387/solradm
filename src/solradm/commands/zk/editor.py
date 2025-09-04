@@ -26,15 +26,18 @@ from solradm.commands.zk.utils import (
 from solradm.commands.zk.utils.sync_handler import ZooKeeperSyncHandler
 from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
 from solradm.completion.collections import collection_names
+from solradm.completion.znodes import znode_paths
+from solradm.commands.callbacks import add_verbosity_option
 from solradm.config.util import resolve_config_name_to_abs_or_default_directory
 from solradm.zk import get_client
 
 app = typer.Typer()
+add_verbosity_option(app)
 
 
 @app.command()
 def edit(
-        znode_path: str = typer.Argument("/configs", help="Path of the zNode to edit"),
+        znode_path: str = typer.Argument("/configs", help="Path of the zNode to edit", autocompletion=znode_paths),
         sync_interval: int = typer.Option(
             5, "--sync-interval", "-s", help="Sync interval in seconds"
         ),
@@ -143,7 +146,7 @@ def upload(
             resolve_path=False,
             help="Local paths to copy to ZooKeeper. This may also just be a config name (it will be uploaded from the default configuration directory)",
         ),
-        znode_path: str = typer.Option("/configs", help="zNode path to copy to"),
+        znode_path: str = typer.Option("/configs", help="zNode path to copy to", autocompletion=znode_paths),
         only_used: bool = typer.Option(
             True,
             "--only-used/--all",

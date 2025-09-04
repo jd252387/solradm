@@ -17,6 +17,8 @@ if config_path.exists():
     with open(config_path) as f:
         _existing_config = yaml.safe_load(f) or {}
 
+_backup_base_location = _existing_config.get("backup_base_location", "/mnt/backups")
+
 local_contexts: list = _existing_config.get("contexts", {}).get("available", []).copy()
 context_repositories: list[str] = _existing_config.get("context_repositories", [])
 
@@ -50,6 +52,9 @@ def persist(repos_override=None):
     repos = settings.get("context_repositories") or []
     data["context_repositories"] = list(repos_override if repos_override is not None else repos)
 
+    if settings.get("backup_base_location"):
+        data["backup_base_location"] = settings.backup_base_location
+
     with open(config_path, "w") as f:
         f.write(yaml.safe_dump(data, sort_keys=False))
 
@@ -60,6 +65,7 @@ settings = Dynaconf(
     load_dotenv=True,
     merge_enabled=True,
 )
+settings.setdefault("backup_base_location", _backup_base_location)
 
 theme = Theme({
     "text": "cyan",
