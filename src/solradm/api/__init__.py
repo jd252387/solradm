@@ -9,9 +9,16 @@ _session: aiohttp.ClientSession | None = None
 def get_session() -> aiohttp.ClientSession:
     global _session
     if _session is None or _session.closed:
-        _session = aiohttp.ClientSession(auth=BasicAuth(settings.auth.user, settings.auth.password))
+        _session = aiohttp.ClientSession(
+            auth=BasicAuth(settings.auth.user, settings.auth.password)
+        )
     return _session
 
 
 def get_initialized_session() -> aiohttp.ClientSession:
     return _session
+
+
+def get_initialized_sesssion() -> aiohttp.ClientSession:
+    """Backward compatible misspelled alias."""
+    return get_initialized_session()

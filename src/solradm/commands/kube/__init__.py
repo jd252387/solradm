@@ -1,7 +1,7 @@
 import asyncio
 import json
 import re
-import sys
+from itertools import cycle
 from pathlib import Path
 
 import rich
@@ -9,8 +9,8 @@ import typer
 from async_typer import AsyncTyper
 from kubernetes.client import AppsV1Api
 from kubernetes.client import CoreV1Api
-from kubernetes.stream import stream
 from platformdirs import user_config_dir
+from rich.console import Console
 from rich.prompt import Confirm
 from rich.table import Table
 
@@ -76,28 +76,24 @@ async def logs(
 
     namespace = get_current_kubecontext_namespace()
 
-    for pod in pods:
-        resp = stream(
-            CoreV1Api().read_namespaced_pod_log,
-            pod.metadata.name,
-            namespace,
+    console = Console()
+    color_cycle = cycle(["red", "green", "yellow", "blue", "magenta", "cyan"])
+    pod_colors = {p.metadata.name: next(color_cycle) for p in pods}
+
+    def _stream_logs(pod_name: str):
+        resp = CoreV1Api().read_namespaced_pod_log(
+            name=pod_name,
+            namespace=namespace,
             container=container,
             follow=True,
             _preload_content=False,
         )
-        try:
-            while resp.is_open():
-                resp.update(timeout=1)
-                if resp.peek_stdout():
-                    out = resp.read_stdout()
-                    if out:
-                        print(out, end="")
-                if resp.peek_stderr():
-                    err = resp.read_stderr()
-                    if err:
-                        print(err, end="", file=sys.stderr)
-        finally:
-            resp.close()
+        for line in resp.stream():
+            console.print(f"[{pod_colors[pod_name]}]{pod_name}[/] {line.decode().rstrip()}")
+
+    await asyncio.gather(
+        *(asyncio.to_thread(_stream_logs, p.metadata.name) for p in pods)
+    )
 
 
 @app.async_command(help="Show /var/solr disk usage for matching pods")
