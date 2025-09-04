@@ -46,7 +46,7 @@ def find_pods(pattern: re.Pattern) -> List[V1Pod]:
 def find_pods_by_node_name(node_name: str):
     without_subnet = node_name.partition(".")
     namespace = get_current_kubecontext_namespace()
-    pod_name = without_subnet[0].partition(namespace)[2]
+    pod_name = without_subnet[0].partition(namespace)[2][1:]
 
     return find_pods(re.compile(pod_name))
 

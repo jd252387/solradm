@@ -29,7 +29,7 @@ app = AsyncTyper()
 STATE_FILE = Path(user_config_dir("solradm", "eclipse")) / "kube-scale-state.json"
 
 
-def load_kube_config():
+def load_configured_kubecontext():
     switch_current_kubecontext(get_configured_kubecontext())
 
 
@@ -103,7 +103,7 @@ async def disk(
 ):
     """Display disk usage of /var/solr for pods matching PATTERN."""
 
-    load_kube_config()
+    load_configured_kubecontext()
     pods = find_pods_by_node_name(pattern) if node else find_pods(re.compile(pattern))
 
     if not pods:
@@ -142,7 +142,7 @@ def suspend(
 ):
     """Scale matching deployments and statefulsets to zero replicas."""
 
-    load_kube_config()
+    load_configured_kubecontext()
     pattern = re.compile(name_regex)
     deployments, statefulsets = _get_workloads(pattern)
     if not deployments and not statefulsets:
@@ -178,7 +178,7 @@ def resume(
 ):
     """Scale previously suspended workloads back to their original replicas."""
 
-    load_kube_config()
+    load_configured_kubecontext()
     sf = state_file or STATE_FILE
     if not sf.exists():
         rich.print(f"[error] ❌ State file {sf} does not exist")

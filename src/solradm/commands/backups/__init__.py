@@ -13,6 +13,7 @@ from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
 from solradm.commands.filters.replica_type_filter import ReplicaTypeFilter
 from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
+from solradm.commands.kube import load_configured_kubecontext
 from solradm.kube.utils import find_pods_by_node_name, get_configured_kubecontext, switch_current_kubecontext, \
     run_command_in_pod
 from solradm.renderers.task_table import MultiTaskTable
@@ -41,7 +42,7 @@ async def take(
     base_location = PurePosixPath(base_location_str)
 
     if create_directories:
-        switch_current_kubecontext(get_configured_kubecontext())
+        load_configured_kubecontext()
         overseer_pod = find_pods_by_node_name(get_overseer_leader())[0]
         rich.print(
             f"[text] Making sure backup directories exist on {base_location} through overseer-elected pod {overseer_pod.metadata.name}...")
