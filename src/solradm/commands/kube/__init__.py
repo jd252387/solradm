@@ -9,7 +9,8 @@ import rich
 import typer
 import urllib3
 from async_typer import AsyncTyper
-from kubernetes.client import ApiClient
+from kubernetes import client
+from kubernetes.client import ApiClient, Configuration
 from kubernetes.client import AppsV1Api
 from kubernetes.client import CoreV1Api
 from kubernetes.client import CustomObjectsApi
@@ -38,8 +39,15 @@ add_verbosity_option(app)
 STATE_FILE = Path(user_config_dir("solradm", "eclipse")) / "kube-scale-state.json"
 
 
-def load_configured_kubecontext() -> bool:
-    switch_current_kubecontext(get_configured_kubecontext())
+def load_configured_kubecontext(client_configuration: Configuration = None) -> bool:
+    configured = get_configured_kubecontext()
+
+    if configured is None:
+        return False
+
+    switch_current_kubecontext(configured, client_configuration)
+
+    return True
 
 
 def _get_workloads(pattern: re.Pattern):
@@ -78,7 +86,7 @@ async def logs(
                                              autocompletion=container_names),
 ):
     """Stream Kubernetes logs from pods matching PATTERN."""
-
+    load_configured_kubecontext()
     pods = find_pods_by_node_name(pattern) if node else find_pods(re.compile(pattern))
 
     if not pods:
@@ -247,8 +255,9 @@ def resume(
 def console():
     """Open the OpenShift web console in a browser for the current namespace."""
 
-    load_configured_kubecontext()
-    api_client = ApiClient()
+    cfg = client.Configuration()
+    load_configured_kubecontext(client_configuration=cfg)
+    api_client = ApiClient(configuration=cfg)
     try:
         api_client.call_api("/apis/project.openshift.io/v1/projects", "GET")
     except Exception:

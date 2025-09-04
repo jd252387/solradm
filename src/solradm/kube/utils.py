@@ -1,7 +1,7 @@
 import re
 from typing import Any, List
 
-from kubernetes.client import CoreV1Api, V1PodList, V1Pod
+from kubernetes.client import CoreV1Api, V1PodList, V1Pod, Configuration
 from kubernetes.config import list_kube_config_contexts, load_kube_config
 
 from solradm.config.util import get_current_context
@@ -27,8 +27,8 @@ def get_current_kubecontext_namespace() -> str | None:
     return get_current_kubecontext()["context"].get("namespace")
 
 
-def switch_current_kubecontext(target_context: Any) -> Any | None:
-    load_kube_config(context=target_context["name"])
+def switch_current_kubecontext(target_context: Any, client_configuration: Configuration | None = None) -> Any | None:
+    load_kube_config(context=target_context["name"], client_configuration=client_configuration)
 
 
 def find_pods(pattern: re.Pattern) -> List[V1Pod]:
