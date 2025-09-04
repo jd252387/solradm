@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import webbrowser
 from itertools import cycle
 from pathlib import Path
 
@@ -8,8 +9,10 @@ import rich
 import typer
 import urllib3
 from async_typer import AsyncTyper
+from kubernetes.client import ApiClient
 from kubernetes.client import AppsV1Api
 from kubernetes.client import CoreV1Api
+from kubernetes.client import CustomObjectsApi
 from platformdirs import user_config_dir
 from rich.console import Console
 from rich.prompt import Confirm
@@ -238,3 +241,38 @@ def resume(
         api.patch_namespaced_stateful_set_scale(name, namespace, {"spec": {"replicas": replicas}})
 
     rich.print(f"[success]✅  Restored workloads from {sf}")
+
+
+@app.command(help="Open OpenShift console for the current namespace")
+def console():
+    """Open the OpenShift web console in a browser for the current namespace."""
+
+    load_configured_kubecontext()
+    api_client = ApiClient()
+    try:
+        api_client.call_api("/apis/project.openshift.io/v1/projects", "GET")
+    except Exception:
+        rich.print("[error] ❌ Current kubecontext is not an OpenShift cluster")
+        raise typer.Exit(1)
+
+    namespace = get_current_kubecontext_namespace()
+    if not namespace:
+        rich.print("[error] ❌ The kubecontext does not map to a specific namespace!")
+        raise typer.Exit(1)
+
+    try:
+        route = CustomObjectsApi(api_client).get_namespaced_custom_object(
+            group="route.openshift.io",
+            version="v1",
+            namespace="openshift-console",
+            plural="routes",
+            name="console",
+        )
+        host = route["spec"]["host"]
+    except Exception:
+        rich.print("[error] ❌ Unable to determine OpenShift console host")
+        raise typer.Exit(1)
+
+    url = f"https://{host}/k8s/ns/{namespace}"
+    webbrowser.open(url)
+    rich.print(f"[success]✅  Opened OpenShift console at {url}")
