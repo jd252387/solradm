@@ -32,7 +32,7 @@ add_verbosity_option(app)
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def take(
         cluster_state: List[Collection],
-        base_location_str: str = typer.Option(settings.get("backup_base_location", "/mnt/backups"), "--location",
+        base_location_str: str = typer.Option(settings.get("backup_base_location", "/mnt/backups/backups"), "--location",
                                               help="Base location on each node's disk to place the backup. Each backup will be created under location/collection_name/shard_number",
                                               autocompletion=backup_paths),
         number_to_keep=typer.Option(None,

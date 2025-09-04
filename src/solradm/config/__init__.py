@@ -17,8 +17,6 @@ if config_path.exists():
     with open(config_path) as f:
         _existing_config = yaml.safe_load(f) or {}
 
-_backup_base_location = _existing_config.get("backup_base_location", "/mnt/backups")
-
 local_contexts: list = _existing_config.get("contexts", {}).get("available", []).copy()
 context_repositories: list[str] = _existing_config.get("context_repositories", [])
 
@@ -65,7 +63,6 @@ settings = Dynaconf(
     load_dotenv=True,
     merge_enabled=True,
 )
-settings.setdefault("backup_base_location", _backup_base_location)
 
 theme = Theme({
     "text": "cyan",
