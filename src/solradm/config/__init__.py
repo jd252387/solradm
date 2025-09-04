@@ -99,7 +99,11 @@ share them, create temporary ones, and so on...
     if create_ctx:
         from solradm.config.interactive import setup_context
 
-        new_context = setup_context.setup()
+        context_name = ""
+        while context_name == "":
+            context_name = Prompt.ask("[question]Enter your initial context name -> ")
+
+        new_context = setup_context.setup(context_name)
         contexts_avail.append(new_context.as_dict())
         current_context = {"name": new_context.name}
 

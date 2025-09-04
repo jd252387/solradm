@@ -8,10 +8,7 @@ from solradm.config.util import Context
 from solradm.kube.utils import get_kubecontext
 
 
-def setup() -> Context:
-    context_name = ""
-    while context_name == "":
-        context_name = Prompt.ask("[question]Enter your initial context name -> ")
+def setup(context_name: str) -> Context:
     zk_address = ""
     while zk_address == "":
         zk_address = Prompt.ask(

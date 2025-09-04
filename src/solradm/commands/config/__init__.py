@@ -9,7 +9,7 @@ from kazoo.handlers.threading import KazooTimeoutError
 from kubernetes.client import CoreV1Api, Configuration
 from kubernetes.config import load_kube_config
 from rich.pretty import pprint
-from rich.prompt import Confirm
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from typer import Typer
 
@@ -44,7 +44,7 @@ def current():
     pprint(get_current_context())
 
 
-def _verify_zk_connection() -> bool:
+def verify_zk_connection() -> bool:
     try:
         get_client()
         rich.print(
@@ -67,7 +67,7 @@ def switch(
 
     if name in [context.name for context in settings.contexts.available]:
         settings.contexts.current = {"name": name}
-        if _verify_zk_connection():
+        if verify_zk_connection():
             persist()
             if name in [c["name"] for c in local_contexts]:
                 location = "local configuration"
@@ -211,7 +211,7 @@ def connect(
             raise typer.BadParameter(f"Kubecontext {kubecontext} does not exist!")
         settings.contexts.current["kubecontext"] = kubecontext
 
-    if _verify_zk_connection():
+    if verify_zk_connection():
         persist()
         rich.print(
             "Switched to temporary context. Use [italic]context persist[/] to save the context permanently."
@@ -271,8 +271,8 @@ def save(name: str = typer.Argument(..., help="Context name")):
 
 @app.command()
 def add(
-        name: str = typer.Argument(..., help="Context name"),
-        zk: str = typer.Option(..., "-z", "--zk", help="ZooKeeper address"),
+        name: str = typer.Argument(None, help="Context name"),
+        zk: str = typer.Option(None, "-z", "--zk", help="ZooKeeper address"),
         kubecontext: str = typer.Option(
             None,
             "-k",
@@ -280,16 +280,22 @@ def add(
             help="Target Kubecontext",
             autocompletion=kube_contexts,
         ),
-        interactive: bool = typer.Option(False, help="Interactive setup mode"),
+        interactive: bool = typer.Option(True, help="Interactive setup mode"),
 ):
     """Add a new named context."""
-
-    if name in [context.name for context in settings.contexts.available]:
-        raise typer.BadParameter(f"Context {name} already exists!")
-
     if interactive:
-        context = setup()
+        context_name = ""
+        while context_name == "":
+            context_name = Prompt.ask("[question]Enter your context name -> ")
+            if name in [context.name for context in settings.contexts.available]:
+                rich.print(f"[error] Context {name} already exists!")
+                context_name = ""
+        context = setup(context_name)
     else:
+        if not name or not zk:
+            raise typer.BadParameter("You must specify both a name and a ZooKeeper address! Alternatively, use --interactive to enter interactive setup mode.")
+        if name in [context.name for context in settings.contexts.available]:
+            raise typer.BadParameter(f"Context {name} already exists!")
         if kubecontext and not get_kubecontext(kubecontext):
             raise typer.BadParameter(f"Kubecontext {kubecontext} does not exist!")
         context = Context(name=name, zk=zk, kubecontext=kubecontext)
@@ -297,7 +303,7 @@ def add(
     settings.contexts.available = settings.contexts.available + [context.as_dict()]
     local_contexts.append(context.as_dict())
     persist()
-    rich.print(f"[success]✅  Added new context {name}!")
+    rich.print(f"[success]✅ Added new context {name}!")
 
 
 @app.command()
