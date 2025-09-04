@@ -1,5 +1,6 @@
 import asyncio
 import re
+import webbrowser
 from typing import List
 
 import rich
@@ -10,6 +11,8 @@ import solradm.api.utils as api_utils
 from solradm.api.models import Collection
 from solradm.api.state import get_nodes_by_role
 from solradm.api.utils import get_cores_from_node, send_request
+from solradm.api.utils import get_host_with_scheme
+from solradm.commands.callbacks import add_verbosity_option
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
 from solradm.commands.kube import load_configured_kubecontext
@@ -22,9 +25,6 @@ from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
-from solradm.commands.callbacks import add_verbosity_option
-from solradm.api.utils import get_host_with_scheme
-import webbrowser
 
 app = AsyncTyper()
 add_verbosity_option(app)

@@ -72,4 +72,3 @@ async def send_request(host: str, endpoint: str, params: dict = None, dry_output
 async def get_cores_from_node(host: str) -> List[Core]:
     json = await send_request(host, "/admin/cores", params={"indexInfo": "false"}, dry_run_override=False)
     return [Core.model_validate(json["status"][key]) for key in json["status"].keys()]
-

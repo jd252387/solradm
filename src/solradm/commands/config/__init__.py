@@ -14,6 +14,7 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from typer import Typer
 
+from solradm.commands.callbacks import add_verbosity_option
 from solradm.completion.contexts import context_names, context_repo_paths, kube_contexts
 from solradm.config import settings, persist, config_path, local_contexts
 from solradm.config.context import Context
@@ -31,7 +32,6 @@ from solradm.kube.utils import (
     get_kubecontext,
 )
 from solradm.zk import get_client
-from solradm.commands.callbacks import add_verbosity_option
 
 app = Typer()
 add_verbosity_option(app)

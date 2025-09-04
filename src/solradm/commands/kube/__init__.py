@@ -15,10 +15,9 @@ from rich.console import Console
 from rich.prompt import Confirm
 from rich.table import Table
 
-from solradm.completion.nodes import node_names
-from solradm.completion.kube import pod_names, container_names, workload_names
 from solradm.commands.callbacks import add_verbosity_option
-from solradm.exceptions.adm_exception import AdmException
+from solradm.completion.kube import pod_names, container_names, workload_names
+from solradm.completion.nodes import node_names
 from solradm.kube.utils import (
     get_configured_kubecontext,
     find_pods,
@@ -72,7 +71,8 @@ def _print_workloads(deployments, statefulsets):
 async def logs(
         pattern: str = typer.Argument(..., help="Regex of pod or node name", autocompletion=pod_names),
         node: bool = typer.Option(False, "--node", help="Treat pattern as node name", autocompletion=node_names),
-        container: str | None = typer.Option(None, "--container", "-c", help="Container name", autocompletion=container_names),
+        container: str | None = typer.Option(None, "--container", "-c", help="Container name",
+                                             autocompletion=container_names),
 ):
     """Stream Kubernetes logs from pods matching PATTERN."""
 
@@ -159,7 +159,8 @@ async def disk(
 
 @app.command(help="Scale workloads matching a regex down to zero and save their replicas")
 def suspend(
-        name_regex: str = typer.Argument(..., help="Regex for deployment/statefulset names", autocompletion=workload_names),
+        name_regex: str = typer.Argument(..., help="Regex for deployment/statefulset names",
+                                         autocompletion=workload_names),
         state_file: Path = typer.Option(None, "--state-file", help="File to store replica state", dir_okay=False),
 ):
     """Scale matching deployments and statefulsets to zero replicas."""

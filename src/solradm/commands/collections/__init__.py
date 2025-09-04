@@ -18,6 +18,7 @@ import solradm.api.utils as api_utils
 from solradm.api.models import Collection, Replica, Shard
 from solradm.api.state import get_nodes_by_role, get_collections
 from solradm.api.utils import validate_num_replicas, get_replicas, send_request
+from solradm.commands.callbacks import add_verbosity_option
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
 from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
@@ -34,7 +35,6 @@ from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
-from solradm.commands.callbacks import add_verbosity_option
 
 app = AsyncTyper()
 add_verbosity_option(app)

@@ -15,13 +15,13 @@ from solradm.commands.filters.replica_type_filter import ReplicaTypeFilter
 from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
 from solradm.commands.kube import load_configured_kubecontext
+from solradm.completion.backups import backup_paths
+from solradm.config import settings
 from solradm.kube.utils import find_pods_by_node_name, run_command_in_pod
 from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
-from solradm.config import settings
-from solradm.completion.backups import backup_paths
 
 app = AsyncTyper()
 add_verbosity_option(app)

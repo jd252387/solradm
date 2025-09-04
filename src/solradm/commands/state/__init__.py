@@ -10,8 +10,8 @@ from async_typer import AsyncTyper
 from solradm.api.models import Collection
 from solradm.api.state import get_collections
 from solradm.api.utils import send_request
-from solradm.zk.utils import get_overseer_leader
 from solradm.commands.callbacks import add_verbosity_option
+from solradm.zk.utils import get_overseer_leader
 
 app = AsyncTyper()
 add_verbosity_option(app)

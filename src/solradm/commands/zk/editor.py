@@ -18,6 +18,7 @@ from watchdog.observers import Observer
 from solradm.api import get_initialized_session
 from solradm.api.state import get_collections
 from solradm.api.utils import get_collections_using_config
+from solradm.commands.callbacks import add_verbosity_option
 from solradm.commands.zk.utils import (
     open_vscode,
     create_or_update,
@@ -27,7 +28,6 @@ from solradm.commands.zk.utils.sync_handler import ZooKeeperSyncHandler
 from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
 from solradm.completion.collections import collection_names
 from solradm.completion.znodes import znode_paths
-from solradm.commands.callbacks import add_verbosity_option
 from solradm.config.util import resolve_config_name_to_abs_or_default_directory
 from solradm.zk import get_client
 
