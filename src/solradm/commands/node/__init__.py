@@ -12,6 +12,7 @@ from solradm.api.state import get_nodes_by_role
 from solradm.api.utils import get_cores_from_node, send_request
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
+from solradm.commands.kube import load_configured_kubecontext
 from solradm.completion.nodes import node_names
 from solradm.kube.utils import (
     find_pods_by_node_name,
@@ -100,13 +101,9 @@ async def drain(
             renderer=MultiTaskTable(metatasks, refresh_every=0.25)
         )
 
-    # After deletion, remove leftover directories from disk
-    configured = get_configured_kubecontext()
-    if not configured:
+    if not load_configured_kubecontext():
         rich.print("[warning] ⚠️ No kubecontext configured; skipping disk cleanup")
         return
-
-    switch_current_kubecontext(configured)
 
     for n in selected_nodes:
         pods = find_pods_by_node_name(n)

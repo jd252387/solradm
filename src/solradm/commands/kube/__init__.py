@@ -15,6 +15,7 @@ from rich.prompt import Confirm
 from rich.table import Table
 
 from solradm.completion.nodes import node_names
+from solradm.exceptions.adm_exception import AdmException
 from solradm.kube.utils import (
     get_configured_kubecontext,
     find_pods,
@@ -29,7 +30,7 @@ app = AsyncTyper()
 STATE_FILE = Path(user_config_dir("solradm", "eclipse")) / "kube-scale-state.json"
 
 
-def load_configured_kubecontext():
+def load_configured_kubecontext() -> bool:
     switch_current_kubecontext(get_configured_kubecontext())
 
 
