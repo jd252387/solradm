@@ -349,7 +349,7 @@ async def query(
 ):
     """Query a collection and pretty-print the top results."""
 
-    params = {"q": q, "rows": rows, "fl": fl, "start": start}
+    params: dict = {"q": q, "rows": rows, "fl": fl, "start": start}
     if fq:
         params["fq"] = fq
     if param:
