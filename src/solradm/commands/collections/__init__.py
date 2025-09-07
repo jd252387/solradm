@@ -248,7 +248,7 @@ async def create(
         if conf:
             raise typer.BadParameter("You can't specify both --conf and --upload-conf!")
         from solradm.commands.zk.editor import upload
-        upload(paths=[upload_conf], znode_path="/configs", only_used=False, reload=False, exclude=None,
+        upload(paths=[str(upload_conf)], znode_path="/configs", only_used=False, reload=False, exclude=None,
                skip_checks=True)
         conf = os.path.basename(os.path.normpath(upload_conf))
     else:
