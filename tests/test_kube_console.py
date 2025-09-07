@@ -1,7 +1,13 @@
 import importlib
 
 
-def test_kube_console(monkeypatch):
+def test_kube_console(monkeypatch, tmp_path):
+    cfg_home = tmp_path / "cfg"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(cfg_home))
+    settings_dir = cfg_home / "solradm"
+    settings_dir.mkdir(parents=True)
+    (settings_dir / "settings.yaml").write_text("contexts:\n  current: {name: test}\n  available: []\n")
+
     from solradm.commands import kube as kube_module
     importlib.reload(kube_module)
 

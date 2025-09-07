@@ -271,7 +271,34 @@ def ui():
     if not is_openshift_cluster():
         rich.print("[error] ❌ The current Kubernetes cluster is not of the OpenShift distribution.")
 
-    api = client.CustomObjectsApi()
+    api = CustomObjectsApi(ApiClient())
+    namespace = get_current_kubecontext_namespace()
+    if not namespace:
+        rich.print("[error] ❌ The kubecontext does not map to a specific namespace!")
+        raise typer.Exit(1)
+
+    try:
+        route = api.get_namespaced_custom_object(
+            group="route.openshift.io",
+            version="v1",
+            namespace="openshift-console",
+            plural="routes",
+            name="console",
+        )
+        host = route["spec"]["host"]
+    except Exception:
+        rich.print("[error] ❌ Unable to determine OpenShift console host")
+        raise typer.Exit(1)
+
+    url = f"https://{host}/k8s/ns/{namespace}"
+    webbrowser.open(url)
+    rich.print(f"[success]✅  Opened OpenShift console at {url}")
+
+
+def console():
+    """Open the web console without checking cluster type (legacy)."""
+    load_configured_kubecontext()
+    api = CustomObjectsApi(ApiClient())
     namespace = get_current_kubecontext_namespace()
     if not namespace:
         rich.print("[error] ❌ The kubecontext does not map to a specific namespace!")

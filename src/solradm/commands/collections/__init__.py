@@ -337,18 +337,51 @@ async def query(
         q: str = typer.Argument(..., help="Lucene query string"),
         rows: int = typer.Option(10, help="Number of rows to return"),
         fl: str = typer.Option("*", help="Fields to return"),
+        start: int = typer.Option(0, help="Starting offset"),
+        fq: List[str] | None = typer.Option(None, "--fq", help="Filter query", show_default=None),
+        param: List[str] | None = typer.Option(
+            None,
+            "--param",
+            "-p",
+            help="Additional query parameter in the form name=value",
+            show_default=None,
+        ),
         debug: bool = typer.Option(False, help="Include debug information"),
 ):
     """Query a collection and pretty-print the top results."""
 
-    params = {"q": q, "rows": rows, "fl": fl}
+    params = {"q": q, "rows": rows, "fl": fl, "start": start}
+    if fq:
+        params["fq"] = fq
+    if param:
+        for kv in param:
+            if "=" not in kv:
+                rich.print(f"[warning]Ignoring invalid param {kv!r}")
+                continue
+            k, v = kv.split("=", 1)
+            params[k] = v
     if debug:
         params["debug"] = "true"
 
-    resp = await send_request(get_overseer_leader(), f"/{collection}/select", params=params)
+    try:
+        coordinators = get_nodes_by_role("coordinator").get("on", [])
+    except Exception:
+        coordinators = []
+    base = coordinators[0] if coordinators else get_overseer_leader()
+
+    resp = await send_request(base, f"/{collection}/select", params=params)
 
     docs = resp.get("response", {}).get("docs", [])
-    rich.print_json(data=json.dumps(docs))
+    if fl != "*":
+        fields = [f.strip() for f in fl.split(",") if f.strip()]
+        table = Table(title="Results", header_style="bold cyan", expand=True)
+        for field in fields:
+            table.add_column(field)
+        for doc in docs:
+            table.add_row(*[str(doc.get(field, "")) for field in fields])
+        rich.print(table)
+    else:
+        rich.print_json(data=json.dumps(docs))
 
     if debug and "debug" in resp:
         rich.print_json(data=json.dumps(resp["debug"]))
