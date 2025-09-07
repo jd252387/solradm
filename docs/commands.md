@@ -119,12 +119,15 @@ Reload cores for filtered replicas and optionally coordinator nodes.
 - `--coordinators` – reload only coordinator nodes.
 - `--no-coordinators` – reload only data nodes. If neither option is given both types are reloaded.
 
-### `query <collection> <q> [--rows <n>] [--fl <fields>] [--debug]`
-Execute a Lucene query and pretty‑print the results.
+### `query <collection> <q> [--rows <n>] [--fl <fields>] [--start <n>] [--fq <query>] [--param <k=v>] [--debug]`
+Execute a Lucene query and pretty‑print the results. Requests target coordinator nodes when available, falling back to the overseer.
 - `<collection>` – target collection.
 - `<q>` – query string.
 - `--rows` – number of rows to return (default 10).
 - `--fl` – comma‑separated list of fields to display (default `*`).
+- `--start` – starting offset within the result set (default 0).
+- `--fq` – repeatable filter query passed to Solr.
+- `--param` – repeatable arbitrary query parameter of the form `name=value`.
 - `--debug` – include the debug section from Solr in the output.
 
 ### `reindex --source <collection> --target <collection> [--source-context <ctx>] [--handler <path>] [--fq <query>] [--source-shard <shard>]`
