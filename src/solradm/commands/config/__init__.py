@@ -348,7 +348,7 @@ def add(
     settings.contexts.available = settings.contexts.available + [context.as_dict()]
     local_contexts.append(context.as_dict())
     persist()
-    rich.print(f"[success]✅ Added new context {name}!")
+    rich.print(f"[success]✅ Added new context {context.name}!")
 
 
 @app.command()

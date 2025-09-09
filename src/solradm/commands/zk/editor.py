@@ -29,6 +29,7 @@ from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
 from solradm.completion.collections import collection_names
 from solradm.completion.znodes import znode_paths
 from solradm.config.util import resolve_config_name_to_abs_or_default_directory
+from solradm.exceptions.adm_exception import AdmException
 from solradm.zk import get_client
 from solradm.zk.utils import win_path_to_zk_path
 
@@ -76,9 +77,13 @@ def edit(
             # Open VSCode if requested
             vscode_process = None
             if not no_vscode:
-                vscode_process = open_vscode(temp_dir)
-                if not vscode_process:
-                    rich.print("[warning]⚠️ Continuing without VSCode...")
+                try:
+                    vscode_process = open_vscode(temp_dir)
+                except AdmException:
+                    rich.print(
+                        "[error]❌ Failed to open VSCode. Make sure 'code' command is available in PATH"
+                    )
+                    raise typer.Exit(1)
 
             # Set up file watching and syncing
             rich.print(f"[blue]👀 Watching for changes in {temp_dir}...")

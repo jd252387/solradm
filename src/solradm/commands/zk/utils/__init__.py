@@ -7,29 +7,28 @@ from typing import Dict, List, Tuple
 import rich
 from kazoo.client import KazooClient
 
+from solradm.exceptions.adm_exception import AdmException
+
 
 def open_vscode(directory: str):
     """Open VSCode on the specified directory and return the process."""
     try:
+        code_abs_location = shutil.which("code")
+
+        if not code_abs_location:
+            raise FileNotFoundError
+
         # Start VSCode as a subprocess and return it
         process = subprocess.Popen(
-            [shutil.which("code"), "--new-window", "--wait", directory],
+            [code_abs_location, "--new-window", "--wait", directory],
             env=os.environ.copy(),
         )
         rich.print(
             f"[success]🚀 Opened VSCode on {directory} (PID: {process.pid})"
         )
         return process
-    except subprocess.CalledProcessError:
-        rich.print(
-            "[error]❌ Failed to open VSCode. Make sure 'code' command is available in PATH"
-        )
-        return None
-    except FileNotFoundError:
-        rich.print(
-            "[error]❌ VSCode command 'code' not found. Please install VSCode and add it to PATH"
-        )
-        return None
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        raise AdmException("Failed to open VSCode")
 
 
 def create_or_update(zk: KazooClient, path: str, data: bytes) -> None:
