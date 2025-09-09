@@ -99,7 +99,7 @@ def edit(
 
             # Create watchdog observer
             event_handler = ZooKeeperSyncHandler(
-                get_client(), temp_dir, znode_path, sync_interval, reload=True
+                get_client(), temp_dir, znode_path, sync_interval, reload=reload
             )
             observer = Observer()
             observer.schedule(event_handler, temp_dir, recursive=True)
@@ -253,7 +253,7 @@ def upload(
                 if exclude and col.name in exclude:
                     continue
                 to_reload.add(col.name)
-        if to_reload:
+        if len(to_reload) > 0:
             from solradm.commands.collections import reload as reload_cmd
             asyncio.run(
                 reload_cmd(
