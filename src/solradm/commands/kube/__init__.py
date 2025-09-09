@@ -22,6 +22,7 @@ from rich.table import Table
 from solradm.commands.callbacks import add_verbosity_option
 from solradm.completion.kube import pod_names, container_names, workload_names
 from solradm.completion.nodes import node_names
+from solradm.exceptions.adm_exception import AdmException
 from solradm.kube.utils import (
     get_configured_kubecontext,
     find_pods,
@@ -43,7 +44,7 @@ def load_configured_kubecontext(client_configuration: Configuration = None) -> b
     configured = get_configured_kubecontext()
 
     if configured is None:
-        return False
+        raise AdmException("No kubecontext is configured for the current context!")
 
     switch_current_kubecontext(configured, client_configuration)
 
