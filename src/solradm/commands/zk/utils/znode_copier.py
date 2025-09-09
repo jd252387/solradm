@@ -54,7 +54,7 @@ def _copy_znode_recursive(
             local_file_path = os.path.join(local_dir, os.path.basename(znode_path))
             with open(local_file_path, "w", encoding="utf-8") as f:
                 if data:
-                    f.write(data.decode("utf-8"))
+                    f.write(data.decode("utf-8").replace("\r", ""))
             progress.update(task, description=f"Copied data zNode: {znode_path}")
         else:
             for child in children:
