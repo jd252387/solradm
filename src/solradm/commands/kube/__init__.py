@@ -264,7 +264,7 @@ def resume(
 
 
 @app.command(help="Open OpenShift console for the current namespace")
-def ui():
+def console():
     """Open the OpenShift web console in a browser for the current namespace."""
 
     load_configured_kubecontext()

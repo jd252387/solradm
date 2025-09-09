@@ -12,6 +12,11 @@ from solradm.config.util import is_valid_context_repo, load_repo_contexts
 
 config_path = Path(os.path.join(user_config_dir("solradm", "eclipse"), "settings.yaml"))
 
+if not config_path.exists() and os.environ.get("SOLRADM_AUTO_CONFIG"):
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(config_path, "w") as f:
+        f.write("contexts:\n  available: []\n  current: {}\n")
+
 _existing_config: dict = {}
 if config_path.exists():
     with open(config_path) as f:
