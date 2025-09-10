@@ -13,6 +13,8 @@ from kazoo.client import KazooClient
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn
 from rich.prompt import Confirm
 from rich.table import Table
+from rich.panel import Panel
+from rich import box
 
 import solradm.api.utils as api_utils
 from solradm.api.models import Collection, Replica, Shard
@@ -358,7 +360,14 @@ async def query(
                 rich.print(f"[warning]Ignoring invalid param {kv!r}")
                 continue
             k, v = kv.split("=", 1)
-            params[k] = v
+            if k in params:
+                existing = params[k]
+                if isinstance(existing, list):
+                    existing.append(v)
+                else:
+                    params[k] = [existing, v]
+            else:
+                params[k] = v
     if debug:
         params["debug"] = "true"
 
@@ -371,16 +380,25 @@ async def query(
     resp = await send_request(base, f"/{collection}/select", params=params)
 
     docs = resp.get("response", {}).get("docs", [])
-    if fl != "*":
-        fields = [f.strip() for f in fl.split(",") if f.strip()]
-        table = Table(title="Results", header_style="bold cyan", expand=True)
+    if docs:
+        if fl != "*":
+            fields = [f.strip() for f in fl.split(",") if f.strip()]
+        else:
+            fields = sorted({key for doc in docs for key in doc.keys()})
+        table = Table(
+            title="Results",
+            header_style="bold cyan",
+            expand=True,
+            box=box.SIMPLE_HEAVY,
+            row_styles=["", "dim"],
+        )
         for field in fields:
-            table.add_column(field)
+            table.add_column(field, style="green")
         for doc in docs:
             table.add_row(*[str(doc.get(field, "")) for field in fields])
         rich.print(table)
     else:
-        rich.print_json(data=json.dumps(docs))
+        rich.print(Panel("No documents found", style="yellow"))
 
     if debug and "debug" in resp:
         rich.print_json(data=json.dumps(resp["debug"]))
