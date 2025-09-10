@@ -48,9 +48,9 @@ def run():
             return
         app()
     except SolrException as e:
-        logging.error("Received a fatal error from Solr: %s", e)
+        rich.print("[error] ❌ Received a fatal error from Solr: %s", e)
     except AdmException as e:
-        logging.error("Internal error:: %s", e)
+        rich.print("[error] ❌ ", e)
     finally:
         notify_if_outdated()
         import asyncio
