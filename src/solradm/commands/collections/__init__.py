@@ -309,6 +309,7 @@ async def reload(
 ):
     """Reload the specified cores and optionally coordinators."""
     replicas = []
+    selected_collection_names = {collection.name for collection in cluster_state}
     if coordinators is None or not coordinators:
         replicas.extend(get_replicas(cluster_state))
     if coordinators is None or coordinators:
@@ -316,6 +317,8 @@ async def reload(
         for node in coordinator_nodes:
             cores = await api_utils.get_cores_from_node(node)
             for core in cores:
+                if core.cloud.collection not in selected_collection_names:
+                    continue
                 replicas.append(
                     Replica(name=core.name, core=core.name, node_name=node, type=core.cloud.replicaType,
                             state=core.lastPublished, leader=True, force_set_state=False, base_url=node))

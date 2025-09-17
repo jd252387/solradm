@@ -18,9 +18,19 @@ def get_current_context() -> Context:
             (context for context in settings.contexts.available if context.name == settings.contexts.current.name),
             None)
 
-        return Context(context_dict.name, context_dict.zk, context_dict.get("kubecontext"))
+        return Context(
+            context_dict.name,
+            context_dict.zk,
+            context_dict.get("kubecontext"),
+            context_dict.get("namespace"),
+        )
     else:
-        return Context(None, current.zk, current.get("kubecontext"))
+        return Context(
+            None,
+            current.zk,
+            current.get("kubecontext"),
+            current.get("namespace"),
+        )
 
 
 def _get_default_znode_dir() -> Path | None:

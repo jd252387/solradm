@@ -14,7 +14,10 @@ def get_kubecontext(name: str) -> Any | None:
 
 
 def get_configured_kubecontext() -> Any | None:
-    return get_kubecontext(get_current_context().kubecontext)
+    current = get_current_context()
+    if not current.kubecontext:
+        return None
+    return get_kubecontext(current.kubecontext)
 
 
 def get_current_kubecontext() -> Any | None:
@@ -24,11 +27,29 @@ def get_current_kubecontext() -> Any | None:
 
 
 def get_current_kubecontext_namespace() -> str | None:
-    return get_current_kubecontext()["context"].get("namespace")
+    active = get_current_kubecontext()
+    namespace = active["context"].get("namespace") if active else None
+    if namespace:
+        return namespace
+    return get_current_context().namespace
 
 
-def switch_current_kubecontext(target_context: Any, client_configuration: Configuration | None = None) -> Any | None:
+def switch_current_kubecontext(
+        target_context: Any,
+        namespace: str | None = None,
+        client_configuration: Configuration | None = None,
+) -> Any | None:
     load_kube_config(context=target_context["name"], client_configuration=client_configuration)
+
+    resolved_namespace = namespace or target_context["context"].get("namespace")
+    if resolved_namespace:
+        if client_configuration is not None:
+            client_configuration.namespace = resolved_namespace
+            Configuration.set_default(client_configuration)
+        else:
+            cfg = Configuration.get_default_copy()
+            cfg.namespace = resolved_namespace
+            Configuration.set_default(cfg)
 
 
 def find_pods(pattern: re.Pattern) -> List[V1Pod]:
