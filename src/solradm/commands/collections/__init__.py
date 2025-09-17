@@ -177,9 +177,11 @@ async def populate(
         table.add_row(n, ", ".join(s.name for s in shards_list))
     rich.print(table)
 
-    counts = [len(node_to_shards.get(n, [])) for n in selected_nodes]
-    avg = sum(counts) / len(selected_nodes)
+    counts = [len(shards_list) for shards_list in node_to_shards.values()]
+    avg = sum(counts) / len(counts)
     dist = Counter(counts)
+
+    unused_nodes = sorted(set(selected_nodes) - set(node_to_shards.keys()))
 
     rich.print(f"Average replicas per node: {avg:.2f}")
 
@@ -189,6 +191,12 @@ async def populate(
     for num, cnt in sorted(dist.items()):
         dist_table.add_row(str(num), str(cnt))
     rich.print(dist_table)
+
+    if unused_nodes:
+        rich.print(
+            "[warning] ⚠️ The following nodes matched the filter but will not receive replicas: "
+            + ", ".join(unused_nodes)
+        )
 
     if not Confirm.ask("Proceed with adding replicas?"):
         raise typer.Exit(0)
