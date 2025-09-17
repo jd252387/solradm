@@ -54,8 +54,8 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
                 self.modification_hashes[event.src_path] = edit_hash
 
     def on_deleted(self, event):
-        if not event.is_directory:
-            self._schedule_sync(event.src_path, "deleted")
+        change_type = "deleted_dir" if event.is_directory else "deleted"
+        self._schedule_sync(event.src_path, change_type)
 
     def _schedule_sync(self, file_path: str, change_type: str):
         """Schedule a sync operation."""
@@ -93,9 +93,11 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
                 self._sync_file_change(file_path, zk_path, change_type)
 
                 if self.reload:
-                    split_path = zk_path.split("/")
-                    if split_path[0] == "configs":
-                        to_reload.extend(get_collections_using_config(get_collections(), split_path[1]))
+                    split_path = [part for part in zk_path.split("/") if part]
+                    if len(split_path) >= 2 and split_path[0] == "configs":
+                        to_reload.extend(
+                            get_collections_using_config(get_collections(), split_path[1])
+                        )
             except Exception as e:
                 rich.print(f"[error]❌ Error syncing {file_path}: {e}")
 
@@ -121,7 +123,7 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
                     content = f.read()
 
                 create_or_update(self.zk, zk_path, content.encode("utf-8"))
-        elif change_type == "deleted":
+        elif change_type in {"deleted", "deleted_dir"}:
             # Delete zNode if it exists
             if self.zk.exists(zk_path):
                 self.zk.delete(zk_path, recursive=True)

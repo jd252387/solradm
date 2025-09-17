@@ -22,6 +22,7 @@ from rich.table import Table
 from solradm.commands.callbacks import add_verbosity_option
 from solradm.completion.kube import pod_names, container_names, workload_names
 from solradm.completion.nodes import node_names
+from solradm.config.util import get_current_context
 from solradm.exceptions.adm_exception import AdmException
 from solradm.kube.utils import (
     get_configured_kubecontext,
@@ -41,12 +42,27 @@ STATE_FILE = Path(user_config_dir("solradm", "eclipse")) / "kube-scale-state.jso
 
 
 def load_configured_kubecontext(client_configuration: Configuration = None) -> bool:
+    current_context = get_current_context()
     configured = get_configured_kubecontext()
 
-    if configured is None:
+    if not current_context.kubecontext:
         raise AdmException("No kubecontext is configured for the current context!")
 
-    switch_current_kubecontext(configured, client_configuration)
+    if configured is None:
+        raise AdmException(
+            f"Kubecontext {current_context.kubecontext} could not be found in your kubeconfig."
+        )
+
+    if not current_context.namespace:
+        raise AdmException(
+            "The configured kubecontext is missing a namespace. Edit the context to add one."
+        )
+
+    switch_current_kubecontext(
+        configured,
+        namespace=current_context.namespace,
+        client_configuration=client_configuration,
+    )
 
     return True
 

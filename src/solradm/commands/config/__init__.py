@@ -14,6 +14,7 @@ from rich.pretty import pprint
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from typer import Typer
+from typer.models import OptionInfo
 
 from solradm.commands.callbacks import add_verbosity_option
 from solradm.completion.contexts import context_names, context_repo_paths, kube_contexts
@@ -50,6 +51,29 @@ def _to_dict(obj):
     if isinstance(obj, dict):
         return {k: _to_dict(v) for k, v in obj.items()}
     return obj
+
+
+def _ensure_kubecontext_exists(kubecontext: str):
+    if not get_kubecontext(kubecontext):
+        raise typer.BadParameter(f"Kubecontext {kubecontext} does not exist!")
+
+
+def _require_namespace(namespace) -> str:
+    value = _coerce_optional_option(namespace)
+    if value is None:
+        raise typer.BadParameter(
+            "A namespace must be provided when specifying a kubecontext."
+        )
+
+    trimmed = value.strip()
+    if not trimmed:
+        raise typer.BadParameter("Namespace cannot be empty")
+
+    return trimmed
+
+
+def _coerce_optional_option(value):
+    return value.default if isinstance(value, OptionInfo) else value
 
 
 @app.command()
@@ -245,15 +269,31 @@ def connect(
         kubecontext: str = typer.Option(
             None, help="Kubernetes context", autocompletion=kube_contexts
         ),
+        namespace: str | None = typer.Option(
+            None,
+            "--namespace",
+            "-n",
+            help="Target namespace for the kubecontext",
+        ),
 ):
     """Temporarily connect to a ZooKeeper host."""
 
+    kubecontext = _coerce_optional_option(kubecontext)
+    namespace = _coerce_optional_option(namespace)
+
     settings.contexts.current = {"zk": zk}
 
+    if namespace and not kubecontext:
+        raise typer.BadParameter("--namespace can only be used together with --kubecontext")
+
     if kubecontext:
-        if not get_kubecontext(kubecontext):
-            raise typer.BadParameter(f"Kubecontext {kubecontext} does not exist!")
+        kubecontext = kubecontext.strip()
+        if not kubecontext:
+            raise typer.BadParameter("Kubecontext cannot be empty")
+        _ensure_kubecontext_exists(kubecontext)
+        resolved_namespace = _require_namespace(namespace)
         settings.contexts.current["kubecontext"] = kubecontext
+        settings.contexts.current["namespace"] = resolved_namespace
 
     if _verify_zk_connection():
         persist()
@@ -294,7 +334,7 @@ def connect_current():
         raise typer.BadParameter("Unable to determine API server host")
 
     zk_address = f"{api_host}:{node_port}"
-    connect(zk_address, current["name"])
+    connect(zk_address, current["name"], namespace=namespace)
 
 
 @app.command()
@@ -306,6 +346,7 @@ def save(name: str = typer.Argument(..., help="Context name")):
             name,
             settings.contexts.current.zk,
             settings.contexts.current.get("kubecontext"),
+            namespace=settings.contexts.current.get("namespace"),
         )
     else:
         rich.print(
@@ -324,9 +365,18 @@ def add(
             help="Target Kubecontext",
             autocompletion=kube_contexts,
         ),
+        namespace: str | None = typer.Option(
+            None,
+            "--namespace",
+            "-n",
+            help="Namespace to associate with the kubecontext",
+        ),
         interactive: bool = typer.Option(True, help="Interactive setup mode"),
 ):
     """Add a new named context."""
+    zk = _coerce_optional_option(zk)
+    kubecontext = _coerce_optional_option(kubecontext)
+    namespace = _coerce_optional_option(namespace)
     if interactive:
         context_name = ""
         while context_name == "":
@@ -341,9 +391,16 @@ def add(
                 "You must specify both a name and a ZooKeeper address! Alternatively, use --interactive to enter interactive setup mode.")
         if name in [context.name for context in settings.contexts.available]:
             raise typer.BadParameter(f"Context {name} already exists!")
-        if kubecontext and not get_kubecontext(kubecontext):
-            raise typer.BadParameter(f"Kubecontext {kubecontext} does not exist!")
-        context = Context(name=name, zk=zk, kubecontext=kubecontext)
+        if namespace and not kubecontext:
+            raise typer.BadParameter("--namespace can only be used together with --kubecontext")
+        resolved_namespace = None
+        if kubecontext:
+            kubecontext = kubecontext.strip()
+            if not kubecontext:
+                raise typer.BadParameter("Kubecontext cannot be empty")
+            _ensure_kubecontext_exists(kubecontext)
+            resolved_namespace = _require_namespace(namespace)
+        context = Context(name=name, zk=zk, kubecontext=kubecontext, namespace=resolved_namespace)
 
     settings.contexts.available = settings.contexts.available + [context.as_dict()]
     local_contexts.append(context.as_dict())
@@ -364,22 +421,48 @@ def edit(
             help="Target Kubecontext",
             autocompletion=kube_contexts,
         ),
+        namespace: str | None = typer.Option(
+            None,
+            "--namespace",
+            "-n",
+            help="Namespace associated with the kubecontext",
+        ),
 ):
     """Modify an existing context."""
+    zk = _coerce_optional_option(zk)
+    kubecontext = _coerce_optional_option(kubecontext)
+    namespace = _coerce_optional_option(namespace)
 
-    if zk is None and kubecontext is None:
-        raise typer.BadParameter("Please specify --zk and/or --kubecontext")
-
-    if kubecontext and not get_kubecontext(kubecontext):
-        raise typer.BadParameter(f"Kubecontext {kubecontext} does not exist!")
+    if zk is None and kubecontext is None and namespace is None:
+        raise typer.BadParameter("Please specify --zk, --kubecontext or --namespace")
 
     if name in [c["name"] for c in local_contexts]:
         for context in settings.contexts.available:
             if context.name == name:
+                existing_kubecontext = context.get("kubecontext")
+                existing_namespace = context.get("namespace")
+                if kubecontext is not None:
+                    new_kubecontext = kubecontext
+                    if not new_kubecontext or not new_kubecontext.strip():
+                        raise typer.BadParameter("Kubecontext cannot be empty")
+                    new_kubecontext = new_kubecontext.strip()
+                    _ensure_kubecontext_exists(new_kubecontext)
+                    new_namespace = _require_namespace(namespace)
+                else:
+                    new_kubecontext = existing_kubecontext
+                    if namespace is not None:
+                        if not existing_kubecontext:
+                            raise typer.BadParameter(
+                                "Cannot set a namespace when the context has no kubecontext configured."
+                            )
+                        new_namespace = _require_namespace(namespace)
+                    else:
+                        new_namespace = existing_namespace
                 new_context = Context(
                     name,
                     zk=zk if zk else context.zk,
-                    kubecontext=kubecontext if kubecontext else context.get("kubecontext"),
+                    kubecontext=new_kubecontext,
+                    namespace=new_namespace,
                 )
                 settings.contexts.available = [
                                                   c for c in settings.contexts.available if c.name != name
@@ -408,10 +491,30 @@ def edit(
             raise typer.BadParameter(f"Context {name} does not exist!")
 
         existing = next(c for c in repo_contexts if c["name"] == name)
+        existing_kubecontext = existing.get("kubecontext")
+        existing_namespace = existing.get("namespace")
+        if kubecontext is not None:
+            new_kubecontext = kubecontext
+            if not new_kubecontext or not new_kubecontext.strip():
+                raise typer.BadParameter("Kubecontext cannot be empty")
+            new_kubecontext = new_kubecontext.strip()
+            _ensure_kubecontext_exists(new_kubecontext)
+            new_namespace = _require_namespace(namespace)
+        else:
+            new_kubecontext = existing_kubecontext
+            if namespace is not None:
+                if not existing_kubecontext:
+                    raise typer.BadParameter(
+                        "Cannot set a namespace when the context has no kubecontext configured."
+                    )
+                new_namespace = _require_namespace(namespace)
+            else:
+                new_namespace = existing_namespace
         new_context = Context(
             name,
             zk=zk if zk else existing["zk"],
-            kubecontext=kubecontext if kubecontext else existing.get("kubecontext"),
+            kubecontext=new_kubecontext,
+            namespace=new_namespace,
         )
         repo_contexts = [
             c if c["name"] != name else new_context.as_dict() for c in repo_contexts

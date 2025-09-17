@@ -1,5 +1,7 @@
+import rich
 import rich.console
-from kubernetes.config import list_kube_config_contexts
+from kubernetes.client import CoreV1Api
+from kubernetes.config import list_kube_config_contexts, load_kube_config
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich.text import Text
@@ -53,5 +55,52 @@ Solradm actions that require a kubecontext have 2 modes -
             )
 
         new_context.kubecontext = kubecontext
+
+        namespace_options: list[str] = []
+        default_namespace: str | None = None
+
+        selected_context = get_kubecontext(kubecontext)
+        if selected_context:
+            default_namespace = selected_context["context"].get("namespace")
+
+        try:
+            load_kube_config(context=kubecontext)
+            namespace_items = CoreV1Api().list_namespace().items
+            namespace_options = sorted({ns.metadata.name for ns in namespace_items})
+        except Exception:
+            namespace_options = []
+            rich.print(
+                "[warning]⚠️ Unable to list namespaces for the selected kubecontext. Please enter one manually."
+            )
+
+        if namespace_options:
+            table = Table(
+                title="Available Namespaces",
+                header_style="bold cyan",
+                style="white bold",
+                row_styles=["white"],
+                title_style="magenta bold",
+            )
+            table.add_column("Namespace", style="bold")
+            table.add_column("Default", style="green", justify="center")
+            for ns in namespace_options:
+                marker = "✅" if default_namespace and ns == default_namespace else ""
+                table.add_row(ns, marker)
+            rich.print(table)
+
+        prompt_kwargs = {}
+        if default_namespace:
+            prompt_kwargs["default"] = default_namespace
+
+        namespace = ""
+        while not namespace:
+            namespace = Prompt.ask(
+                "[question]Enter the target namespace for this kubecontext -> ",
+                **prompt_kwargs,
+            ).strip()
+            if not namespace:
+                rich.print("[error]A namespace is required when configuring a kubecontext.")
+
+        new_context.namespace = namespace
 
     return new_context
