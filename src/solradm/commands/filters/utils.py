@@ -27,12 +27,13 @@ def with_dry_run(func):
     return wrapper
 
 
-def with_cluster_state(*filter_classes):
+def with_cluster_state(*filter_classes, allow_empty: bool = False):
     """
     Decorator that automatically fetches ClusterState and optionally applies filters.
 
     Args:
         *filter_classes: Optional filter classes to apply to the cluster state
+        allow_empty: Allow decorated command to run even if no collections match
     """
 
     def decorator(func):
@@ -81,6 +82,8 @@ def with_cluster_state(*filter_classes):
                 cluster_state = filter_instance.apply(cluster_state)
 
             if len(cluster_state) == 0:
+                if allow_empty and not filter_instances:
+                    return func(cluster_state=cluster_state, *args, **kwargs)
                 if solradm.api.utils.is_dry_run:
                     rich.print(
                         f"[warning][green bold]💡 EXITING DRY RUN - [/] CLI command \"{func.__qualname__}\" has been called, but the filters didn't match any collections. This may be OK as you are running with dry run, as the previous command did not actually edit the cluster. This command was called with parameters \"{args if args else ""}{kwargs if kwargs else ""}")
