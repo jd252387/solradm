@@ -291,7 +291,7 @@ def ui():
         rich.print("[error] ❌ Unable to determine OpenShift console host")
         raise typer.Exit(1)
 
-    url = f"https://{host}/k8s/ns/{namespace}"
+    url = f"https://{host}/k8s/ns/{namespace}/core~v1~Pod"
     webbrowser.open(url)
     rich.print(f"[success]✅  Opened OpenShift console at {url}")
 

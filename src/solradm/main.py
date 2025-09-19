@@ -36,8 +36,6 @@ app.add_typer(state.app, name="state", help="Export or restore cluster state")
 app.command()(status_cmd)
 app.command()(version)
 
-
-
 def run():
     try:
         import sys
