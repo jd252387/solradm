@@ -29,7 +29,7 @@ STATE_COLORS = {
 }
 
 
-@with_cluster_state()
+@with_cluster_state(allow_empty=True)
 def status(
         cluster_state: List[Collection],
         severity: List[str] | None = typer.Option(
