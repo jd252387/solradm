@@ -92,14 +92,17 @@ Solradm actions that require a kubecontext have 2 modes -
         if default_namespace:
             prompt_kwargs["default"] = default_namespace
 
-        namespace = ""
-        while not namespace:
+        while True:
             namespace = Prompt.ask(
                 "[question]Enter the target namespace for this kubecontext -> ",
                 **prompt_kwargs,
             ).strip()
             if not namespace:
                 rich.print("[error]A namespace is required when configuring a kubecontext.")
+            elif namespace not in namespace_options:
+                rich.print("[error]The namespace you entered is invalid.")
+            else:
+                break
 
         new_context.namespace = namespace
 
