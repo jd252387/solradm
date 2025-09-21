@@ -43,8 +43,11 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
 
     def on_modified(self, event):
         if not event.is_directory:
-            contents = open(event.src_path, "rb").read()
-            if not contents:
+            try:
+                contents = open(event.src_path, "rb").read()
+                if not contents:
+                    return
+            except Exception:
                 return
 
             edit_hash = hashlib.md5(contents).hexdigest()
