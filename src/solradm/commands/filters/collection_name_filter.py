@@ -50,3 +50,11 @@ class CollectionNameFilter(Filter):
                 raise typer.BadParameter(f"Invalid regex pattern '{self.collection_name_filter}': {e}")
         else:
             return cluster_state
+
+    def describe(self) -> List[str]:
+        descriptions: List[str] = []
+        if self.collection_name_filter:
+            descriptions.append(
+                f"Collections whose name matches the regular expression '{self.collection_name_filter}'"
+            )
+        return descriptions

@@ -37,92 +37,80 @@ app = typer.Typer()
 add_verbosity_option(app)
 
 
-@app.command()
-def edit(
-        znode_path: str = typer.Argument("/configs", help="Path of the zNode to edit", autocompletion=znode_paths),
-        sync_interval: int = typer.Option(
-            5, "--sync-interval", "-s", help="Sync interval in seconds"
-        ),
-        no_data: bool = typer.Option(False, "--no-data", help="Skip copying zNode data"),
-        no_vscode: bool = typer.Option(
-            False, "--no-vscode", help="Don't open VSCode automatically"
-        ),
-        reload: bool = typer.Option(False, "--reload",
-                                    help="Automatically reloads collections whose configs have been edited, in real-time up to sync-interval")
-):
-    """Interactively view and edit ZooKeeper."""
+def _open_znode_session(
+        znode_path: str,
+        *,
+        sync_interval: int,
+        reload: bool,
+        read_only: bool,
+) -> None:
+    header_text = "ZNode Viewer" if read_only else "ZNode Copier & Sync Tool"
+    panel_title = "👀 ZooKeeper Viewer" if read_only else "🚀 ZooKeeper Integration"
 
     rich.print(
         Panel.fit(
-            Text("ZNode Copier & Sync Tool"),
-            title="🚀 ZooKeeper Integration",
+            Text(header_text),
+            title=panel_title,
         )
     )
 
-    # Create temporary directory
     with tempfile.TemporaryDirectory() as temp_dir:
         rich.print(f"[blue]📁 Created temporary directory: {temp_dir}")
 
         try:
-            # Copy zNode to temporary directory
             rich.print(f"[blue]📋 Copying zNode {znode_path} to temporary directory...")
             if not copy_znode_to_local(
                     zk=get_client(),
                     znode_path=znode_path,
                     local_dir=temp_dir,
-                    include_data=not no_data,
+                    include_data=True,
             ):
                 raise typer.Exit(1)
 
-            # Open VSCode if requested
             vscode_process = None
-            if not no_vscode:
-                try:
-                    vscode_process = open_vscode(temp_dir)
-                except AdmException:
-                    rich.print(
-                        "[error]❌ Failed to open VSCode. Make sure 'code' command is available in PATH"
-                    )
-                    raise typer.Exit(1)
+            try:
+                vscode_process = open_vscode(temp_dir)
+            except AdmException:
+                rich.print(
+                    "[error]❌ Failed to open VSCode. Make sure 'code' command is available in PATH"
+                )
+                raise typer.Exit(1)
 
-            # Set up file watching and syncing
-            rich.print(f"[blue]👀 Watching for changes in {temp_dir}...")
-            rich.print(
-                f"[blue]🔄 Changes will be synced to ZooKeeper every {sync_interval} seconds"
-            )
-            if not no_vscode:
+            observer = None
+            event_handler = None
+
+            if read_only:
+                rich.print("[yellow]💡 Viewing mode: changes made locally will NOT sync to ZooKeeper.")
+                rich.print("[yellow]💡 Close VSCode when you're done viewing.")
+            else:
+                rich.print(f"[blue]👀 Watching for changes in {temp_dir}...")
+                rich.print(
+                    f"[blue]🔄 Changes will be synced to ZooKeeper every {sync_interval} seconds"
+                )
                 rich.print(
                     "[yellow]💡 Make your changes in VSCode. Changes will be synced automatically. Close VSCode when you're done."
                 )
-            else:
-                rich.print("[yellow]💡 Press Ctrl+C to stop watching.")
-
-            # Create watchdog observer
-            event_handler = ZooKeeperSyncHandler(
-                get_client(), temp_dir, znode_path, sync_interval, reload=reload
-            )
-            observer = Observer()
-            observer.schedule(event_handler, temp_dir, recursive=True)
-            observer.start()
+                event_handler = ZooKeeperSyncHandler(
+                    get_client(), temp_dir, znode_path, sync_interval, reload=reload
+                )
+                observer = Observer()
+                observer.schedule(event_handler, temp_dir, recursive=True)
+                observer.start()
 
             try:
-                # Keep the script running and monitor VSCode process
                 while True:
                     time.sleep(1)
 
-                    # Check if VSCode process has exited
                     if vscode_process and vscode_process.poll() is not None:
                         rich.print("[warning]🚪 VSCode has been closed. Exiting...")
-                        # Final sync before exiting
-                        if event_handler.pending_changes:
+                        if event_handler and event_handler.pending_changes:
                             rich.print("[blue]🔄 Final sync before exit...")
                             event_handler._sync_changes()
                         break
 
             except KeyboardInterrupt:
-                rich.print("\n[warning]🛑 Stopping file watcher...")
+                rich.print("\n[warning]🛑 Stopping session...")
             finally:
-                # Clean up
                 if vscode_process and vscode_process.poll() is None:
                     rich.print("[blue]🔄 Closing VSCode...")
                     vscode_process.terminate()
@@ -132,8 +120,9 @@ def edit(
                         rich.print("[warning]⚠️ Force killing VSCode...")
                         vscode_process.kill()
 
-                observer.stop()
-                observer.join()
+                if observer:
+                    observer.stop()
+                    observer.join()
 
         except Exception as e:
             rich.print(f"[error]❌ Unexpected error: {e}")
@@ -142,6 +131,38 @@ def edit(
             rich.print(
                 "[success]🧹 Temporary directory will be automatically cleaned up"
             )
+
+
+@app.command()
+def edit(
+        znode_path: str = typer.Argument("/configs", help="Path of the zNode to edit", autocompletion=znode_paths),
+        sync_interval: int = typer.Option(
+            5, "--sync-interval", "-s", help="Sync interval in seconds"
+        ),
+        reload: bool = typer.Option(False, "--reload",
+                                    help="Automatically reloads collections whose configs have been edited, in real-time up to sync-interval")
+):
+    """Interactively view and edit ZooKeeper."""
+    _open_znode_session(
+        znode_path=znode_path,
+        sync_interval=sync_interval,
+        reload=reload,
+        read_only=False,
+    )
+
+
+@app.command()
+def view(
+        znode_path: str = typer.Argument("/configs", help="Path of the zNode to view", autocompletion=znode_paths),
+):
+    """Open a read-only view of a ZooKeeper zNode in VSCode."""
+
+    _open_znode_session(
+        znode_path=znode_path,
+        sync_interval=5,
+        reload=False,
+        read_only=True,
+    )
 
 
 @app.command()

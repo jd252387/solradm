@@ -100,3 +100,15 @@ class ShardFilter(Filter):
                 collection.shards = new_shards
                 filtered_collections.append(collection)
         return filtered_collections
+
+    def describe(self) -> List[str]:
+        descriptions: List[str] = []
+        if self.shards:
+            descriptions.append(
+                f"Include shards whose numeric identifier matches '{self.shards}'"
+            )
+        if self.exclude_shards:
+            descriptions.append(
+                f"Exclude shards whose numeric identifier matches '{self.exclude_shards}'"
+            )
+        return descriptions
