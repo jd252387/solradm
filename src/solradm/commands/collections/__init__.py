@@ -312,17 +312,29 @@ async def delete(
 
 @app.async_command(help="Reload cores for filtered replicas")
 @with_dry_run
-@with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
+@with_cluster_state(
+    CollectionNameFilter,
+    ShardFilter,
+    ReplicaTypeFilter,
+    ReplicaStateFilter,
+    ReplicaPositionFilter,
+    show_filter_explanations=True,
+)
 async def reload(
         cluster_state: List[Collection],
         coordinators: bool = typer.Option(None,
                                           help="If unset, reloads both data and coordinator nodes. If set to true, only reload coordinators. If set to false, only reload data nodes.")
 ):
     """Reload the specified cores and optionally coordinators."""
-    replicas = []
+    replicas: List[Replica] = []
+    collection_counts: Counter[str] = Counter()
     selected_collection_names = {collection.name for collection in cluster_state}
     if coordinators is None or not coordinators:
-        replicas.extend(get_replicas(cluster_state))
+        data_replicas = get_replicas(cluster_state)
+        replicas.extend(data_replicas)
+        for replica in data_replicas:
+            if replica.shard and replica.shard.collection:
+                collection_counts[replica.shard.collection.name] += 1
     if coordinators is None or coordinators:
         coordinator_nodes = get_nodes_by_role("coordinator")["on"]
         for node in coordinator_nodes:
@@ -331,10 +343,37 @@ async def reload(
                 if core.cloud.collection not in selected_collection_names:
                     continue
                 replicas.append(
-                    Replica(name=core.name, core=core.name, node_name=node, type=core.cloud.replicaType,
-                            state=core.lastPublished, leader=True, force_set_state=False, base_url=node))
+                    Replica(
+                        name=core.name,
+                        core=core.name,
+                        node_name=node,
+                        type=core.cloud.replicaType,
+                        state=core.lastPublished,
+                        leader=True,
+                        force_set_state=False,
+                        base_url=node,
+                    )
+                )
+                collection_counts[core.cloud.collection] += 1
 
-    validate_num_replicas(replicas)
+    replicas = validate_num_replicas(replicas)
+
+    if collection_counts:
+        table = Table(title="Planned core reloads", header_style="bold magenta")
+        table.add_column("Collection", style="cyan")
+        table.add_column("Cores", justify="right", style="green")
+
+        total = 0
+        for collection_name in sorted(collection_counts):
+            count = collection_counts[collection_name]
+            total += count
+            table.add_row(collection_name, str(count))
+
+        table.add_row("[bold]TOTAL[/bold]", str(total), style="bold")
+        rich.print(table)
+
+        if not Confirm.ask("Proceed with reloading the listed cores?"):
+            raise typer.Exit(0)
 
     tasks = [
         MetaTask(

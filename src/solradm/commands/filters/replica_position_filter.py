@@ -69,3 +69,15 @@ class ReplicaPositionFilter(Filter):
                 collection.shards = new_shards
                 filtered_collections.append(collection)
         return filtered_collections
+
+    def describe(self) -> List[str]:
+        descriptions: List[str] = []
+        if self.replica_position is not None:
+            descriptions.append(
+                f"All replicas whose position is {self.replica_position} within their corresponding shard"
+            )
+        if self.exclude_replica_position is not None:
+            descriptions.append(
+                f"Exclude replicas whose position is {self.exclude_replica_position} within their corresponding shard"
+            )
+        return descriptions

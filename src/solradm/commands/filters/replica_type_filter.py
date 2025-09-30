@@ -70,3 +70,15 @@ class ReplicaTypeFilter(Filter):
                 collection.shards = new_shards
                 filtered_collections.append(collection)
         return filtered_collections
+
+    def describe(self) -> List[str]:
+        descriptions: List[str] = []
+        if self.replica_type:
+            descriptions.append(
+                f"Include replicas whose type is '{self.replica_type}'"
+            )
+        if self.exclude_replica_type:
+            descriptions.append(
+                f"Exclude replicas whose type is '{self.exclude_replica_type}'"
+            )
+        return descriptions

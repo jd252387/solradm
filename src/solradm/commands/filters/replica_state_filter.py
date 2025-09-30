@@ -65,3 +65,15 @@ class ReplicaStateFilter(Filter):
                 collection.shards = new_shards
                 filtered_collections.append(collection)
         return filtered_collections
+
+    def describe(self) -> List[str]:
+        descriptions: List[str] = []
+        if self.replica_state:
+            descriptions.append(
+                f"Include replicas whose state is '{self.replica_state}'"
+            )
+        if self.exclude_replica_state:
+            descriptions.append(
+                f"Exclude replicas whose state is '{self.exclude_replica_state}'"
+            )
+        return descriptions

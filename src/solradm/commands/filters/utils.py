@@ -1,9 +1,11 @@
 import functools
 import inspect
+import re
 
 import rich
 import typer
 from rich.panel import Panel
+from rich.table import Table
 
 import solradm.api.utils
 from solradm.api.state import get_collections
@@ -27,13 +29,22 @@ def with_dry_run(func):
     return wrapper
 
 
-def with_cluster_state(*filter_classes, allow_empty: bool = False):
+def _friendly_filter_name(filter_instance) -> str:
+    name = filter_instance.__class__.__name__
+    if name.endswith("Filter"):
+        name = name[:-6]
+    pretty = re.sub(r"(?<!^)(?=[A-Z])", " ", name).strip()
+    return pretty or filter_instance.__class__.__name__
+
+
+def with_cluster_state(*filter_classes, allow_empty: bool = False, show_filter_explanations: bool = False):
     """
     Decorator that automatically fetches ClusterState and optionally applies filters.
 
     Args:
         *filter_classes: Optional filter classes to apply to the cluster state
         allow_empty: Allow decorated command to run even if no collections match
+        show_filter_explanations: When True, print a summary of the active filters before executing
     """
 
     def decorator(func):
@@ -71,7 +82,7 @@ def with_cluster_state(*filter_classes, allow_empty: bool = False):
                 filter_instance = filter_class(**filter_params)
                 filter_instance.init()
 
-                if any(filter_params.values()):
+                if any(value is not None for value in filter_params.values()):
                     filter_instances.append(filter_instance)
             try:
                 cluster_state = get_collections()
@@ -80,6 +91,30 @@ def with_cluster_state(*filter_classes, allow_empty: bool = False):
 
             for filter_instance in filter_instances:
                 cluster_state = filter_instance.apply(cluster_state)
+
+            if show_filter_explanations:
+                explanation_rows = []
+                for filter_instance in filter_instances:
+                    for explanation in filter_instance.describe():
+                        if explanation:
+                            explanation_rows.append(
+                                (_friendly_filter_name(filter_instance), explanation)
+                            )
+
+                if explanation_rows:
+                    table = Table(
+                        title="Active filters",
+                        header_style="bold magenta",
+                        show_lines=False,
+                    )
+                        
+                    table.add_column("Filter", style="cyan", no_wrap=True)
+                    table.add_column("Explanation", style="green")
+
+                    for filter_name, explanation in explanation_rows:
+                        table.add_row(filter_name, explanation)
+
+                    rich.print(table)
 
             if len(cluster_state) == 0:
                 if allow_empty and not filter_instances:
