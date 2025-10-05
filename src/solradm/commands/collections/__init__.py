@@ -4,7 +4,7 @@ import os
 import re
 from collections import Counter
 from pathlib import Path
-from typing import List
+from typing import Iterable, List, Sequence
 
 import rich
 import typer
@@ -45,15 +45,98 @@ app = AsyncTyper()
 add_verbosity_option(app)
 
 
-@app.async_command(help="Remove replicas for filtered collections")
+def _compile_node_patterns(patterns: Sequence[str] | None, option_display: str) -> list[re.Pattern[str]]:
+    compiled: list[re.Pattern[str]] = []
+    for pattern in patterns or []:
+        try:
+            compiled.append(re.compile(pattern))
+        except re.error as exc:
+            raise typer.BadParameter(
+                f"Invalid regular expression for {option_display} '{pattern}': {exc}"
+            ) from exc
+    return compiled
+
+
+def _select_nodes(
+        available_nodes: Iterable[str],
+        include_patterns: Sequence[str] | None,
+        exclude_patterns: Sequence[str] | None,
+) -> list[str]:
+    nodes = list(available_nodes)
+    include_regexes = _compile_node_patterns(include_patterns, "--node")
+    exclude_regexes = _compile_node_patterns(exclude_patterns, "--exclude-node")
+
+    def matches(node: str) -> bool:
+        if include_regexes and not any(regex.search(node) for regex in include_regexes):
+            return False
+        if exclude_regexes and any(regex.search(node) for regex in exclude_regexes):
+            return False
+        return True
+
+    return sorted({node for node in nodes if matches(node)})
+
+
+@app.async_command(help=(
+    "Remove replicas for filtered collections.\n\n"
+    "Examples:\n"
+    "  solradm coll depopulate --collection '^logs-' --replica-state down --dry\n"
+    "  solradm coll depopulate --collection '^metrics$' --shards 1-3 --replica-type leader --node 'solr0[12]'\n"
+    "  solradm coll depopulate --collection '^analytics$' --replica-position 2 --exclude-node 'solr-backup'"
+))
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def depopulate(
-        cluster_state: List[Collection]
+        cluster_state: List[Collection],
+        node: List[str] | None = typer.Option(
+            None,
+            "--node",
+            help="Regex to select nodes",
+            autocompletion=node_names,
+        ),
+        exclude_node: List[str] | None = typer.Option(
+            None,
+            "--exclude-node",
+            help="Regex to exclude nodes",
+            autocompletion=node_names,
+        ),
 ):
     """Remove replicas from the selected collections."""
 
     replicas = get_replicas(cluster_state)
+
+    if node or exclude_node:
+        selected_nodes = _select_nodes(
+            [replica.node_name for replica in replicas if replica.node_name],
+            node,
+            exclude_node,
+        )
+
+        if not selected_nodes:
+            rich.print("[error] ❌ No nodes match the given selectors")
+            raise typer.Exit(1)
+
+        filtered_collections: list[Collection] = []
+        filtered_replicas: list[Replica] = []
+        for coll in cluster_state:
+            new_shards: list[Shard] = []
+            for shard in coll.shards:
+                new_replicas = [
+                    replica for replica in shard.replicas if replica.node_name in selected_nodes
+                ]
+                if new_replicas:
+                    shard.replicas = new_replicas
+                    new_shards.append(shard)
+                    filtered_replicas.extend(new_replicas)
+            if new_shards:
+                coll.shards = new_shards
+                filtered_collections.append(coll)
+
+        cluster_state = filtered_collections
+        replicas = filtered_replicas
+
+        if not replicas:
+            rich.print("[error] ❌ No replicas match the given node selectors")
+            raise typer.Exit(1)
 
     table = Table(title="Cluster State", header_style="bold magenta")
     table.add_column("Collection", style="cyan")
@@ -108,7 +191,12 @@ async def depopulate(
     await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
 
 
-@app.async_command(help="Add replicas to a collection across selected nodes")
+@app.async_command(help=(
+    "Add replicas to a collection across selected nodes.\n\n"
+    "Examples:\n"
+    "  solradm coll populate --collection '^logs-' --shards 1-3 --node 'solr0[12]'\n"
+    "  solradm coll populate --collection '^logs-' --exclude-shards 4-6 --node 'solr0[0-4]' --exclude-node 'solr03' --skip-checks --dry"
+))
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter)
 async def populate(
@@ -138,17 +226,7 @@ async def populate(
 
     data_nodes = get_nodes_by_role("data").get("on", [])
 
-    include_patterns = [re.compile(p) for p in node] if node else []
-    exclude_patterns = [re.compile(p) for p in exclude_node] if exclude_node else []
-
-    def match_node(n: str) -> bool:
-        if include_patterns and not any(p.search(n) for p in include_patterns):
-            return False
-        if exclude_patterns and any(p.search(n) for p in exclude_patterns):
-            return False
-        return True
-
-    selected_nodes = sorted([n for n in data_nodes if match_node(n)])
+    selected_nodes = _select_nodes(data_nodes, node, exclude_node)
 
     if not selected_nodes:
         rich.print("[error] ❌ No nodes match the given selectors")
@@ -229,7 +307,12 @@ async def populate(
     await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
 
 
-@app.async_command(help="Create a new collection")
+@app.async_command(help=(
+    "Create a new collection.\n\n"
+    "Examples:\n"
+    "  solradm coll create search --shards 4 --conf search-config\n"
+    "  solradm coll create metrics --shards 6 --upload-conf ./configs/metrics --populate --node 'solr0[1-3]' --dry"
+))
 @with_dry_run
 async def create(
         name: str = typer.Argument(..., help="Name of the collection"),
@@ -310,7 +393,13 @@ async def delete(
         rich.print(f"[success]✅  Deleted collection {name}!")
 
 
-@app.async_command(help="Reload cores for filtered replicas")
+@app.async_command(help=(
+    "Reload cores for filtered replicas.\n\n"
+    "Examples:\n"
+    "  solradm coll reload --collection '^logs-' --dry\n"
+    "  solradm coll reload --collection '^logs-' --shards 1-2 --replica-type leader --replica-state active\n"
+    "  solradm coll reload --collection '^analytics$' --replica-position 1 --exclude-replica-type follower --coordinators true"
+))
 @with_dry_run
 @with_cluster_state(
     CollectionNameFilter,
