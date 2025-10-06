@@ -61,7 +61,7 @@ async def take(
             [replica.shard.collection.name, replica.shard.name, replica.core],
             asyncio.create_task(send_request(get_overseer_leader(), f"/{replica.core}/replication",
                                              params={**global_params, "command": "backup",
-                                                     "location": base_location / f"{replica.shard.collection.name}/{replica.shard.name}"}
+                                                     "location": str(base_location / f"{replica.shard.collection.name}/{replica.shard.name}")}
                                              ),
                                 ))
         for replica in replicas
@@ -93,7 +93,7 @@ async def restore(
             [replica.shard.collection.name, replica.shard.name, replica.core],
             asyncio.create_task(send_request(get_overseer_leader(), f"/{replica.core}/replication",
                                              params={"command": "restore",
-                                                     "location": backups_path / replica.shard.name}),
+                                                     "location": str(backups_path / replica.shard.name)}),
                                 ))
         for replica in replicas
     ]
