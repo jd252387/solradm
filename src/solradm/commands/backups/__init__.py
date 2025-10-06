@@ -1,6 +1,6 @@
 import asyncio
 from pathlib import PurePosixPath
-from typing import List, Collection
+from typing import Collection, List
 
 import rich
 import typer
@@ -22,6 +22,8 @@ from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
+from rich.filesize import decimal as human_readable_size
+from rich.table import Table
 
 app = AsyncTyper()
 add_verbosity_option(app)
@@ -97,3 +99,135 @@ async def restore(
     ]
     metatasks = MultiMetaTask(["collection", "shard", "core"], tasks)
     await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
+
+
+@app.async_command(name="restore-status", help="Show restore progress for the filtered replicas")
+@with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
+async def restore_status(cluster_state: List[Collection]):
+    """Display restore status and on-disk usage for replicas currently restoring."""
+
+    replicas = validate_num_replicas(get_replicas(cluster_state))
+
+    status_tasks = [
+        asyncio.create_task(
+            send_request(
+                get_overseer_leader(),
+                f"/{replica.core}/replication",
+                params={"command": "restorestatus"},
+            )
+        )
+        for replica in replicas
+    ]
+    responses = await asyncio.gather(*status_tasks, return_exceptions=True)
+
+    restoring_replicas = []
+    for replica, response in zip(replicas, responses):
+        if isinstance(response, Exception):
+            rich.print(
+                f"[warning]⚠️  Failed to fetch restore status for core {replica.core}: {response}"
+            )
+            continue
+
+        status_payload = response.get("restorestatus") or {}
+        status_value = status_payload.get("status")
+        if not status_value or status_value.lower() != "in progress":
+            continue
+
+        restoring_replicas.append((replica, status_payload))
+
+    if not restoring_replicas:
+        rich.print("[success]✅  No restores are currently in progress for the selected replicas.")
+        return
+
+    kube_loaded = False
+    try:
+        kube_loaded = load_configured_kubecontext()
+    except Exception as exc:  # pragma: no cover - defensive logging
+        rich.print(f"[warning]⚠️  Failed to load configured kubecontext: {exc}")
+
+    restore_rows = []
+    for replica, payload in restoring_replicas:
+        pod_name = None
+        latest_dir = None
+        latest_size: int | None = None
+        if kube_loaded:
+            try:
+                pods = find_pods_by_node_name(replica.node_name)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                rich.print(
+                    f"[warning]⚠️  Failed to resolve pod for node {replica.node_name}: {exc}"
+                )
+                pods = []
+
+            if not pods:
+                rich.print(
+                    f"[warning]⚠️  No pod found for node {replica.node_name}; unable to inspect restore directory"
+                )
+            else:
+                pod_name = pods[0].metadata.name
+                command = (
+                    f"latest=$(ls -1dt /var/solr/data/{replica.core}/data/restore* 2>/dev/null | head -n 1); "
+                    "if [ -z \"$latest\" ]; then echo 'MISSING'; "
+                    "else size=$(du -sb \"$latest\" 2>/dev/null | awk '{print $1}'); "
+                    "if [ -z \"$size\" ]; then size=0; fi; echo \"$size $latest\"; fi"
+                )
+                try:
+                    output = await asyncio.to_thread(run_command_in_pod, pod_name, command)
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    rich.print(
+                        f"[warning]⚠️  Failed to inspect restore directory for core {replica.core} on {pod_name}: {exc}"
+                    )
+                else:
+                    parsed = output.strip()
+                    if parsed and parsed != "MISSING":
+                        parts = parsed.split(maxsplit=1)
+                        size_str = parts[0]
+                        if size_str.isdigit():
+                            latest_size = int(size_str)
+                            latest_dir = parts[1] if len(parts) > 1 else None
+                        else:
+                            latest_dir = parts[-1]
+
+        restore_rows.append(
+            {
+                "replica": replica,
+                "payload": payload,
+                "pod_name": pod_name,
+                "latest_dir": latest_dir,
+                "latest_size": latest_size,
+            }
+        )
+
+    restore_rows.sort(
+        key=lambda entry: entry["latest_size"] if entry["latest_size"] is not None else -1,
+        reverse=True,
+    )
+
+    table = Table(title="Restore progress", header_style="bold magenta")
+    table.add_column("Core", style="cyan", no_wrap=True)
+    table.add_column("Node", style="green")
+    table.add_column("Pod", style="green")
+    table.add_column("Latest restore", style="yellow")
+    table.add_column("Size", justify="right", style="magenta")
+    table.add_column("Progress", style="white")
+
+    for row in restore_rows:
+        details = row["payload"].get("details") or {}
+        progress = details.get("fileListDownloaded") or row["payload"].get("status") or "In Progress"
+        size_text = "—"
+        if row["latest_size"] is not None:
+            try:
+                size_text = human_readable_size(row["latest_size"])
+            except Exception:  # pragma: no cover - formatting fallback
+                size_text = str(row["latest_size"])
+
+        table.add_row(
+            row["replica"].core,
+            row["replica"].node_name,
+            row["pod_name"] or "—",
+            row["latest_dir"] or "—",
+            size_text,
+            progress,
+        )
+
+    rich.print(table)
