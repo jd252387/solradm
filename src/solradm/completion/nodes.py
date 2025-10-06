@@ -1,6 +1,7 @@
 from typing import List
 
-from .utils import _filter
+from . import autocompletion_error
+from .utils import _filter_starts_with
 
 
 def node_names(ctx, args: List[str], incomplete: str) -> List[str]:
@@ -13,6 +14,6 @@ def node_names(ctx, args: List[str], incomplete: str) -> List[str]:
             for arr in role_nodes.values():
                 nodes.update(arr)
         options = sorted(nodes)
-    except Exception:
-        options = []
-    return _filter(options, incomplete)
+    except Exception as e:
+        return autocompletion_error(incomplete, e)
+    return _filter_starts_with(options, incomplete)

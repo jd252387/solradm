@@ -1,6 +1,7 @@
 from typing import List
 
-from .utils import _filter
+from . import autocompletion_error
+from .utils import _filter_starts_with
 
 
 def context_names(ctx, args: List[str], incomplete: str) -> List[str]:
@@ -8,9 +9,9 @@ def context_names(ctx, args: List[str], incomplete: str) -> List[str]:
         from solradm.config import settings
 
         names = [c.name for c in settings.contexts.available]
-    except Exception:
-        names = []
-    return _filter(sorted(names), incomplete)
+    except Exception as e:
+        return autocompletion_error(incomplete, e)
+    return _filter_starts_with(sorted(names), incomplete)
 
 
 def kube_contexts(ctx, args: List[str], incomplete: str) -> List[str]:
@@ -19,9 +20,9 @@ def kube_contexts(ctx, args: List[str], incomplete: str) -> List[str]:
 
         contexts, _ = list_kube_config_contexts()
         names = [c["name"] for c in contexts]
-    except Exception:
-        names = []
-    return _filter(sorted(names), incomplete)
+    except Exception as e:
+        return autocompletion_error(incomplete, e)
+    return _filter_starts_with(sorted(names), incomplete)
 
 
 def context_repo_paths(ctx, args: List[str], incomplete: str) -> List[str]:
@@ -29,6 +30,6 @@ def context_repo_paths(ctx, args: List[str], incomplete: str) -> List[str]:
         from solradm.config import settings
 
         names = settings.get("context_repositories") or []
-    except Exception:
-        names = []
-    return _filter(sorted(names), incomplete)
+    except Exception as e:
+        return autocompletion_error(incomplete, e)
+    return _filter_starts_with(sorted(names), incomplete)

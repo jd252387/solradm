@@ -1,6 +1,7 @@
 from typing import List
 
-from .utils import _filter
+from . import autocompletion_error
+from .utils import _filter_starts_with
 
 
 def config_names(ctx, args: List[str], incomplete: str) -> List[str]:
@@ -12,6 +13,6 @@ def config_names(ctx, args: List[str], incomplete: str) -> List[str]:
             options = sorted(zk.get_children("/configs"))
         else:
             options = []
-    except Exception:
-        options = []
-    return _filter(options, incomplete)
+    except Exception as e:
+        return autocompletion_error(incomplete, e)
+    return _filter_starts_with(options, incomplete)

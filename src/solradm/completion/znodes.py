@@ -1,6 +1,7 @@
 from typing import List
 
-from .utils import _filter
+from . import autocompletion_error
+from .utils import _filter_starts_with
 
 
 def znode_paths(ctx, args: List[str], incomplete: str) -> List[str]:
@@ -11,6 +12,6 @@ def znode_paths(ctx, args: List[str], incomplete: str) -> List[str]:
         parent = path.rsplit('/', 1)[0] if '/' in path else '/'
         children = zk.get_children(parent)
         opts = [f"{parent.rstrip('/')}/{c}" for c in children] + ["/"]
-    except Exception:
-        opts = []
-    return _filter(sorted(opts), path)
+    except Exception as e:
+        return autocompletion_error(incomplete, e)
+    return _filter_starts_with(sorted(opts), path)

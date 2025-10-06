@@ -1,7 +1,7 @@
 import re
 from typing import List
 
-from .utils import _filter
+from .utils import _filter_starts_with
 
 
 def pod_names(ctx, args: List[str], incomplete: str) -> List[str]:
@@ -14,7 +14,7 @@ def pod_names(ctx, args: List[str], incomplete: str) -> List[str]:
         names = [p.metadata.name for p in pods]
     except Exception:
         names = []
-    return _filter(sorted(names), incomplete)
+    return _filter_starts_with(sorted(names), incomplete)
 
 
 def container_names(ctx, args: List[str], incomplete: str) -> List[str]:
@@ -28,7 +28,7 @@ def container_names(ctx, args: List[str], incomplete: str) -> List[str]:
         names = sorted(containers)
     except Exception:
         names = []
-    return _filter(names, incomplete)
+    return _filter_starts_with(names, incomplete)
 
 
 def workload_names(ctx, args: List[str], incomplete: str) -> List[str]:
@@ -40,4 +40,4 @@ def workload_names(ctx, args: List[str], incomplete: str) -> List[str]:
         names = [d.metadata.name for d in deployments] + [s.metadata.name for s in statefulsets]
     except Exception:
         names = []
-    return _filter(sorted(names), incomplete)
+    return _filter_starts_with(sorted(names), incomplete)
