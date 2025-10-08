@@ -981,7 +981,9 @@ def _get_collection_from_context(context_zk: str, collection: str) -> Collection
 
 @app.async_command(
     help="Reindex documents from a source collection into a target collection using the dataimport handler")
+@with_cluster_state()
 async def reindex(
+        cluster_state: List[Collection],
         source_collection: str = typer.Option(
             ..., "--source", help="Collection to reindex from", autocompletion=source_collection_names
         ),
@@ -989,46 +991,82 @@ async def reindex(
                                               autocompletion=collection_names),
         source_context: str | None = typer.Option(None, "--source-context", help="Context of the source collection",
                                                   autocompletion=context_names),
+        source_zk: str | None = typer.Option(
+            None,
+            "--source-zk",
+            help="ZooKeeper host where the source collection resides",
+        ),
+        target_zk: str | None = typer.Option(
+            None,
+            "--target-zk",
+            help="ZooKeeper host where the target collection resides",
+        ),
+        target_context: str | None = typer.Option(
+            None,
+            "--target-context",
+            help="Context of the target collection",
+            autocompletion=context_names,
+        ),
         handler: str = typer.Option("/dataimport", "--handler", help="Path of the dataimport handler"),
-        fq: List[str] | None = typer.Option(None, "--fq", help="Filter query to pass to the dataimport handler"),
+        fq: tuple[str, ...] | None = typer.Option(
+            None,
+            "--fq",
+            help="Filter query to pass to the dataimport handler"
+        ),
         source_shard: List[str] | None = typer.Option(None, "--source-shard", help="Source shards to reindex"),
 ):
-    current_ctx = get_current_context()
-    cluster_state = get_collections()
-    target_coll = next((c for c in cluster_state if c.name == target_collection), None)
+    if (source_context and source_zk) or (target_context and target_zk):
+        rich.print("[error]❌  Context and ZooKeeper overrides are mutually exclusive")
+        raise typer.Exit(1)
+
+    resolved_source_context = next((c for c in settings.contexts.available if c.name == source_context), None) if source_context else None
+    resolved_target_context = next((c for c in settings.contexts.available if c.name == target_context), None) if target_context else None
+
+    if source_context and not resolved_source_context:
+        rich.print(f"[error]❌  Source context {source_context} not found")
+        raise typer.Exit(1)
+    if target_context and not resolved_target_context:
+        rich.print(f"[error]❌  Target context {target_context} not found")
+        raise typer.Exit(1)
+
+    target_coll = (
+        _get_collection_from_context(target_zk, target_collection)
+        if target_zk else
+        _get_collection_from_context(resolved_target_context.zk, target_collection)
+        if resolved_target_context else
+        next((c for c in cluster_state if c.name == target_collection), None)
+    )
     if not target_coll:
         rich.print(f"[error]❌  Target collection {target_collection} not found")
         raise typer.Exit(1)
 
-    if source_context:
-        ctx = next((c for c in settings.contexts.available if c.name == source_context), None)
-        if not ctx:
-            rich.print(f"[error]❌  Source context {source_context} not found")
-            raise typer.Exit(1)
-        source_coll = _get_collection_from_context(ctx.zk, source_collection)
-        source_zk = ctx.zk
-    else:
-        source_coll = next((c for c in cluster_state if c.name == source_collection), None)
-        if not source_coll:
-            rich.print(f"[error]❌  Source collection {source_collection} not found")
-            raise typer.Exit(1)
-        source_zk = current_ctx.zk
+    source_coll = (
+        _get_collection_from_context(source_zk, source_collection)
+        if source_zk else
+        _get_collection_from_context(resolved_source_context.zk, source_collection)
+        if resolved_source_context else
+        next((c for c in cluster_state if c.name == source_collection), None)
+    )
+    if not source_coll:
+        rich.print(f"[error]❌  Source collection {source_collection} not found")
+        raise typer.Exit(1)
 
-    src_shards = [s for s in source_coll.shards if not source_shard or s.name in source_shard]
+    src_shards = sorted(
+        (s for s in source_coll.shards if not source_shard or s.name in source_shard),
+        key=lambda s: s.name,
+    )
     if not src_shards:
         rich.print("[error]❌  No source shards matched")
         raise typer.Exit(1)
 
     tgt_shards = sorted(target_coll.shards, key=lambda s: s.name)
-    src_shards_sorted = sorted(src_shards, key=lambda s: s.name)
+    if not tgt_shards:
+        rich.print("[error]❌  Target collection has no shards")
+        raise typer.Exit(1)
 
     shard_map: dict[str, List[Shard]] = {}
-    if len(tgt_shards) >= len(src_shards_sorted):
-        for idx, src in enumerate(src_shards_sorted):
-            shard_map.setdefault(tgt_shards[idx].name, []).append(src)
-    else:
-        for idx, src in enumerate(src_shards_sorted):
-            shard_map.setdefault(tgt_shards[idx % len(tgt_shards)].name, []).append(src)
+    for idx, shard in enumerate(src_shards):
+        shard_map.setdefault(tgt_shards[idx % len(tgt_shards)].name, []).append(shard)
 
     leaders = {shard.name: next((r for r in shard.replicas if r.leader), None) for shard in target_coll.shards}
     busy = []
@@ -1064,22 +1102,31 @@ async def reindex(
 
     with Progress(SpinnerColumn(), TextColumn("{task.description}"), BarColumn(), TimeRemainingColumn()) as progress:
 
-        async def run_target(shard_name: str, src_list: List[Shard]):
+        async def run_target(shard_name: str, shards: List[Shard]):
             leader = leaders[shard_name]
             task_id = progress.add_task(shard_name, total=100)
-            for src in src_list:
+            for shard in shards:
+                source_replica = (
+                    next((r for r in shard.replicas if r.leader), None)
+                    or next((r for r in shard.replicas if r.base_url and r.core), None)
+                )
+                if not source_replica or not source_replica.base_url or not source_replica.core:
+                    rich.print(f"[error]❌  No usable replica found for source shard {shard.name}")
+                    raise typer.Exit(1)
+                source_core_url = (
+                    get_host_with_scheme(source_replica.base_url, "http").rstrip("/")
+                    + f"/{source_replica.core}"
+                )
                 params = {
                     "command": "full-import",
                     "clean": "false",
                     "commit": "true",
                     "distrib": "false",
                     "wt": "json",
-                    "sourceZkHost": source_zk,
-                    "sourceCollection": source_collection,
-                    "sourceShard": src.name,
+                    "url": source_core_url,
                 }
                 if fq:
-                    params["fq"] = fq
+                    params["fq"] = ",".join(fq)
                 await send_request(leader.base_url, f"/{target_collection}{handler}", params=params)
 
                 while True:
