@@ -3,8 +3,9 @@ import json
 import os
 import re
 from collections import Counter
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import Iterable, Iterator, List, Sequence
 
 import rich
 import typer
@@ -966,8 +967,8 @@ def _parse_status(json_resp):
     return processed or 0, total, json_resp.get("status")
 
 
-def _get_collection_from_context(context_zk: str, collection: str) -> Collection:
-    zk = KazooClient(hosts=context_zk, timeout=5)
+def _get_collection_from_zk(zk: str, collection: str) -> Collection:
+    zk = KazooClient(hosts=zk, timeout=5)
     zk.start()
     try:
         data, _ = zk.get(f"/collections/{collection}/state.json")
@@ -977,6 +978,102 @@ def _get_collection_from_context(context_zk: str, collection: str) -> Collection
     state = json.loads(data.decode("utf-8"))[collection]
     state["name"] = collection
     return Collection.model_validate(state)
+
+
+def _resolve_context(context_name: str | None, *, role: str):
+    if not context_name:
+        return None
+    context = next((c for c in settings.contexts.available if c.name == context_name), None)
+    if context:
+        return context
+    rich.print(f"[error]❌  {role} context {context_name} not found")
+    raise typer.Exit(1)
+
+
+def _resolve_collection(
+        collection_name: str,
+        *,
+        cluster_state: Sequence[Collection],
+        context,
+        zk_override: str | None,
+        role: str,
+) -> Collection:
+    if zk_override:
+        return _get_collection_from_zk(zk_override, collection_name)
+    if context:
+        return _get_collection_from_zk(context.zk, collection_name)
+    collection = next((c for c in cluster_state if c.name == collection_name), None)
+    if collection:
+        return collection
+    rich.print(f"[error]❌  {role} collection {collection_name} not found!")
+    raise typer.Exit(1)
+
+
+def _map_source_to_targets(source_shards: Sequence[Shard], target_shards: Sequence[Shard]) -> dict[str, List[Shard]]:
+    shard_map: dict[str, List[Shard]] = {}
+    for idx, shard in enumerate(source_shards):
+        target_name = target_shards[idx % len(target_shards)].name
+        shard_map.setdefault(target_name, []).append(shard)
+    return shard_map
+
+
+def _leaders_by_shard(shards: Sequence[Shard]) -> dict[str, Replica | None]:
+    return {shard.name: next((r for r in shard.replicas if r.leader), None) for shard in shards}
+
+
+@contextmanager
+def _dataimport_progress() -> Iterator[Progress]:
+    columns = (
+        SpinnerColumn(),
+        TextColumn("{task.description}"),
+        BarColumn(),
+        TimeRemainingColumn(),
+    )
+    with Progress(*columns) as progress:
+        yield progress
+
+
+async def _watch_dataimport_status(
+        progress: Progress,
+        task_id: int,
+        base_url: str,
+        dataimport_path: str,
+) -> None:
+    while True:
+        stat = await send_request(
+            base_url,
+            dataimport_path,
+            params={"command": "status", "wt": "json"},
+        )
+        done, total, status = _parse_status(stat)
+        if total:
+            progress.update(task_id, total=total, completed=done)
+        else:
+            progress.update(task_id, completed=done)
+        if status != "busy":
+            break
+        await asyncio.sleep(1)
+
+
+async def _detect_busy_shards(
+        leaders: dict[str, Replica | None],
+        dataimport_path: str,
+) -> list[tuple[str, Replica]]:
+    busy: list[tuple[str, Replica]] = []
+    for name, replica in leaders.items():
+        if replica is None:
+            continue
+        if not replica.base_url:
+            rich.print(f"[error]❌  Leader for shard {name} is missing a base URL")
+            raise typer.Exit(1)
+        status = await send_request(
+            replica.base_url,
+            dataimport_path,
+            params={"command": "status", "wt": "json"},
+        )
+        if status.get("status") == "busy":
+            busy.append((name, replica))
+    return busy
 
 
 @app.async_command(
@@ -1019,37 +1116,23 @@ async def reindex(
         rich.print("[error]❌  Context and ZooKeeper overrides are mutually exclusive")
         raise typer.Exit(1)
 
-    resolved_source_context = next((c for c in settings.contexts.available if c.name == source_context), None) if source_context else None
-    resolved_target_context = next((c for c in settings.contexts.available if c.name == target_context), None) if target_context else None
+    resolved_source_context = _resolve_context(source_context, role="Source")
+    resolved_target_context = _resolve_context(target_context, role="Target")
 
-    if source_context and not resolved_source_context:
-        rich.print(f"[error]❌  Source context {source_context} not found")
-        raise typer.Exit(1)
-    if target_context and not resolved_target_context:
-        rich.print(f"[error]❌  Target context {target_context} not found")
-        raise typer.Exit(1)
-
-    target_coll = (
-        _get_collection_from_context(target_zk, target_collection)
-        if target_zk else
-        _get_collection_from_context(resolved_target_context.zk, target_collection)
-        if resolved_target_context else
-        next((c for c in cluster_state if c.name == target_collection), None)
+    target_coll = _resolve_collection(
+        target_collection,
+        cluster_state=cluster_state,
+        context=resolved_target_context,
+        zk_override=target_zk,
+        role="Target",
     )
-    if not target_coll:
-        rich.print(f"[error]❌  Target collection {target_collection} not found")
-        raise typer.Exit(1)
-
-    source_coll = (
-        _get_collection_from_context(source_zk, source_collection)
-        if source_zk else
-        _get_collection_from_context(resolved_source_context.zk, source_collection)
-        if resolved_source_context else
-        next((c for c in cluster_state if c.name == source_collection), None)
+    source_coll = _resolve_collection(
+        source_collection,
+        cluster_state=cluster_state,
+        context=resolved_source_context,
+        zk_override=source_zk,
+        role="Source",
     )
-    if not source_coll:
-        rich.print(f"[error]❌  Source collection {source_collection} not found")
-        raise typer.Exit(1)
 
     src_shards = sorted(
         (s for s in source_coll.shards if not source_shard or s.name in source_shard),
@@ -1064,48 +1147,33 @@ async def reindex(
         rich.print("[error]❌  Target collection has no shards")
         raise typer.Exit(1)
 
-    shard_map: dict[str, List[Shard]] = {}
-    for idx, shard in enumerate(src_shards):
-        shard_map.setdefault(tgt_shards[idx % len(tgt_shards)].name, []).append(shard)
+    shard_map = _map_source_to_targets(src_shards, tgt_shards)
+    leaders = _leaders_by_shard(tgt_shards)
+    dataimport_path = f"/{target_collection}{handler}"
 
-    leaders = {shard.name: next((r for r in shard.replicas if r.leader), None) for shard in target_coll.shards}
-    busy = []
-    for name, rep in leaders.items():
-        if rep is None:
-            continue
-        status = await send_request(rep.base_url, f"/{target_collection}{handler}",
-                                    params={"command": "status", "wt": "json"})
-        if status.get("status") == "busy":
-            busy.append((name, rep))
-
-    if busy:
+    busy_shards = await _detect_busy_shards(leaders, dataimport_path)
+    if busy_shards:
         rich.print("[warning]⚠️  Dataimport already running on some shards. Monitoring progress...")
-        with Progress(SpinnerColumn(), TextColumn("{task.description}"), BarColumn(),
-                      TimeRemainingColumn()) as progress:
-            tasks = {name: progress.add_task(name, total=100) for name, _ in busy}
-
-            async def monitor(replica: Replica, name: str):
-                while True:
-                    stat = await send_request(replica.base_url, f"/{target_collection}{handler}",
-                                              params={"command": "status", "wt": "json"})
-                    done, total, st = _parse_status(stat)
-                    if total:
-                        progress.update(tasks[name], total=total, completed=done)
-                    else:
-                        progress.update(tasks[name], completed=done)
-                    if st != "busy":
-                        break
-                    await asyncio.sleep(1)
-
-            await asyncio.gather(*(monitor(rep, name) for name, rep in busy))
+        with _dataimport_progress() as progress:
+            tasks = {name: progress.add_task(name, total=100) for name, _ in busy_shards}
+            await asyncio.gather(
+                *(
+                    _watch_dataimport_status(progress, tasks[name], replica.base_url, dataimport_path)
+                    for name, replica in busy_shards
+                )
+            )
         raise typer.Exit(1)
 
-    with Progress(SpinnerColumn(), TextColumn("{task.description}"), BarColumn(), TimeRemainingColumn()) as progress:
+    fq_param = ",".join(fq) if fq else None
 
-        async def run_target(shard_name: str, shards: List[Shard]):
-            leader = leaders[shard_name]
-            task_id = progress.add_task(shard_name, total=100)
-            for shard in shards:
+    with _dataimport_progress() as progress:
+        async def run_target(target_name: str, source_shards_for_target: List[Shard]):
+            leader = leaders.get(target_name)
+            if not leader or not leader.base_url:
+                rich.print(f"[error]❌  No leader with a base URL found for target shard {target_name}")
+                raise typer.Exit(1)
+            task_id = progress.add_task(target_name, total=100)
+            for shard in source_shards_for_target:
                 source_replica = (
                     next((r for r in shard.replicas if r.leader), None)
                     or next((r for r in shard.replicas if r.base_url and r.core), None)
@@ -1125,21 +1193,10 @@ async def reindex(
                     "wt": "json",
                     "url": source_core_url,
                 }
-                if fq:
-                    params["fq"] = ",".join(fq)
-                await send_request(leader.base_url, f"/{target_collection}{handler}", params=params)
-
-                while True:
-                    stat = await send_request(leader.base_url, f"/{target_collection}{handler}",
-                                              params={"command": "status", "wt": "json"})
-                    done, total, st = _parse_status(stat)
-                    if total:
-                        progress.update(task_id, total=total, completed=done)
-                    else:
-                        progress.update(task_id, completed=done)
-                    if st != "busy":
-                        break
-                    await asyncio.sleep(1)
+                if fq_param:
+                    params["fq"] = fq_param
+                await send_request(leader.base_url, dataimport_path, params=params)
+                await _watch_dataimport_status(progress, task_id, leader.base_url, dataimport_path)
             progress.update(task_id, completed=progress.tasks[task_id].total or progress.tasks[task_id].completed)
 
         await asyncio.gather(*(run_target(name, shards) for name, shards in shard_map.items()))
