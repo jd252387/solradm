@@ -275,7 +275,7 @@ def upload(
                     continue
                 to_reload.add(col.name)
         if len(to_reload) > 0:
-            from solradm.commands.collections import reload as reload_cmd
+            from solradm.commands.collections.maintenance import reload as reload_cmd
             asyncio.run(
                 reload_cmd(
                     collection_name_filter=

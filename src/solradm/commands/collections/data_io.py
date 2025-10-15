@@ -13,7 +13,7 @@ from solradm.api import get_session
 from solradm.api.models import Collection
 from solradm.api.state import get_nodes_by_role
 from solradm.api.utils import get_host_with_scheme, send_request
-from solradm.commands.collections.app import app
+from solradm.commands.collections import app
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
 from solradm.completion.collections import collection_names

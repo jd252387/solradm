@@ -13,7 +13,7 @@ import solradm.api.utils as api_utils
 from solradm.api.models import Collection, Replica
 from solradm.api.state import get_nodes_by_role
 from solradm.api.utils import get_replicas, send_request, validate_num_replicas
-from solradm.commands.collections.app import app
+from solradm.commands.collections import app
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
 from solradm.commands.filters.replica_state_filter import ReplicaStateFilter

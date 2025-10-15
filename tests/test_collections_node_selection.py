@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 import typer
 
+from solradm.commands.collections.lifecycle import _select_nodes
+
 _test_config_home = Path(tempfile.gettempdir()) / "solradm-test-config"
 (_test_config_home / "solradm").mkdir(parents=True, exist_ok=True)
 settings_file = _test_config_home / "solradm" / "settings.yaml"
@@ -12,9 +14,6 @@ if not settings_file.exists():
     settings_file.write_text("contexts:\n  available: []\n  current: {name: default}\n")
 
 os.environ.setdefault("XDG_CONFIG_HOME", str(_test_config_home))
-
-from solradm.commands.collections import _select_nodes
-
 
 def test_select_nodes_returns_sorted_unique_when_no_filters():
     nodes = ["solr02", "solr01", "solr01"]

@@ -12,7 +12,7 @@ from watchdog.events import FileSystemEventHandler
 from solradm.api import get_initialized_session
 from solradm.api.state import get_collections
 from solradm.api.utils import get_collections_using_config
-from solradm.commands.collections import reload
+from solradm.commands.collections.maintenance import reload
 from solradm.commands.zk.utils import create_or_update, get_relative_znode_path
 
 
