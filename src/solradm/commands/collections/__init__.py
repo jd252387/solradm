@@ -1,15 +1,21 @@
-from __future__ import annotations
+from async_typer import AsyncTyper
 
-from .app import app
+from solradm.commands.callbacks import add_verbosity_option
+from solradm.commands.collections import query, reindex
+from solradm.commands.collections.data_io import export_documents, import_documents
+from solradm.commands.collections.lifecycle import create, delete, depopulate, populate
+from solradm.commands.collections.maintenance import reload
 
-# Import command modules to register CLI subcommands when the package is loaded.
-# The imported modules attach commands to the shared Typer application via decorators.
-from . import data_io as _data_io  # noqa: F401
-from . import lifecycle as _lifecycle  # noqa: F401
-from . import maintenance as _maintenance  # noqa: F401
-from . import query as _query  # noqa: F401
-from . import reindex as _reindex  # noqa: F401
-from .lifecycle import _select_nodes
-from .maintenance import reload
 
-__all__ = ["app", "_select_nodes", "reload"]
+app = AsyncTyper()
+add_verbosity_option(app)
+
+app.command()(export_documents)
+app.command()(import_documents)
+app.command()(depopulate)
+app.command()(populate)
+app.command()(reload)
+app.command()(create)
+app.command()(delete)
+app.command()(query)
+app.command()(reindex)

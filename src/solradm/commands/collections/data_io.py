@@ -240,7 +240,7 @@ async def _send_commit_request(base: str, collection: str, soft_commit: bool) ->
 
 
 @app.async_command(help="Export documents from a collection to a file")
-async def export(
+async def export_documents(
     collection: str = typer.Argument(
         ..., help="Collection to export", autocompletion=collection_names
     ),
