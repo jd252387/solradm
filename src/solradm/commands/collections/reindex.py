@@ -191,7 +191,7 @@ async def reindex(
         autocompletion=context_names,
     ),
     handler: str = typer.Option("/dataimport", "--handler", help="Path of the dataimport handler"),
-    fq: tuple[str, ...] | None = typer.Option(
+    fq: tuple[str] | None = typer.Option(
         None,
         "--fq",
         help="Filter query to pass to the dataimport handler",
