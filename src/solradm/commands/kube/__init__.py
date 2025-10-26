@@ -34,6 +34,7 @@ from solradm.kube.utils import (
     run_command_in_pod,
     switch_current_kubecontext,
 )
+from solradm.utils import open_directory
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -342,30 +343,7 @@ def resume(
 @app.command(help="Open the directory containing kube state files")
 def dir():
     """Open the directory containing kube suspend/resume state files."""
-    import os
-    import subprocess
-    import platform
-
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-
-    system = platform.system()
-    try:
-        if system == "Darwin":  # macOS
-            subprocess.run(["open", str(STATE_DIR)], check=True)
-        elif system == "Linux":
-            subprocess.run(["xdg-open", str(STATE_DIR)], check=True)
-        elif system == "Windows":
-            os.startfile(STATE_DIR)
-        else:
-            rich.print(f"[yellow]⚠  Cannot open directory automatically on {system}")
-            rich.print(f"[yellow]   State directory: {STATE_DIR}")
-            raise typer.Exit(0)
-
-        rich.print(f"[success]✅  Opened state directory: {STATE_DIR}")
-    except Exception as e:
-        rich.print(f"[error] ❌ Failed to open directory: {e}")
-        rich.print(f"[yellow]   State directory: {STATE_DIR}")
-        raise typer.Exit(1)
+    open_directory(STATE_DIR)
 
 
 @app.command(help="Open OpenShift console for the current namespace")

@@ -1,6 +1,4 @@
 import json
-import subprocess
-import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -33,6 +31,7 @@ from solradm.kube.utils import (
     get_current_kubecontext_namespace,
     get_kubecontext,
 )
+from solradm.utils import open_directory
 from solradm.zk import get_client
 
 app = Typer()
@@ -130,12 +129,7 @@ def switch(
 @app.command()
 def open_config():
     """Open the configuration directory and highlight the settings file"""
-    if sys.platform.startswith("win"):
-        subprocess.run(["explorer", f"/select,{config_path}"])
-    elif sys.platform == "darwin":
-        subprocess.run(["open", "-R", str(config_path)])
-    else:
-        subprocess.run(["xdg-open", str(config_path.parent)])
+    open_directory(config_path, select_file=True)
 
 
 @repo_app.command("create")
@@ -237,12 +231,7 @@ def open_repo(
     if path_str not in repo_list:
         raise typer.BadParameter(f"Context repository {path} is not configured!")
 
-    if sys.platform.startswith("win"):
-        subprocess.run(["explorer", f"/select,{path}"])
-    elif sys.platform == "darwin":
-        subprocess.run(["open", "-R", str(path)])
-    else:
-        subprocess.run(["xdg-open", str(path.parent)])
+    open_directory(path, select_file=True)
 
 
 @app.command("config-dir")
