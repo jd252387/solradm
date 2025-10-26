@@ -4,6 +4,7 @@ import re
 import webbrowser
 from itertools import cycle
 from pathlib import Path
+from typing import Any
 
 import rich
 import typer
@@ -26,6 +27,7 @@ from solradm.config.util import get_current_context
 from solradm.exceptions.adm_exception import AdmException
 from solradm.kube.utils import (
     get_configured_kubecontext,
+    get_kubecontext,
     find_pods,
     find_pods_by_node_name,
     get_current_kubecontext_namespace,
@@ -38,7 +40,39 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 app = AsyncTyper()
 add_verbosity_option(app)
 
-STATE_FILE = Path(user_config_dir("solradm", "eclipse")) / "kube-scale-state.json"
+STATE_DIR = Path(user_config_dir("solradm", "eclipse")) / "kube-states"
+
+
+def get_state_file_path(kubecontext: str) -> Path:
+    """Get the state file path for a given kubecontext."""
+    # Sanitize the kubecontext name for use in filename
+    safe_name = re.sub(r'[^\w\-.]', '_', kubecontext)
+    return STATE_DIR / f"state-{safe_name}.json"
+
+
+def load_and_validate_kubecontext(kubecontext: str) -> tuple[Any, str]:
+    """
+    Load and validate a kubecontext by name.
+    Returns the context object and its namespace.
+    Raises AdmException if the context is invalid or has no namespace.
+    """
+    context = get_kubecontext(kubecontext)
+
+    if context is None:
+        raise AdmException(
+            f"Kubecontext '{kubecontext}' could not be found in your kubeconfig."
+        )
+
+    namespace = context["context"].get("namespace")
+    if not namespace:
+        raise AdmException(
+            f"Kubecontext '{kubecontext}' is missing a namespace configuration."
+        )
+
+    # Load the kubeconfig for this context
+    switch_current_kubecontext(context, namespace=namespace)
+
+    return context, namespace
 
 
 def load_configured_kubecontext(client_configuration: Configuration = None) -> bool:
@@ -199,13 +233,24 @@ async def disk(
 
 @app.command(help="Scale workloads matching a regex down to zero and save their replicas")
 def suspend(
+        kubecontext: str = typer.Argument(..., help="Kubecontext name to suspend workloads in"),
         name_regex: str = typer.Argument(..., help="Regex for deployment/statefulset names",
                                          autocompletion=workload_names),
-        state_file: Path = typer.Option(None, "--state-file", help="File to store replica state", dir_okay=False),
 ):
     """Scale matching deployments and statefulsets to zero replicas."""
 
-    load_configured_kubecontext()
+    # Load and validate the kubecontext
+    context, namespace = load_and_validate_kubecontext(kubecontext)
+
+    # Get the state file path for this context
+    state_file = get_state_file_path(kubecontext)
+
+    # Check if state file already exists
+    if state_file.exists():
+        rich.print(f"[error] ❌ State file for kubecontext '{kubecontext}' already exists at {state_file}")
+        rich.print("[error] ❌ Please resume the existing state first before suspending again")
+        raise typer.Exit(1)
+
     pattern = re.compile(name_regex)
     deployments, statefulsets = _get_workloads(pattern)
     if not deployments and not statefulsets:
@@ -216,39 +261,50 @@ def suspend(
     if not Confirm.ask("Proceed with scaling these workloads to zero?"):
         raise typer.Exit(0)
 
-    sf = state_file or STATE_FILE
-    sf.parent.mkdir(parents=True, exist_ok=True)
+    state_file.parent.mkdir(parents=True, exist_ok=True)
     data = {
+        "kubecontext": kubecontext,
+        "namespace": namespace,
         "deployments": {d.metadata.name: d.spec.replicas for d in deployments},
         "statefulsets": {s.metadata.name: s.spec.replicas for s in statefulsets},
     }
-    with open(sf, "w") as f:
-        json.dump(data, f)
+    with open(state_file, "w") as f:
+        json.dump(data, f, indent=2)
 
     api = AppsV1Api()
-    namespace = get_current_kubecontext_namespace()
     for d in deployments:
         api.patch_namespaced_deployment_scale(d.metadata.name, namespace, {"spec": {"replicas": 0}})
     for s in statefulsets:
         api.patch_namespaced_stateful_set_scale(s.metadata.name, namespace, {"spec": {"replicas": 0}})
 
-    rich.print(f"[success]✅  Scaled workloads and saved state to {sf}")
+    rich.print(f"[success]✅  Scaled workloads and saved state to {state_file}")
 
 
 @app.command(help="Restore replicas from a saved state file")
 def resume(
-        state_file: Path = typer.Option(None, "--state-file", help="State file to load", dir_okay=False),
+        kubecontext: str = typer.Argument(..., help="Kubecontext name to resume workloads in"),
 ):
     """Scale previously suspended workloads back to their original replicas."""
 
-    load_configured_kubecontext()
-    sf = state_file or STATE_FILE
-    if not sf.exists():
-        rich.print(f"[error] ❌ State file {sf} does not exist")
+    # Get the state file path for this context
+    state_file = get_state_file_path(kubecontext)
+
+    if not state_file.exists():
+        rich.print(f"[error] ❌ State file for kubecontext '{kubecontext}' does not exist at {state_file}")
+        rich.print("[error] ❌ There is no suspended state to resume for this context")
         raise typer.Exit(1)
 
-    with open(sf) as f:
+    with open(state_file) as f:
         data = json.load(f)
+
+    # Verify the state file matches the requested kubecontext
+    saved_context = data.get("kubecontext")
+    if saved_context != kubecontext:
+        rich.print(f"[error] ❌ State file mismatch: file contains context '{saved_context}', but '{kubecontext}' was requested")
+        raise typer.Exit(1)
+
+    # Load and validate the kubecontext
+    context, namespace = load_and_validate_kubecontext(kubecontext)
 
     deployments = data.get("deployments", {})
     statefulsets = data.get("statefulsets", {})
@@ -271,13 +327,45 @@ def resume(
         raise typer.Exit(0)
 
     api = AppsV1Api()
-    namespace = get_current_kubecontext_namespace()
     for name, replicas in deployments.items():
         api.patch_namespaced_deployment_scale(name, namespace, {"spec": {"replicas": replicas}})
     for name, replicas in statefulsets.items():
         api.patch_namespaced_stateful_set_scale(name, namespace, {"spec": {"replicas": replicas}})
 
-    rich.print(f"[success]✅  Restored workloads from {sf}")
+    rich.print(f"[success]✅  Restored workloads from {state_file}")
+
+    # Delete the state file after successful resume
+    state_file.unlink()
+    rich.print(f"[success]✅  Deleted state file {state_file}")
+
+
+@app.command(help="Open the directory containing kube state files")
+def dir():
+    """Open the directory containing kube suspend/resume state files."""
+    import os
+    import subprocess
+    import platform
+
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+
+    system = platform.system()
+    try:
+        if system == "Darwin":  # macOS
+            subprocess.run(["open", str(STATE_DIR)], check=True)
+        elif system == "Linux":
+            subprocess.run(["xdg-open", str(STATE_DIR)], check=True)
+        elif system == "Windows":
+            os.startfile(STATE_DIR)
+        else:
+            rich.print(f"[yellow]⚠  Cannot open directory automatically on {system}")
+            rich.print(f"[yellow]   State directory: {STATE_DIR}")
+            raise typer.Exit(0)
+
+        rich.print(f"[success]✅  Opened state directory: {STATE_DIR}")
+    except Exception as e:
+        rich.print(f"[error] ❌ Failed to open directory: {e}")
+        rich.print(f"[yellow]   State directory: {STATE_DIR}")
+        raise typer.Exit(1)
 
 
 @app.command(help="Open OpenShift console for the current namespace")
