@@ -249,10 +249,10 @@ def open_repo(
 def config_dir(
         path: Path = typer.Argument(
             ..., exists=True, file_okay=False, dir_okay=True, resolve_path=True,
-            help="Path to default configsets directory"
+            help="Path to configsets directory, containing 'root' and 'configsets' subdirectories"
         ),
 ):
-    """Update the default solradm configuration directory."""
+    """Update the configset directory to fetch Solr configsets and chroot ZooKeeper files from."""
 
     if not validate_config_dir(path):
         raise typer.BadParameter(
