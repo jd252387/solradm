@@ -199,6 +199,11 @@ async def reindex(
     source_shard: List[str] | None = typer.Option(
         None, "--source-shard", help="Source shards to reindex"
     ),
+    rows: int = typer.Option(2000, "--rows", help="How many rows to fetch per cursorMark request from the source collection."), 
+    sort: str = typer.Option("first_timestamp asc, item_id asc", help="Sort criteria for the cursorMark requests from the source collection"),
+    qt: str = typer.Option("/dih", help="Request handler to fetch from the source collection."), 
+    fl: str = typer.Option("*,ignored_tmp1:_version_", help="Fields to reindex. By default, reindexes all fields."), 
+    timeout: int = typer.Option("300", help="The query timeout from the source collection, in seconds."), 
 ) -> None:
     if (source_context and source_zk) or (target_context and target_zk):
         rich.print("[error]❌  Context and ZooKeeper overrides are mutually exclusive")
@@ -280,9 +285,14 @@ async def reindex(
                     "distrib": "false",
                     "wt": "json",
                     "url": source_core_url,
+                    "qt": qt, 
+                    "fl": fl, 
+                    "timeout": timeout,
+                    "rows": rows, 
+                    "sort": sort
                 }
                 if fq_param:
-                    params["fq"] = fq_param
+                    params["fqs"] = fq_param
                 await send_request(leader.base_url, dataimport_path, params=params)
                 await _watch_dataimport_status(progress, task_id, leader.base_url, dataimport_path)
             progress.update(
