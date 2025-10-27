@@ -20,7 +20,7 @@ from solradm.api.utils import (
     send_request,
     validate_num_replicas,
 )
-from solradm.commands.collections import app
+from solradm.commands.collections.subapp import app
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.replica_position_filter import ReplicaPositionFilter
 from solradm.commands.filters.replica_state_filter import ReplicaStateFilter

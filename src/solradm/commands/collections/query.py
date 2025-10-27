@@ -11,7 +11,7 @@ from rich.table import Table
 
 from solradm.api.state import get_nodes_by_role
 from solradm.api.utils import send_request
-from solradm.commands.collections import app
+from solradm.commands.collections.subapp import app
 from solradm.completion.collections import collection_names
 from solradm.zk.utils import get_overseer_leader
 

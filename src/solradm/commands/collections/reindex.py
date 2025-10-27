@@ -19,7 +19,7 @@ from rich.progress import (
 
 from solradm.api.models import Collection, Replica, Shard
 from solradm.api.utils import get_host_with_scheme, send_request
-from solradm.commands.collections import app
+from solradm.commands.collections.subapp import app
 from solradm.commands.filters.utils import with_cluster_state
 from solradm.completion.collections import collection_names, source_collection_names
 from solradm.completion.contexts import context_names
