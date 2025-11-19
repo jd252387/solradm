@@ -68,6 +68,25 @@ def _select_nodes(
     return sorted({node for node in nodes if matches(node)})
 
 
+def _sort_nodes(selected_nodes: Sequence[str], node_order: str) -> list[str]:
+    if node_order == "alphabetical":
+        return sorted(selected_nodes)
+
+    if node_order == "numerical":
+        sorted_nodes: list[tuple[int, str]] = []
+        for node in selected_nodes:
+            match = re.search(r"\d+", node)
+            if not match:
+                raise typer.BadParameter(
+                    f"Selected node '{node}' lacks digits required for numerical ordering"
+                )
+            sorted_nodes.append((int(match.group()), node))
+
+        return [node for _, node in sorted(sorted_nodes, key=lambda item: (item[0], item[1]))]
+
+    raise typer.BadParameter("--node-order must be either 'alphabetical' or 'numerical'")
+
+
 @app.async_command(
     help=(
         "Remove replicas for filtered collections.\n\n"
@@ -217,7 +236,8 @@ async def depopulate(
         "Add replicas to a collection across selected nodes.\n\n"
         "Examples:\n"
         "  solradm coll populate --collection '^logs-' --shards 1-3 --node 'solr0[12]'\n"
-        "  solradm coll populate --collection '^logs-' --exclude-shards 4-6 --node 'solr0[0-4]' --exclude-node 'solr03' --skip-checks --dry"
+        "  solradm coll populate --collection '^logs-' --exclude-shards 4-6 --node 'solr0[0-4]' --exclude-node 'solr03' --skip-checks --dry\n"
+        "  solradm coll populate --collection '^logs-' --node 'solr0[0-4]' --node-order alphabetical"
     )
 )
 @with_dry_run
@@ -236,6 +256,13 @@ async def populate(
         help="Regex to exclude nodes",
         autocompletion=node_names,
     ),
+    node_order: str = typer.Option(
+        "numerical",
+        "--node-order",
+        case_sensitive=False,
+        help="Order to distribute nodes: numerical (default) or alphabetical",
+        show_choices=True,
+    ),
 ) -> None:
     """Populate a single collection with replicas across nodes."""
 
@@ -251,6 +278,11 @@ async def populate(
     data_nodes = get_nodes_by_role("data").get("on", [])
 
     selected_nodes = _select_nodes(data_nodes, node, exclude_node)
+
+    if node_order.lower() not in {"alphabetical", "numerical"}:
+        raise typer.BadParameter("--node-order must be either 'alphabetical' or 'numerical'")
+
+    selected_nodes = _sort_nodes(selected_nodes, node_order.lower())
 
     if not selected_nodes:
         rich.print("[error] ❌ No nodes match the given selectors")
@@ -338,7 +370,7 @@ async def populate(
         "Create a new collection.\n\n"
         "Examples:\n"
         "  solradm coll create search --shards 4 --conf search-config\n"
-        "  solradm coll create metrics --shards 6 --upload-conf ./configs/metrics --populate --node 'solr0[1-3]' --dry"
+        "  solradm coll create metrics --shards 6 --upload-conf ./configs/metrics --populate --node 'solr0[1-3]' --node-order alphabetical --dry"
     )
 )
 @with_dry_run
@@ -366,6 +398,13 @@ async def create(
         "--node",
         help="Regex to select nodes for populate",
         autocompletion=node_names,
+    ),
+    node_order: str = typer.Option(
+        "numerical",
+        "--node-order",
+        case_sensitive=False,
+        help="Order to distribute nodes during populate: numerical (default) or alphabetical",
+        show_choices=True,
     ),
 ) -> None:
     """Create a collection in Solr."""
@@ -404,6 +443,7 @@ async def create(
             collection_name_filter=f"^{name}$",
             node=[node] if node else None,
             exclude_node=None,
+            node_order=node_order,
         )
 
 
