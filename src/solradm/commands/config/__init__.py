@@ -10,7 +10,7 @@ import yaml
 from kazoo.handlers.threading import KazooTimeoutError
 from kubernetes.client import CoreV1Api, Configuration
 from kubernetes.config import load_kube_config
-from rich.pretty import pprint
+from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from typer import Typer
@@ -76,11 +76,38 @@ def _coerce_optional_option(value):
     return value.default if isinstance(value, OptionInfo) else value
 
 
+def _format_context_line(label: str, value: str) -> str:
+    return f"[bold]{label}:[/] {value}"
+
+
+def print_current_context(*, console: Console | None = None):
+    """Render the active context in a human-friendly format."""
+
+    ctx = get_current_context()
+    console = console or Console()
+    name_display = ctx.name if ctx.name is not None else "Temporary (unsaved)"
+
+    kubecontext = ctx.kubecontext or "-"
+    namespace = ctx.namespace or "-"
+
+    console.print(
+        "\n".join(
+            [
+                "[bold]Current context[/]",
+                _format_context_line("Name", name_display),
+                _format_context_line("ZooKeeper", ctx.zk),
+                _format_context_line("Kubecontext", kubecontext),
+                _format_context_line("Namespace", namespace),
+            ]
+        )
+    )
+
+
 @app.command()
 def current():
     """Show the currently active context."""
 
-    pprint(get_current_context())
+    print_current_context()
 
 
 def _verify_zk_connection() -> bool:
@@ -243,6 +270,38 @@ def open_repo(
         subprocess.run(["open", "-R", str(path)])
     else:
         subprocess.run(["xdg-open", str(path.parent)])
+
+
+@repo_app.command("upload")
+def upload(
+        name: str = typer.Argument(
+            ..., help="Local context name", autocompletion=context_names
+        ),
+        repo: Path = typer.Option(
+            ..., "-r", "--repo", exists=True, file_okay=True, dir_okay=False,
+            autocompletion=context_repo_paths, help="Target context repository",
+        ),
+):
+    """Upload a local context to a repository."""
+
+    if name not in [c["name"] for c in local_contexts]:
+        raise typer.BadParameter(f"Context {name} does not exist in local configuration!")
+
+    repo_list = list(settings.get("context_repositories") or [])
+    if str(repo) not in repo_list:
+        raise typer.BadParameter(f"Context repository {repo} is not configured!")
+
+    contexts = load_repo_contexts(repo)
+    if any(c["name"] == name for c in contexts):
+        raise typer.BadParameter(
+            f"Context {name} already exists in repository {repo}!"
+        )
+
+    context = next(c for c in local_contexts if c["name"] == name)
+    contexts.append(context)
+    save_repo_contexts(repo, contexts)
+    settings.reload()
+    rich.print(f"[success]✅  Uploaded context {name} to {repo}!")
 
 
 @app.command("update-configsets")
@@ -557,38 +616,6 @@ def delete(
         save_repo_contexts(target_repo, repo_contexts)
         settings.reload()
         rich.print(f"[success]✅  Deleted context {name} from {target_repo}!")
-
-
-@app.command()
-def upload(
-        name: str = typer.Argument(
-            ..., help="Local context name", autocompletion=context_names
-        ),
-        repo: Path = typer.Option(
-            ..., "-r", "--repo", exists=True, file_okay=True, dir_okay=False,
-            autocompletion=context_repo_paths, help="Target context repository"
-        ),
-):
-    """Upload a local context to a repository."""
-
-    if name not in [c["name"] for c in local_contexts]:
-        raise typer.BadParameter(f"Context {name} does not exist in local configuration!")
-
-    repo_list = list(settings.get("context_repositories") or [])
-    if str(repo) not in repo_list:
-        raise typer.BadParameter(f"Context repository {repo} is not configured!")
-
-    contexts = load_repo_contexts(repo)
-    if any(c["name"] == name for c in contexts):
-        raise typer.BadParameter(
-            f"Context {name} already exists in repository {repo}!"
-        )
-
-    context = next(c for c in local_contexts if c["name"] == name)
-    contexts.append(context)
-    save_repo_contexts(repo, contexts)
-    settings.reload()
-    rich.print(f"[success]✅  Uploaded context {name} to {repo}!")
 
 
 @app.command("list")
