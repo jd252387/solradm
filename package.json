@@ -1,6 +1,6 @@
 {
   "name": "solradm",
-  "version": "1.11.5",
+  "version": "1.14.0",
   "description": "Solr Administration CLI",
   "type": "module",
   "scripts": {

@@ -1,6 +1,6 @@
 [project]
 name = "solradm"
-version = "1.11.5"
+version = "1.14.0"
 description = "Solr Administration CLI"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -21,7 +21,6 @@ dependencies = [
 [project.scripts]
 solradm = "solradm.main:run"
 sa = "solradm.main:run"
-saperf = "solradm.aa:run"
 
 [build-system]
 requires = ["setuptools>=69", "wheel"]

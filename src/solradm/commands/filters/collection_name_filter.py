@@ -25,15 +25,15 @@ class CollectionNameFilter(Filter):
         }
     )
 
-    skip_checks: Optional[bool] = field(
+    all_coll: Optional[bool] = field(
         default=False,
         metadata={
-            "typer_option": typer.Option(False, "--skip-checks", "-y", help="Skip filter absence checks")
+            "typer_option": typer.Option(False, "--all-collections", "-a", help="Skip collection filter absence checks")
         }
     )
 
     def init(self):
-        if self.collection_name_filter is None and not self.skip_checks:
+        if self.collection_name_filter is None and not self.all_coll:
             if not Confirm.ask(
                     "No collection filter was specified, so this command will run across all collections, adhering to any other filters you have placed.\nAre you sure you want to continue?"):
                 raise typer.Exit(0)
