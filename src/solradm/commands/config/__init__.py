@@ -245,7 +245,7 @@ def open_repo(
         subprocess.run(["xdg-open", str(path.parent)])
 
 
-@app.command("config-dir")
+@app.command("update-configsets")
 def config_dir(
         path: Path = typer.Argument(
             ..., exists=True, file_okay=False, dir_okay=True, resolve_path=True,
@@ -524,9 +524,7 @@ def edit(
         rich.print(f"[success]✅  Updated context {name} in {target_repo}!")
 
 
-@app.command()
 @app.command("remove")
-@app.command("delete")
 def delete(
         name: str = typer.Argument(
             ..., help="Context name", autocompletion=context_names
@@ -615,32 +613,3 @@ def list_contexts():
         table.add_row(name, ", ".join(disp))
 
     rich.print(table)
-
-
-@app.command("view")
-def view_config():
-    """Show the entire configuration and merged contexts."""
-
-    repo_list = list(settings.get("context_repositories") or [])
-    merged: dict[str, dict] = {}
-    for repo in repo_list:
-        repo_path = Path(repo)
-        if repo_path.exists():
-            for ctx in load_repo_contexts(repo_path):
-                merged[ctx["name"]] = ctx
-    for ctx in local_contexts:
-        merged[ctx["name"]] = ctx
-
-    cfg = {
-        "contexts": {
-            "current": _to_dict(settings.contexts.current),
-            "available": _to_dict(settings.contexts.available),
-        },
-        "config_dir": str(settings.get("config_dir")) if settings.get("config_dir") else None,
-        "auth": _to_dict(settings.get("auth") or {}),
-        "context_repositories": repo_list,
-        "merged_contexts": _to_dict(list(merged.values())),
-        "backup_base_location": settings.get("backup_base_location"),
-    }
-
-    print(json.dumps(cfg, indent=2))
