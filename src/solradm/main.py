@@ -40,6 +40,10 @@ def run():
     try:
         import sys
 
+        if len(sys.argv) == 1:
+            config.print_current_context()
+            return
+
         top_commands = {"core", "coll", "backup", "context", "zoo", "auth", "kube", "node", "state", "status", "version"}
         if len(sys.argv) >= 2 and not sys.argv[1].startswith("-") and sys.argv[1] not in top_commands:
             try:
