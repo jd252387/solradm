@@ -49,6 +49,7 @@ async def reload(
         None,
         help="If unset, reloads both data and coordinator nodes. If set to true, only reload coordinators. If set to false, only reload data nodes.",
     ),
+    skip_checks: bool = typer.Option(False, "--skip-confirm", "-y", help="Skip confirmation prompt"),
 ) -> None:
     """Reload the specified cores and optionally coordinators."""
 
@@ -84,7 +85,7 @@ async def reload(
 
     replicas = validate_num_replicas(replicas)
 
-    if collection_counts:
+    if collection_counts and not skip_checks:
         table = Table(title="Planned core reloads", header_style="bold magenta")
         table.add_column("Collection", style="cyan")
         table.add_column("Cores", justify="right", style="green")

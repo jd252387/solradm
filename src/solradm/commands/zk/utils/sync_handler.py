@@ -107,7 +107,8 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
         if len(to_reload) > 0:
             asyncio.run(reload(
                 collection_name_filter=r"^(" + "|".join(re.escape(collection.name) for collection in to_reload) + r")$", coordinators=None,
-                dry_run=False))
+                dry_run=False,
+                skip_checks=True))
             asyncio.run(get_initialized_session().close())
 
         self.pending_changes.clear()

@@ -118,6 +118,7 @@ async def depopulate(
         help="Regex to exclude nodes",
         autocompletion=node_names,
     ),
+    skip_checks: bool = typer.Option(False, "--skip-confirm", "-y", help="Skip confirmation prompt"),
 ) -> None:
     """Remove replicas from the selected collections."""
 
@@ -157,54 +158,55 @@ async def depopulate(
             rich.print("[error] ❌ No replicas match the given node selectors")
             raise typer.Exit(1)
 
-    table = Table(title="Cluster State", header_style="bold magenta")
-    table.add_column("Collection", style="cyan")
-    table.add_column("Active Shards", justify="right", style="green")
-    table.add_column("Active Replicas", justify="right", style="green")
-    table.add_column("Problematic Shards", justify="right", style="yellow")
-    table.add_column("Problematic Replicas", justify="right", style="yellow")
+    if not skip_checks:
+        table = Table(title="Cluster State", header_style="bold magenta")
+        table.add_column("Collection", style="cyan")
+        table.add_column("Active Shards", justify="right", style="green")
+        table.add_column("Active Replicas", justify="right", style="green")
+        table.add_column("Problematic Shards", justify="right", style="yellow")
+        table.add_column("Problematic Replicas", justify="right", style="yellow")
 
-    total_active_shards = 0
-    total_active_replicas = 0
-    total_non_active_shards = 0
-    total_non_active_replicas = 0
-    for coll in cluster_state:
-        active_shards = sum(
-            1 for shard in coll.shards if any(r.state == "active" for r in shard.replicas)
-        )
-        active_replicas = sum(
-            1 for shard in coll.shards for r in shard.replicas if r.state == "active"
-        )
-        non_active_shards = sum(
-            1 for shard in coll.shards if any(r.state != "active" for r in shard.replicas)
-        )
-        non_active_replicas = sum(
-            1 for shard in coll.shards for r in shard.replicas if r.state != "active"
-        )
-        total_active_shards += active_shards
-        total_active_replicas += active_replicas
-        total_non_active_shards += non_active_shards
-        total_non_active_replicas += non_active_replicas
+        total_active_shards = 0
+        total_active_replicas = 0
+        total_non_active_shards = 0
+        total_non_active_replicas = 0
+        for coll in cluster_state:
+            active_shards = sum(
+                1 for shard in coll.shards if any(r.state == "active" for r in shard.replicas)
+            )
+            active_replicas = sum(
+                1 for shard in coll.shards for r in shard.replicas if r.state == "active"
+            )
+            non_active_shards = sum(
+                1 for shard in coll.shards if any(r.state != "active" for r in shard.replicas)
+            )
+            non_active_replicas = sum(
+                1 for shard in coll.shards for r in shard.replicas if r.state != "active"
+            )
+            total_active_shards += active_shards
+            total_active_replicas += active_replicas
+            total_non_active_shards += non_active_shards
+            total_non_active_replicas += non_active_replicas
+            table.add_row(
+                coll.name,
+                str(active_shards),
+                str(active_replicas),
+                str(non_active_shards),
+                str(non_active_replicas),
+            )
+
         table.add_row(
-            coll.name,
-            str(active_shards),
-            str(active_replicas),
-            str(non_active_shards),
-            str(non_active_replicas),
+            "[bold]TOTAL[/bold]",
+            str(total_active_shards),
+            str(total_active_replicas),
+            str(total_non_active_shards),
+            str(total_non_active_replicas),
+            style="bold",
         )
+        rich.print(table)
 
-    table.add_row(
-        "[bold]TOTAL[/bold]",
-        str(total_active_shards),
-        str(total_active_replicas),
-        str(total_non_active_shards),
-        str(total_non_active_replicas),
-        style="bold",
-    )
-    rich.print(table)
-
-    if not Confirm.ask("Proceed with removing replicas?"):
-        raise typer.Exit(0)
+        if not Confirm.ask("Proceed with removing replicas?"):
+            raise typer.Exit(0)
 
     replicas = validate_num_replicas(replicas)
     tasks = [
@@ -263,6 +265,7 @@ async def populate(
         help="Order to distribute nodes: numerical (default) or alphabetical",
         show_choices=True,
     ),
+    skip_checks: bool = typer.Option(False, "--skip-confirm", "-y", help="Skip confirmation prompt"),
 ) -> None:
     """Populate a single collection with replicas across nodes."""
 
@@ -307,36 +310,37 @@ async def populate(
         rich.print("[warning] ⚠️ No replicas need to be created on the selected nodes")
         raise typer.Exit(0)
 
-    table = Table(title="Planned replicas to add")
-    table.add_column("Node")
-    table.add_column("Shards")
-    for n, shards_list in node_to_shards.items():
-        table.add_row(n, ", ".join(s.name for s in shards_list))
-    rich.print(table)
+    if not skip_checks:
+        table = Table(title="Planned replicas to add")
+        table.add_column("Node")
+        table.add_column("Shards")
+        for n, shards_list in node_to_shards.items():
+            table.add_row(n, ", ".join(s.name for s in shards_list))
+        rich.print(table)
 
-    counts = [len(shards_list) for shards_list in node_to_shards.values()]
-    avg = sum(counts) / len(counts)
-    dist = Counter(counts)
+        counts = [len(shards_list) for shards_list in node_to_shards.values()]
+        avg = sum(counts) / len(counts)
+        dist = Counter(counts)
 
-    unused_nodes = sorted(set(selected_nodes) - set(node_to_shards.keys()))
+        unused_nodes = sorted(set(selected_nodes) - set(node_to_shards.keys()))
 
-    rich.print(f"Average replicas per node: {avg:.2f}")
+        rich.print(f"Average replicas per node: {avg:.2f}")
 
-    dist_table = Table(title="Replica distribution")
-    dist_table.add_column("Replicas")
-    dist_table.add_column("Nodes")
-    for num, cnt in sorted(dist.items()):
-        dist_table.add_row(str(num), str(cnt))
-    rich.print(dist_table)
+        dist_table = Table(title="Replica distribution")
+        dist_table.add_column("Replicas")
+        dist_table.add_column("Nodes")
+        for num, cnt in sorted(dist.items()):
+            dist_table.add_row(str(num), str(cnt))
+        rich.print(dist_table)
 
-    if unused_nodes:
-        rich.print(
-            "[warning] ⚠️ The following nodes matched the filter but will not receive replicas: "
-            + ", ".join(unused_nodes)
-        )
+        if unused_nodes:
+            rich.print(
+                "[warning] ⚠️ The following nodes matched the filter but will not receive replicas: "
+                + ", ".join(unused_nodes)
+            )
 
-    if not Confirm.ask("Proceed with adding replicas?"):
-        raise typer.Exit(0)
+        if not Confirm.ask("Proceed with adding replicas?"):
+            raise typer.Exit(0)
 
     tasks: list[MetaTask] = []
     for n, shards_list in node_to_shards.items():
