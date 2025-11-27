@@ -13,7 +13,7 @@ from solradm.commands.zk import editor
 from solradm.exceptions.adm_exception import AdmException
 from solradm.exceptions.solr_exception import SolrException
 from solradm.update import notify_if_outdated
-from solradm.commands.version import version
+from solradm.commands.generic import version
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,11 +40,7 @@ def run():
     try:
         import sys
 
-        if len(sys.argv) == 1:
-            config.print_current_context()
-            return
-
-        top_commands = {"core", "coll", "backup", "context", "zoo", "auth", "kube", "node", "state", "status", "version"}
+        top_commands = {"current", "coll", "backup", "context", "zoo", "auth", "kube", "node", "state", "status", "version"}
         if len(sys.argv) >= 2 and not sys.argv[1].startswith("-") and sys.argv[1] not in top_commands:
             try:
                 config.switch(sys.argv[1])
