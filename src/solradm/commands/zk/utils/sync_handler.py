@@ -89,10 +89,12 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
         )
 
         to_reload = []
+        errors = []
 
         for file_path, change_type in self.pending_changes.items():
+            zk_path = get_relative_znode_path(self.znode_path, self.temp_dir, file_path)
+            action = self._get_action(change_type)
             try:
-                zk_path = get_relative_znode_path(self.znode_path, self.temp_dir, file_path)
                 self._sync_file_change(file_path, zk_path, change_type)
 
                 if self.reload:
@@ -102,7 +104,11 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
                             get_collections_using_config(get_collections(), split_path[1])
                         )
             except Exception as e:
-                rich.print(f"[error]❌ Error syncing {file_path}: {e}")
+                error_message = (
+                    f"❌ Error during {action} for {zk_path} (source {file_path}): {e}"
+                )
+                errors.append(error_message)
+                rich.print(f"[error]{error_message}")
 
         if len(to_reload) > 0:
             asyncio.run(reload(
@@ -114,7 +120,13 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
         self.pending_changes.clear()
         self.modification_hashes.clear()
         self.last_sync = time.time()
-        rich.print("[success]✅ Sync completed")
+
+        if errors:
+            rich.print("[error]⚠️ Sync completed with errors:")
+            for error in errors:
+                rich.print(f"[error]- {error}")
+        else:
+            rich.print("[success]✅ Sync completed")
 
     def _sync_file_change(self, file_path: str, zk_path: str, change_type: str):
         """Sync a single file change to ZooKeeper."""
@@ -132,3 +144,12 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
             if self.zk.exists(zk_path):
                 self.zk.delete(zk_path, recursive=True)
                 rich.print(f"[red]🗑️ Deleted: {zk_path}")
+
+    def _get_action(self, change_type: str) -> str:
+        if change_type in {"created", "modified"}:
+            return "create/update"
+        if change_type in {"deleted", "deleted_dir"}:
+            return "delete"
+        if change_type == "moved":
+            return "move"
+        return change_type or "unknown"
