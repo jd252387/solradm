@@ -1,0 +1,60 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PYTHON_VERSION: "3.13"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Validate release tag matches project version
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          import tomllib
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          version = tag.lstrip("v")
+
+          with open("pyproject.toml", "rb") as f:
+            project = tomllib.load(f)
+
+          project_version = project["project"]["version"]
+
+          if project_version != version:
+            print(
+                "Release tag version ({}{}) does not match pyproject version ({})".format(
+                    "v" if tag.startswith("v") else "", version, project_version
+                )
+            )
+            sys.exit(1)
+          PY
+
+      - name: Build distribution
+        run: uv build
+
+      - name: Publish to PyPI
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: uv publish --token "$UV_PUBLISH_TOKEN"
