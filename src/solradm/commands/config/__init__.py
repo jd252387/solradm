@@ -165,6 +165,37 @@ def open_config():
         subprocess.run(["xdg-open", str(config_path.parent)])
 
 
+@app.command()
+def view_config():
+    """Print the current solradm configuration as JSON."""
+
+    repo_list = list(settings.get("context_repositories") or [])
+    merged_contexts: dict[str, dict] = {}
+
+    for repo in repo_list:
+        for ctx in load_repo_contexts(Path(repo)):
+            name = ctx.get("name")
+            if name:
+                merged_contexts[name] = ctx
+
+    for ctx in local_contexts:
+        name = ctx.get("name")
+        if name:
+            merged_contexts[name] = ctx
+
+    rich.print(
+        json.dumps(
+            {
+                "config_dir": str(settings.get("config_dir")) if settings.get("config_dir") else None,
+                "auth": _to_dict(settings.get("auth")),
+                "contexts": _to_dict(settings.get("contexts")),
+                "context_repositories": repo_list,
+                "merged_contexts": list(merged_contexts.values()),
+            }
+        )
+    )
+
+
 @repo_app.command("create")
 def create_repo(
         path: Path = typer.Argument(

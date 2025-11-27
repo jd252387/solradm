@@ -27,7 +27,7 @@ from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
 from solradm.commands.filters.replica_type_filter import ReplicaTypeFilter
 from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
-from solradm.completion.configs import config_names
+from solradm.completion.configs import config_names, config_names_or_paths
 from solradm.completion.nodes import node_names
 from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
@@ -393,6 +393,7 @@ async def create(
         exists=False,
         resolve_path=False,
         help="Path or configset name to upload before creation",
+        autocompletion=config_names_or_paths,
     ),
     populate_after: bool = typer.Option(
         False, "--populate", help="Populate the collection after creation"

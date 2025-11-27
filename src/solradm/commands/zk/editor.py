@@ -28,6 +28,7 @@ from solradm.commands.zk.utils import (
 from solradm.commands.zk.utils.sync_handler import ZooKeeperSyncHandler
 from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
 from solradm.completion.collections import collection_names
+from solradm.completion.configs import config_names_or_paths
 from solradm.completion.znodes import znode_paths
 from solradm.config.util import resolve_config_name_to_abs_or_default_directory
 from solradm.exceptions.adm_exception import AdmException
@@ -173,6 +174,7 @@ def upload(
             exists=False,
             resolve_path=False,
             help="Local paths to copy to ZooKeeper. This may also just be a config name (it will be uploaded from the default configuration directory)",
+            autocompletion=config_names_or_paths,
         ),
         znode_path: str = typer.Option("/configs", help="zNode path to copy to", autocompletion=znode_paths),
         include: List[str] | None = typer.Option(
