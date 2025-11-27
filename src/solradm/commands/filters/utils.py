@@ -73,6 +73,8 @@ def with_cluster_state(*filter_classes, allow_empty: bool = False, show_filter_e
         def wrapper(*args, **kwargs):
 
             filter_instances = []
+            cluster_state = kwargs.pop("cluster_state", None)
+
             for filter_class in filter_classes:
                 filter_params = {}
                 for field_name in filter_class.__dataclass_fields__:
@@ -84,15 +86,17 @@ def with_cluster_state(*filter_classes, allow_empty: bool = False, show_filter_e
 
                 if any(value is not None for value in filter_params.values()):
                     filter_instances.append(filter_instance)
-            try:
-                cluster_state = get_collections()
-            except Exception as e:
-                raise typer.BadParameter(f"Failed to fetch cluster state: {e}")
+
+            if cluster_state is None:
+                try:
+                    cluster_state = get_collections()
+                except Exception as e:
+                    raise typer.BadParameter(f"Failed to fetch cluster state: {e}")
 
             for filter_instance in filter_instances:
                 cluster_state = filter_instance.apply(cluster_state)
 
-            if show_filter_explanations:
+            if show_filter_explanations and filter_instances:
                 explanation_rows = []
                 for filter_instance in filter_instances:
                     for explanation in filter_instance.describe():
@@ -107,7 +111,7 @@ def with_cluster_state(*filter_classes, allow_empty: bool = False, show_filter_e
                         header_style="bold magenta",
                         show_lines=False,
                     )
-                        
+
                     table.add_column("Filter", style="cyan", no_wrap=True)
                     table.add_column("Explanation", style="green")
 
