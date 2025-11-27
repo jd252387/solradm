@@ -454,20 +454,26 @@ async def create(
 
 
 @app.async_command(help="Delete collections matching a pattern")
+@with_cluster_state(CollectionNameFilter)
 @with_dry_run
 async def delete(
-    pattern: str = typer.Argument(..., help="Regex pattern for collection names"),
+    cluster_state: List[Collection],
+    collection_name_filter: str = typer.Argument(
+        ..., help="Regex pattern for collection names"
+    ),
 ) -> None:
     """Delete collections and their replicas."""
 
-    fil = CollectionNameFilter(collection_name_filter=pattern)
-    cluster_state = fil.apply(get_collections())
     names = [c.name for c in cluster_state]
     if not names:
         rich.print("[error] ❌ No collections match the given pattern")
         raise typer.Exit(1)
 
-    await depopulate(collection_name_filter=pattern, dry_run=api_utils.is_dry_run)
+    await depopulate(
+        cluster_state=cluster_state,
+        collection_name_filter=collection_name_filter,
+        dry_run=api_utils.is_dry_run,
+    )
     if api_utils.is_dry_run:
         return
 
