@@ -27,5 +27,4 @@ def test_status_handles_empty_cluster(monkeypatch, capsys, tmp_path):
 
     out = capsys.readouterr().out
 
-    assert "Replica Status" in out
-    assert "No collections" not in out
+    assert "No collections found in the cluster." in out
