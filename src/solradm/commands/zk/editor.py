@@ -1,5 +1,4 @@
 import asyncio
-import os
 import re
 import subprocess
 import tempfile
@@ -23,6 +22,8 @@ from solradm.commands.zk.utils import (
     open_vscode,
     create_or_update,
     build_files_by_config,
+    compile_regex_patterns,
+    iter_local_files,
 )
 from solradm.commands.zk.utils.sync_handler import ZooKeeperSyncHandler
 from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
@@ -174,6 +175,16 @@ def upload(
             help="Local paths to copy to ZooKeeper. This may also just be a config name (it will be uploaded from the default configuration directory)",
         ),
         znode_path: str = typer.Option("/configs", help="zNode path to copy to", autocompletion=znode_paths),
+        include: List[str] | None = typer.Option(
+            None,
+            "--include",
+            help="Regex to include files/directories (matched against relative paths); exclude patterns take precedence",
+        ),
+        exclude: List[str] | None = typer.Option(
+            None,
+            "--exclude",
+            help="Regex to exclude files/directories (matched against relative paths and applied before includes)",
+        ),
         only_used: bool = typer.Option(
             True,
             "--only-used/--all",
@@ -184,9 +195,10 @@ def upload(
             "--reload",
             help="Reload collections whose configs were uploaded",
         ),
-        exclude: List[str] | None = typer.Option(
+        reload_exclude: List[str] | None = typer.Option(
             None,
-            "--exclude",
+            "--reload-exclude",
+            "--exclude-collection",
             help="Collections to exclude from reloading",
             autocompletion=collection_names,
         ),
@@ -196,17 +208,25 @@ def upload(
         rich.print("[error] ❌ You cannot use only_used when the znode_path is not /configs!")
         raise typer.Exit(1)
 
-    """Upload local files or directories to a ZooKeeper znode."""
+    include_regexes = compile_regex_patterns(include, "--include")
+    exclude_regexes = compile_regex_patterns(exclude, "--exclude")
+
+    """Upload local files or directories to a ZooKeeper znode.
+
+    Exclude patterns are evaluated before include patterns when filtering discovered files.
+    """
     resolved_paths = []
     for path in paths:
         resolved_paths.append(resolve_config_name_to_abs_or_default_directory(path))
 
     if znode_path == "/configs":
-        files_by_config = build_files_by_config([(p, None) for p in resolved_paths], znode_path)
-        files_to_upload = []
-
-        for cfg, files_to_upload in files_by_config.items():
-            files_to_upload.extend(files_to_upload)
+        files_by_config = build_files_by_config(
+            [(p, None) for p in resolved_paths],
+            znode_path,
+            include_regexes=include_regexes,
+            exclude_regexes=exclude_regexes,
+        )
+        files_to_upload = [file for files in files_by_config.values() for file in files]
 
         if not files_by_config:
             rich.print("[warning]⚠️ No files to upload")
@@ -241,13 +261,8 @@ def upload(
     else:
         files_to_upload = []
         for path in resolved_paths:
-            if path.is_dir():
-                for dirname, _, file_names in os.walk(path):
-                    for file in file_names:
-                        full_path = os.path.join(dirname, file)
-                        files_to_upload.append((full_path, win_path_to_zk_path(os.path.relpath(str(full_path), path))))
-            else:
-                files_to_upload.append((os.path.join(os.path.dirname(path), path), win_path_to_zk_path(os.path.basename(path), znode_path)))
+            for full_path, rel_path in iter_local_files(path, include_regexes, exclude_regexes):
+                files_to_upload.append((full_path, win_path_to_zk_path(rel_path, znode_path)))
 
 
         if not skip_checks:
@@ -271,7 +286,7 @@ def upload(
         to_reload = set()
         for cfg, cols in config_usage.items():
             for col in cols:
-                if exclude and col.name in exclude:
+                if reload_exclude and col.name in reload_exclude:
                     continue
                 to_reload.add(col.name)
         if len(to_reload) > 0:
