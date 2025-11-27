@@ -20,7 +20,7 @@ def _prepare(monkeypatch, tmp_path: Path, repo_content: str, settings_content: s
 
 def test_view_configuration(monkeypatch, tmp_path, capsys):
     repo_content = """contexts:\n  available:\n    - name: repo\n      zk: rzk\n    - name: dup\n      zk: repo_dup\n"""
-    settings_content = """context_repositories:\n  - {repo}\ncontexts:\n  available:\n    - name: dup\n      zk: local_dup\n  current: {{name: dup}}\nauth:\n  user: alice\n  password: secret\nconfig_dir: {cfg}\n"""
+    settings_content = """context_repositories:\n  - name: shared\n    path: {repo}\ncontexts:\n  available:\n    - name: dup\n      zk: local_dup\n  current: {{name: dup}}\nauth:\n  user: alice\n  password: secret\nconfig_dir: {cfg}\n"""
     cfg_dir = tmp_path / "confdir"
     repo, cfg, config_cmd = _prepare(
         monkeypatch,
@@ -41,5 +41,7 @@ def test_view_configuration(monkeypatch, tmp_path, capsys):
     merged = {c["name"]: c["zk"] for c in data["merged_contexts"]}
     assert merged["repo"] == "rzk"
     assert merged["dup"] == "local_dup"
-    assert data["context_repositories"] == [str(repo)]
+    assert data["context_repositories"] == [
+        {"name": "shared", "path": str(repo)}
+    ]
 

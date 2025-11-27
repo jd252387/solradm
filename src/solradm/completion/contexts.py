@@ -29,7 +29,15 @@ def context_repo_paths(ctx, args: List[str], incomplete: str) -> List[str]:
     try:
         from solradm.config import settings
 
-        names = settings.get("context_repositories") or []
+        names = []
+        for repo in settings.get("context_repositories") or []:
+            if isinstance(repo, dict):
+                name = repo.get("name")
+            else:
+                name = getattr(repo, "name", None)
+
+            if name:
+                names.append(str(name))
     except Exception as e:
         return autocompletion_error(incomplete, e)
     return _filter_starts_with(sorted(names), incomplete)

@@ -58,14 +58,16 @@ def test_initial_setup_repo_only(monkeypatch, tmp_path):
         monkeypatch,
         tmp_path,
         confirm_answers=[False, True],
-        prompt_answers=[str(tmp_path / "repo.yaml")],
+        prompt_answers=[str(tmp_path / "repo.yaml"), "team"],
         repo_content=repo_content,
     )
 
     assert cfg.settings.contexts.current.name == "r1"
     names = [c["name"] for c in cfg.settings.contexts.available]
     assert names == ["r1", "r2"]
-    assert cfg.settings.get("context_repositories") == [str(repo)]
+    assert cfg.settings.get("context_repositories") == [
+        {"name": "team", "path": str(repo)}
+    ]
 
 
 def test_initial_setup_with_local_and_repo(monkeypatch, tmp_path):
@@ -74,7 +76,7 @@ def test_initial_setup_with_local_and_repo(monkeypatch, tmp_path):
         monkeypatch,
         tmp_path,
         confirm_answers=[True, True],
-        prompt_answers=["local", str(tmp_path / "repo.yaml")],
+        prompt_answers=["local", str(tmp_path / "repo.yaml"), "team"],
         repo_content=repo_content,
     )
 
@@ -82,4 +84,6 @@ def test_initial_setup_with_local_and_repo(monkeypatch, tmp_path):
     names = {c["name"] for c in cfg.settings.contexts.available}
     assert current == "local"
     assert names == {"local", "r1"}
-    assert cfg.settings.get("context_repositories") == [str(repo)]
+    assert cfg.settings.get("context_repositories") == [
+        {"name": "team", "path": str(repo)}
+    ]
