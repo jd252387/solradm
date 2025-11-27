@@ -33,7 +33,7 @@ Remove a previously configured repository.
 - `<path>` – repository file to unregister.
 
 #### `repo list`
-Display every configured repository and the contexts they provide.
+Display every configured repository with its name, location, and the contexts it provides.
 
 #### `repo open <path>`
 Open the repository location in the file explorer.

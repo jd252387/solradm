@@ -273,11 +273,15 @@ def list_repos():
     """List configured context repositories and their contexts."""
 
     repo_list = list(settings.get("context_repositories") or [])
-    table = Table("Repository", "Contexts")
+    table = Table("Name", "Location", "Contexts")
     for repo in repo_list:
         repo_path = Path(repo)
         contexts = [c["name"] for c in load_repo_contexts(repo_path)]
-        table.add_row(str(repo_path), ", ".join(contexts) if contexts else "-")
+        table.add_row(
+            repo_path.stem,
+            str(repo_path),
+            ", ".join(contexts) if contexts else "-",
+        )
     rich.print(table)
 
 
