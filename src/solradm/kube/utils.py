@@ -28,6 +28,10 @@ def get_current_kubecontext() -> Any | None:
 
 
 def get_current_kubecontext_namespace() -> str | None:
+    cfg = Configuration.get_default_copy()
+    if getattr(cfg, "namespace", None):
+        return cfg.namespace
+
     active = get_current_kubecontext()
     namespace = active["context"].get("namespace") if active else None
     if namespace:
