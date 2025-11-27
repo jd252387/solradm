@@ -55,7 +55,11 @@ async def reload(
 
     replicas: List[Replica] = []
     collection_counts: Counter[str] = Counter()
-    selected_collection_names = {collection.name for collection in cluster_state}
+    collection_configsets = {
+        collection.name: collection.configName for collection in cluster_state
+    }
+    selected_collection_names = set(collection_configsets.keys())
+    selected_configset_names = set(collection_configsets.values())
     if coordinators is None or not coordinators:
         data_replicas = get_replicas(cluster_state)
         replicas.extend(data_replicas)
@@ -67,7 +71,12 @@ async def reload(
         for node in coordinator_nodes:
             cores = await api_utils.get_cores_from_node(node)
             for core in cores:
-                if core.cloud.collection not in selected_collection_names:
+                collection_name = core.cloud.collection
+                configset_name = collection_configsets.get(collection_name)
+                if (
+                    collection_name not in selected_collection_names
+                    or configset_name not in selected_configset_names
+                ):
                     continue
                 replicas.append(
                     Replica(
