@@ -52,6 +52,12 @@ def _state_file_for_context(context_name: str) -> Path:
     return _ensure_state_dir() / f"{safe_name}.json"
 
 
+def _apply_namespace_to_configuration(namespace: str, client_configuration: Configuration | None = None):
+    cfg = client_configuration or Configuration.get_default_copy()
+    cfg.namespace = namespace
+    Configuration.set_default(cfg)
+
+
 def _resolve_kubecontext(kubecontext: str):
     target_context = get_kubecontext(kubecontext)
     if target_context is None:
@@ -66,6 +72,8 @@ def _resolve_kubecontext(kubecontext: str):
             f"Kubecontext '{kubecontext}' does not define a namespace in your kubeconfig.",
             param_hint="--kubecontext",
         )
+
+    _apply_namespace_to_configuration(namespace)
 
     return target_context, namespace
 
@@ -108,8 +116,10 @@ def is_openshift_cluster() -> bool:
 
     return False
 
-def _get_workloads(pattern: re.Pattern):
-    namespace = get_current_kubecontext_namespace()
+def _get_workloads(pattern: re.Pattern, namespace: str | None = None):
+    namespace = namespace or get_current_kubecontext_namespace()
+    if not namespace:
+        raise AdmException("The kubecontext does not map to a specific namespace!")
     api = AppsV1Api()
     deployments = [
         d
@@ -242,8 +252,9 @@ def suspend(
         raise typer.Exit(1)
 
     switch_current_kubecontext(target_context, namespace=namespace)
+    _apply_namespace_to_configuration(namespace)
     pattern = re.compile(name_regex)
-    deployments, statefulsets = _get_workloads(pattern)
+    deployments, statefulsets = _get_workloads(pattern, namespace)
     if not deployments and not statefulsets:
         rich.print("[error] ❌ No deployments or statefulsets match the given pattern")
         raise typer.Exit(1)
@@ -283,6 +294,7 @@ def resume(
         raise typer.Exit(1)
 
     switch_current_kubecontext(target_context, namespace=namespace)
+    _apply_namespace_to_configuration(namespace)
 
     with open(sf) as f:
         data = json.load(f)
