@@ -18,7 +18,45 @@ if config_path.exists():
         _existing_config = yaml.safe_load(f) or {}
 
 local_contexts: list = _existing_config.get("contexts", {}).get("available", []).copy()
-context_repositories: list[str] = _existing_config.get("context_repositories", [])
+
+
+def _normalize_context_repositories(repos: list) -> list[dict[str, str]]:
+    normalized: list[dict[str, str]] = []
+    existing_names: set[str] = set()
+    for idx, repo in enumerate(repos):
+        raw_name = None
+        raw_path = None
+        if isinstance(repo, str):
+            raw_path = repo
+        elif isinstance(repo, dict):
+            raw_name = repo.get("name")
+            raw_path = repo.get("path")
+        else:
+            raw_name = getattr(repo, "name", None)
+            raw_path = getattr(repo, "path", None)
+
+        if raw_path is None:
+            continue
+
+        base_name = (raw_name or Path(raw_path).stem or f"repo-{idx + 1}").strip()
+        if not base_name:
+            base_name = f"repo-{idx + 1}"
+
+        name = base_name
+        suffix = 2
+        while name in existing_names:
+            name = f"{base_name}-{suffix}"
+            suffix += 1
+
+        existing_names.add(name)
+        normalized.append({"name": name, "path": str(raw_path)})
+
+    return normalized
+
+
+context_repositories: list[dict[str, str]] = _normalize_context_repositories(
+    _existing_config.get("context_repositories", [])
+)
 
 
 def persist(repos_override=None):
@@ -47,8 +85,9 @@ def persist(repos_override=None):
     if settings.get("config_dir"):
         data["config_dir"] = str(settings.config_dir)
 
-    repos = settings.get("context_repositories") or []
-    data["context_repositories"] = list(repos_override if repos_override is not None else repos)
+    repos = _normalize_context_repositories(settings.get("context_repositories") or [])
+    repo_data = repos_override if repos_override is not None else repos
+    data["context_repositories"] = list(_normalize_context_repositories(repo_data))
 
     if settings.get("backup_base_location"):
         data["backup_base_location"] = settings.backup_base_location
@@ -59,10 +98,12 @@ def persist(repos_override=None):
 
 settings = Dynaconf(
     envvar_prefix="DYNACONF",
-    settings_files=context_repositories + [config_path],
+    settings_files=[repo["path"] for repo in context_repositories] + [config_path],
     load_dotenv=True,
     merge_enabled=True,
 )
+
+settings.set("context_repositories", context_repositories, merge=False)
 
 theme = Theme({
     "text": "cyan",
@@ -140,9 +181,20 @@ share them, create temporary ones, and so on...
             else:
                 is_valid_repo = True
 
-        repo_str = str(repo_path)
-        context_repositories.append(repo_str)
-        settings.configure(settings_files=context_repositories + [config_path])
+        repo_name = Prompt.ask("Enter a unique name for this repository -> ").strip()
+        while not repo_name or any(
+            repo.get("name") == repo_name for repo in context_repositories
+        ):
+            repo_name = Prompt.ask(
+                "[error]Repository name must be unique and non-empty. Enter again -> "
+            ).strip()
+
+        repo_entry = {"name": repo_name, "path": str(repo_path)}
+        context_repositories.append(repo_entry)
+        settings.configure(
+            settings_files=[repo["path"] for repo in context_repositories]
+            + [config_path]
+        )
         repo_contexts = load_repo_contexts(repo_path)
         settings.set("context_repositories", context_repositories)
     else:
