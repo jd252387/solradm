@@ -57,8 +57,18 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
                 self.modification_hashes[event.src_path] = edit_hash
 
     def on_deleted(self, event):
-        change_type = "deleted_dir" if event.is_directory else "deleted"
-        self._schedule_sync(event.src_path, change_type)
+        self._record_delete(event.src_path, event.is_directory)
+
+    def on_moved(self, event):
+        self._record_delete(event.src_path, event.is_directory)
+
+        if event.is_directory:
+            if os.path.exists(event.dest_path):
+                for root, _, files in os.walk(event.dest_path):
+                    for filename in files:
+                        self._schedule_sync(os.path.join(root, filename), "created")
+        else:
+            self._schedule_sync(event.dest_path, "created")
 
     def _schedule_sync(self, file_path: str, change_type: str):
         """Schedule a sync operation."""
@@ -127,6 +137,10 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
                 rich.print(f"[error]- {error}")
         else:
             rich.print("[success]✅ Sync completed")
+
+    def _record_delete(self, path: str, is_directory: bool):
+        change_type = "deleted_dir" if is_directory else "deleted"
+        self._schedule_sync(path, change_type)
 
     def _sync_file_change(self, file_path: str, zk_path: str, change_type: str):
         """Sync a single file change to ZooKeeper."""
