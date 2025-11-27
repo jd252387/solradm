@@ -1,10 +1,13 @@
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Iterator, List, Sequence, Tuple
 
 import rich
+import typer
+from typer.models import OptionInfo
 from kazoo.client import KazooClient
 
 from solradm.exceptions.adm_exception import AdmException
@@ -40,6 +43,79 @@ def create_or_update(zk: KazooClient, path: str, data: bytes) -> None:
         rich.print(f"[blue]📝 Updated: {path}")
 
 
+def compile_regex_patterns(patterns: Sequence[str] | None, option_display: str) -> list[re.Pattern[str]]:
+    if isinstance(patterns, OptionInfo):
+        patterns = None
+    compiled: list[re.Pattern[str]] = []
+    for pattern in patterns or []:
+        try:
+            compiled.append(re.compile(pattern))
+        except re.error as exc:
+            raise typer.BadParameter(
+                f"Invalid regular expression for {option_display} '{pattern}': {exc}"
+            ) from exc
+    return compiled
+
+
+def _normalize_rel_path(path: str) -> str:
+    return path.replace("\\", "/")
+
+
+def _is_excluded(
+        rel_path: str, exclude_patterns: Sequence[re.Pattern[str]] | None
+) -> bool:
+    normalized = _normalize_rel_path(rel_path)
+    return bool(exclude_patterns and any(pattern.search(normalized) for pattern in exclude_patterns))
+
+
+def should_include_path(
+        rel_path: str,
+        include_patterns: Sequence[re.Pattern[str]] | None,
+        exclude_patterns: Sequence[re.Pattern[str]] | None,
+) -> bool:
+    normalized = _normalize_rel_path(rel_path)
+
+    if exclude_patterns and any(pattern.search(normalized) for pattern in exclude_patterns):
+        return False
+    if include_patterns and not any(pattern.search(normalized) for pattern in include_patterns):
+        return False
+    return True
+
+
+def iter_local_files(
+        path: Path,
+        include_patterns: Sequence[re.Pattern[str]] | None,
+        exclude_patterns: Sequence[re.Pattern[str]] | None,
+) -> Iterator[Tuple[Path, str]]:
+    """Yield (absolute_path, relative_path) pairs filtered by include/exclude patterns.
+
+    Exclude patterns are applied before includes. Directory traversal is pruned when a
+    directory matches an exclude pattern.
+    """
+
+    if path.is_file():
+        if should_include_path(path.name, include_patterns, exclude_patterns):
+            yield path, path.name
+        return
+
+    for dirpath, dirnames, filenames in os.walk(path):
+        rel_dir = os.path.relpath(dirpath, path)
+        rel_dir = "" if rel_dir == "." else rel_dir
+
+        filtered_dirnames = []
+        for dirname in dirnames:
+            dir_rel = f"{rel_dir}/{dirname}" if rel_dir else dirname
+            if _is_excluded(dir_rel, exclude_patterns):
+                continue
+            filtered_dirnames.append(dirname)
+        dirnames[:] = filtered_dirnames
+
+        for filename in filenames:
+            rel_file = f"{rel_dir}/{filename}" if rel_dir else filename
+            if should_include_path(rel_file, include_patterns, exclude_patterns):
+                yield Path(dirpath) / filename, _normalize_rel_path(rel_file)
+
+
 def get_relative_znode_path(
         base_znode_path: str, base_dir_path: str, target_file_path: str
 ) -> str:
@@ -67,18 +143,17 @@ def get_relative_znode_path(
     return zk_path
 
 
-def build_files_by_config(paths: List[Tuple[Path, str | None]], znode_path: str) -> Dict[str, List[Tuple[Path, str]]]:
+def build_files_by_config(
+        paths: List[Tuple[Path, str | None]],
+        znode_path: str,
+        *,
+        include_regexes: Sequence[re.Pattern[str]] | None = None,
+        exclude_regexes: Sequence[re.Pattern[str]] | None = None,
+) -> Dict[str, List[Tuple[Path, str]]]:
     files_by_config: Dict[str, List[Tuple[Path, str]]] = {}
     for path, override in paths:
         config = override or path.name
-        if path.is_file():
-            rel_path = path.name
+        for sub_file, rel_path in iter_local_files(path, include_regexes, exclude_regexes):
             zk_path = f"{znode_path.rstrip('/')}/{config}/{rel_path}"
-            files_by_config.setdefault(config, []).append((path, zk_path))
-        elif path.is_dir():
-            for sub_file in path.rglob("*"):
-                if sub_file.is_file():
-                    rel_path = os.path.relpath(sub_file, path).replace("\\", "/")
-                    zk_path = f"{znode_path.rstrip('/')}/{config}/{rel_path}"
-                    files_by_config.setdefault(config, []).append((sub_file, zk_path))
+            files_by_config.setdefault(config, []).append((sub_file, zk_path))
     return files_by_config
