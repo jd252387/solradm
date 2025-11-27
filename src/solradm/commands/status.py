@@ -42,6 +42,10 @@ def status(
 ):
     """Display status table for all replicas across collections."""
 
+    if not cluster_state:
+        rich.print("[warning]ℹ️  No collections found in the cluster.")
+        return
+
     replicas = get_replicas(cluster_state)
 
     if severity:
