@@ -56,7 +56,13 @@ def with_cluster_state(*filter_classes, allow_empty: bool = False, show_filter_e
 
             for filter_class in filter_classes:
                 for field_name, field_info in filter_class.__dataclass_fields__.items():
+                    if "typer_option" not in field_info.metadata:
+                        continue
+
                     typer_option = field_info.metadata.get("typer_option")
+
+                    if any(param.name == field_name for param in new_params):
+                        continue
 
                     new_params.append(inspect.Parameter(
                         field_name,
@@ -69,11 +75,17 @@ def with_cluster_state(*filter_classes, allow_empty: bool = False, show_filter_e
 
         func.__signature__ = new_sig
 
+        signature = inspect.Signature(parameters=new_params)
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
 
-            filter_instances = []
             cluster_state = kwargs.pop("cluster_state", None)
+
+            bound_arguments = signature.bind_partial(*args, **kwargs)
+            kwargs = dict(bound_arguments.arguments)
+
+            filter_instances = []
 
             for filter_class in filter_classes:
                 filter_params = {}
