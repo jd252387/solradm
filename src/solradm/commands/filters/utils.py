@@ -79,58 +79,59 @@ def with_cluster_state(*filter_classes, allow_empty: bool = False, show_filter_e
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-
-            cluster_state = kwargs.pop("cluster_state", None)
-
-            bound_arguments = signature.bind_partial(*args, **kwargs)
-            kwargs = dict(bound_arguments.arguments)
-
-            filter_instances = []
-
-            for filter_class in filter_classes:
-                filter_params = {}
-                for field_name in filter_class.__dataclass_fields__:
-                    if field_name in kwargs:
-                        filter_params[field_name] = kwargs.pop(field_name)
-
-                filter_instance = filter_class(**filter_params)
-                filter_instance.init()
-
-                if any(value is not None for value in filter_params.values()):
-                    filter_instances.append(filter_instance)
-
-            if cluster_state is None:
+            # caller may provide explicit cluster_state and skip fetching
+            # in this case filter arguments are ignored
+            if not (cluster_state := kwargs.pop("cluster_state", None)):
+                # if caller didn't provide explicit cluster_state, then fetch it and filter using the provided filters
                 try:
                     cluster_state = get_collections()
                 except Exception as e:
                     raise typer.BadParameter(f"Failed to fetch cluster state: {e}")
+                
+                bound_arguments = signature.bind_partial(*args, **kwargs)
+                kwargs = dict(bound_arguments.arguments)
 
-            for filter_instance in filter_instances:
-                cluster_state = filter_instance.apply(cluster_state)
+                filter_instances = []
 
-            if show_filter_explanations and filter_instances:
-                explanation_rows = []
+                for filter_class in filter_classes:
+                    filter_params = {}
+                    for field_name in filter_class.__dataclass_fields__:
+                        if field_name in kwargs:
+                            filter_params[field_name] = kwargs.pop(field_name)
+
+                    filter_instance = filter_class(**filter_params)
+                    filter_instance.init()
+
+                    if any(value is not None for value in filter_params.values()):
+                        filter_instances.append(filter_instance)
+                
+
                 for filter_instance in filter_instances:
-                    for explanation in filter_instance.describe():
-                        if explanation:
-                            explanation_rows.append(
-                                (_friendly_filter_name(filter_instance), explanation)
-                            )
+                    cluster_state = filter_instance.apply(cluster_state)
 
-                if explanation_rows:
-                    table = Table(
-                        title="Active filters",
-                        header_style="bold magenta",
-                        show_lines=False,
-                    )
+                if show_filter_explanations and filter_instances:
+                    explanation_rows = []
+                    for filter_instance in filter_instances:
+                        for explanation in filter_instance.describe():
+                            if explanation:
+                                explanation_rows.append(
+                                    (_friendly_filter_name(filter_instance), explanation)
+                                )
 
-                    table.add_column("Filter", style="cyan", no_wrap=True)
-                    table.add_column("Explanation", style="green")
+                    if explanation_rows:
+                        table = Table(
+                            title="Active filters",
+                            header_style="bold magenta",
+                            show_lines=False,
+                        )
 
-                    for filter_name, explanation in explanation_rows:
-                        table.add_row(filter_name, explanation)
+                        table.add_column("Filter", style="cyan", no_wrap=True)
+                        table.add_column("Explanation", style="green")
 
-                    rich.print(table)
+                        for filter_name, explanation in explanation_rows:
+                            table.add_row(filter_name, explanation)
+
+                        rich.print(table)
 
             if len(cluster_state) == 0:
                 if allow_empty and not filter_instances:

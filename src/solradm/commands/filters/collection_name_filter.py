@@ -18,6 +18,7 @@ class CollectionNameFilter(Filter):
         metadata={
             "typer_option": typer.Option(
                 None,
+                "-c",
                 "--collection",
                 help="Regex pattern to filter collections by name",
                 autocompletion=collection_names,
@@ -28,11 +29,12 @@ class CollectionNameFilter(Filter):
     all_coll: Optional[bool] = field(
         default=False,
         metadata={
-            "typer_option": typer.Option(False, "--all-collections", "-a", help="Skip collection filter absence checks")
+            "typer_option": typer.Option(False, "--global", "-g", help="Skip collection filter absence checks")
         }
     )
 
     def init(self):
+
         if self.collection_name_filter is None and not self.all_coll:
             if not Confirm.ask(
                     "No collection filter was specified, so this command will run across all collections, adhering to any other filters you have placed.\nAre you sure you want to continue?"):

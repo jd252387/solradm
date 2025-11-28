@@ -381,9 +381,6 @@ async def create(
 @with_dry_run
 async def delete(
     cluster_state: List[Collection],
-    collection_name_filter: str = typer.Argument(
-        ..., help="Regex pattern for collection names"
-    ),
 ) -> None:
     """Delete collections and their replicas."""
 
@@ -394,7 +391,6 @@ async def delete(
 
     await depopulate(
         cluster_state=cluster_state,
-        collection_name_filter=collection_name_filter,
         dry_run=api_utils.is_dry_run,
     )
     if api_utils.is_dry_run:

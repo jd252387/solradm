@@ -194,37 +194,6 @@ def open_config():
         subprocess.run(["xdg-open", str(config_path.parent)])
 
 
-@app.command()
-def view_config():
-    """Print the current solradm configuration as JSON."""
-
-    repo_list = _get_repo_list()
-    merged_contexts: dict[str, dict] = {}
-
-    for repo in repo_list:
-        for ctx in load_repo_contexts(Path(repo["path"])):
-            name = ctx.get("name")
-            if name:
-                merged_contexts[name] = ctx
-
-    for ctx in local_contexts:
-        name = ctx.get("name")
-        if name:
-            merged_contexts[name] = ctx
-
-    rich.print(
-        json.dumps(
-            {
-                "config_dir": str(settings.get("config_dir")) if settings.get("config_dir") else None,
-                "auth": _to_dict(settings.get("auth")),
-                "contexts": _to_dict(settings.get("contexts")),
-                "context_repositories": repo_list,
-                "merged_contexts": list(merged_contexts.values()),
-            }
-        )
-    )
-
-
 @repo_app.command("create")
 def create_repo(
         name: str = typer.Argument(..., help="Repository name"),
@@ -382,25 +351,6 @@ def upload(
     save_repo_contexts(repo_path, contexts)
     settings.reload()
     rich.print(f"[success]✅  Uploaded context {name} to {repo}!")
-
-
-@app.command("update-configsets")
-def config_dir(
-        path: Path = typer.Argument(
-            ..., exists=True, file_okay=False, dir_okay=True, resolve_path=True,
-            help="Path to configsets directory, containing 'root' and 'configsets' subdirectories"
-        ),
-):
-    """Update the configset directory to fetch Solr configsets and chroot ZooKeeper files from."""
-
-    if not validate_config_dir(path):
-        raise typer.BadParameter(
-            "Directory must contain 'root' and 'configsets' subdirectories"
-        )
-    settings.config_dir = str(path)
-    persist()
-    rich.print(f"[success]✅  Updated default configuration directory to {path}")
-
 
 @app.command()
 def connect(
@@ -666,7 +616,7 @@ def edit(
 
 
 @app.command("remove")
-def delete(
+def remove(
         name: str = typer.Argument(
             ..., help="Context name", autocompletion=context_names
         )
