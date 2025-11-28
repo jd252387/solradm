@@ -13,32 +13,79 @@ os.environ.setdefault("XDG_CONFIG_HOME", str(_test_config_home))
 import pytest
 import typer
 
-from solradm.commands.collections.lifecycle import _select_nodes, _sort_nodes
-
-def test_select_nodes_returns_sorted_unique_when_no_filters():
-    nodes = ["solr02", "solr01", "solr01"]
-
-    assert _select_nodes(nodes, None, None) == ["solr01", "solr02"]
+from solradm.api.models import Collection, Replica, Router, Shard
+from solradm.commands.collections.lifecycle import _sort_nodes
+from solradm.commands.filters.node_name_filter import NodeNameFilter
 
 
-def test_select_nodes_honours_include_and_exclude_patterns():
-    nodes = ["solr01", "solr02", "solr03"]
+def _replica(node_name: str) -> Replica:
+    return Replica(
+        name=f"r-{node_name}",
+        core="core",
+        node_name=node_name,
+        type="NRT",
+        state="active",
+        leader=False,
+        force_set_state=False,
+        base_url=f"http://{node_name}:8983/solr",
+    )
 
-    result = _select_nodes(nodes, ["solr0[12]"], ["solr02"])
 
-    assert result == ["solr01"]
+def _collection(replicas: list[Replica]) -> Collection:
+    shard = Shard(name="shard1", range="0-100", replicas=replicas)
+    return Collection(
+        name="coll",
+        pullReplicas=0,
+        configName="conf",
+        replicationFactor=1,
+        router=Router(name="implicit", field=None),
+        nrtReplicas=1,
+        tlogReplicas=0,
+        shards=[shard],
+    )
+
+
+def test_node_filter_returns_all_when_no_filters():
+    replicas = [_replica("solr02"), _replica("solr01"), _replica("solr01")]
+    cluster_state = [_collection(replicas)]
+
+    node_filter = NodeNameFilter()
+    node_filter.init()
+
+    filtered_state = node_filter.apply(cluster_state)
+
+    assert len(filtered_state) == 1
+    assert sorted({r.node_name for r in filtered_state[0].shards[0].replicas}) == [
+        "solr01",
+        "solr02",
+    ]
+
+
+def test_node_filter_honours_include_and_exclude_patterns():
+    replicas = [_replica("solr01"), _replica("solr02"), _replica("solr03")]
+    cluster_state = [_collection(replicas)]
+
+    node_filter = NodeNameFilter(node=["solr0[12]"], exclude_node=["solr02"])
+    node_filter.init()
+
+    filtered_state = node_filter.apply(cluster_state)
+
+    assert len(filtered_state[0].shards[0].replicas) == 1
+    assert filtered_state[0].shards[0].replicas[0].node_name == "solr01"
 
 
 def test_select_nodes_invalid_include_pattern_raises_bad_parameter():
     with pytest.raises(typer.BadParameter) as exc:
-        _select_nodes(["solr01"], ["["], None)
+        node_filter = NodeNameFilter(node=["["])
+        node_filter.init()
 
     assert "--node" in str(exc.value)
 
 
 def test_select_nodes_invalid_exclude_pattern_raises_bad_parameter():
     with pytest.raises(typer.BadParameter) as exc:
-        _select_nodes(["solr01"], None, ["["])
+        node_filter = NodeNameFilter(exclude_node=["["])
+        node_filter.init()
 
     assert "--exclude-node" in str(exc.value)
 
