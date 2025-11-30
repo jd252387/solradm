@@ -13,19 +13,9 @@ def get_kubecontext(name: str) -> Any | None:
     contexts, _ = list_kube_config_contexts()
     return next((context for context in contexts if context["name"] == name), None)
 
-
-def get_configured_kubecontext() -> Any | None:
-    current = get_current_context()
-    if not current.kubecontext:
-        return None
-    return get_kubecontext(current.kubecontext)
-
-
 def get_current_kubecontext() -> Any | None:
     contexts, active = list_kube_config_contexts()
-
     return active
-
 
 def get_current_kubecontext_namespace() -> str | None:
     cfg = Configuration.get_default_copy()
