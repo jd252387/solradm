@@ -12,6 +12,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.table import Table
 from rich.text import Text
+from rich.diff import Diff
 from watchdog.observers import Observer
 
 from solradm.api import get_initialized_session
@@ -33,13 +34,148 @@ from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
 from solradm.completion.collections import collection_names
 from solradm.completion.configs import config_names_or_paths
 from solradm.completion.znodes import znode_paths
-from solradm.config.util import resolve_config_name_to_abs_or_default_directory
+from solradm.config.util import (
+    get_default_configsets_config_dir,
+    resolve_config_name_to_abs_or_default_directory,
+)
 from solradm.exceptions.adm_exception import AdmException
 from solradm.zk import get_client
 from solradm.zk.utils import win_path_to_zk_path
 
 app = typer.Typer()
 add_verbosity_option(app)
+
+
+@app.command()
+def diff(
+        config_regex: str = typer.Argument(..., help="Regex of configuration names to diff"),
+        dir: Path | None = typer.Option(
+            None,
+            "--dir",
+            "-d",
+            file_okay=False,
+            help="Override the default configsets directory when locating configs to diff",
+        ),
+):
+    """Diff local configsets against the versions stored in ZooKeeper."""
+
+    try:
+        regex = re.compile(config_regex)
+    except re.error as exc:
+        raise typer.BadParameter(f"Invalid regular expression '{config_regex}': {exc}") from exc
+
+    configsets_dir = _resolve_configsets_dir(dir)
+    zk = get_client()
+
+    if not zk.exists("/configs"):
+        rich.print("[error]❌ /configs does not exist in ZooKeeper")
+        raise typer.Exit(1)
+
+    available_configs = sorted(zk.get_children("/configs"))
+    matched_configs = [cfg for cfg in available_configs if regex.search(cfg)]
+
+    if not matched_configs:
+        rich.print("[warning]⚠️ No ZooKeeper configsets matched the provided regex")
+        raise typer.Exit()
+
+    for config_name in matched_configs:
+        rich.print(
+            Panel.fit(
+                Text(config_name, style="bold"),
+                title="Configset",
+                subtitle="Diff",
+                style="cyan",
+            )
+        )
+
+        local_path = configsets_dir / config_name
+        if not local_path.exists():
+            rich.print(f"[warning]⚠️ Local configset '{config_name}' not found at {local_path}")
+
+        local_files = _collect_local_config_files(local_path)
+        zk_files = _collect_zk_config_files(f"/configs/{config_name}")
+
+        file_paths = sorted(set(local_files) | set(zk_files))
+        if not file_paths:
+            rich.print("[yellow]No files found to compare.")
+            continue
+
+        for rel_path in file_paths:
+            local_content = local_files.get(rel_path)
+            zk_content = zk_files.get(rel_path)
+
+            if local_content == zk_content and local_content is not None:
+                rich.print(f"[green]✅ {rel_path} is identical")
+                continue
+
+            local_title = "Local" if local_content is not None else "Local (missing)"
+            zk_title = "ZooKeeper" if zk_content is not None else "ZooKeeper (missing)"
+
+            diff_renderable = Diff.compare(
+                local_content or "",
+                zk_content or "",
+                title1=local_title,
+                title2=zk_title,
+            )
+            rich.print(Panel(diff_renderable, title=rel_path, subtitle=config_name, expand=True))
+
+        rich.print()
+
+
+def _read_text_file(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8").replace("\r", "")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-8", errors="replace").replace("\r", "")
+
+
+def _collect_local_config_files(config_path: Path) -> dict[str, str]:
+    files: dict[str, str] = {}
+    if not config_path.exists():
+        return files
+
+    for file in sorted(config_path.rglob("*")):
+        if file.is_file():
+            files[file.relative_to(config_path).as_posix()] = _read_text_file(file)
+    return files
+
+
+def _collect_zk_config_files(base_path: str) -> dict[str, str]:
+    files: dict[str, str] = {}
+    zk = get_client()
+
+    if not zk.exists(base_path):
+        return files
+
+    def _walk(path: str, rel: str = "") -> None:
+        children = zk.get_children(path)
+        if not children:
+            data, _ = zk.get(path)
+            files[rel or path.split("/")[-1]] = data.decode("utf-8", errors="replace").replace("\r", "")
+            return
+
+        for child in children:
+            child_path = f"{path.rstrip('/')}/{child}" if path != "/" else f"/{child}"
+            child_rel = f"{rel}/{child}" if rel else child
+            _walk(child_path, child_rel)
+
+    _walk(base_path)
+    return files
+
+
+def _resolve_configsets_dir(override_dir: Path | None) -> Path:
+    if override_dir is None:
+        config_dir = get_default_configsets_config_dir()
+        if config_dir is None or not config_dir.is_dir():
+            rich.print("[error]❌ Default configsets directory is not configured.")
+            raise typer.Exit(1)
+        return config_dir
+
+    override_dir = override_dir.expanduser().resolve()
+    if not override_dir.is_dir():
+        rich.print(f"[error]❌ Provided directory {override_dir} does not exist or is not a directory")
+        raise typer.Exit(1)
+    return override_dir
 
 
 def _open_znode_session(
