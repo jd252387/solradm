@@ -34,7 +34,7 @@ app.add_typer(kube.app, name="kube", help="Manage Kubernetes workloads")
 app.add_typer(node.app, name="node", help="Manage Solr nodes")
 app.add_typer(state.app, name="state", help="Export or restore cluster state")
 app.command()(status_cmd)
-app.command()(current)
+app.command(help="Show the currently active context.")(current)
 app.command()(version)
 
 def run():

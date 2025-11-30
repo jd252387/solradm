@@ -1,8 +1,11 @@
 import importlib.metadata
 from pathlib import Path
+
 import tomllib
 import typer
+
 from . import config
+
 
 def version() -> None:
     """Display the current solradm version."""
@@ -17,5 +20,8 @@ def version() -> None:
             ver = "unknown"
     typer.echo(ver)
 
+
 def current() -> None:
+    """Show the currently active context."""
+
     config.current()

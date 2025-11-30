@@ -170,7 +170,7 @@ def view(
     )
 
 
-@app.command()
+@app.command(help="Upload local files or directories to a ZooKeeper znode.")
 def upload(
         paths: List[str] = typer.Argument(
             ...,
@@ -209,17 +209,17 @@ def upload(
         ),
         skip_checks: bool = typer.Option(False, "--skip-confirm", "-y", help="Skip confirmation prompt"),
 ):
+    """Upload local files or directories to a ZooKeeper znode.
+
+    Exclude patterns are evaluated before include patterns when filtering discovered files.
+    """
+
     if only_used and znode_path != "/configs":
         rich.print("[error] ❌ You cannot use only_used when the znode_path is not /configs!")
         raise typer.Exit(1)
 
     include_regexes = compile_regex_patterns(include, "--include")
     exclude_regexes = compile_regex_patterns(exclude, "--exclude")
-
-    """Upload local files or directories to a ZooKeeper znode.
-
-    Exclude patterns are evaluated before include patterns when filtering discovered files.
-    """
     resolved_paths = []
     for path in paths:
         resolved_paths.append(resolve_config_name_to_abs_or_default_directory(path))
