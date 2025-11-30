@@ -92,6 +92,57 @@ def test_suspend_writes_state_per_kubecontext(monkeypatch, tmp_path):
     assert exc_info.value.exit_code == 1
 
 
+def test_suspend_dry_run_skips_scaling(monkeypatch, tmp_path):
+    kube_module = _reload_kube(monkeypatch, tmp_path)
+
+    context_data = {"name": "demo/one", "context": {"namespace": "demo"}}
+    monkeypatch.setattr(kube_module, "get_kubecontext", lambda name: context_data)
+    monkeypatch.setattr(kube_module, "switch_current_kubecontext", lambda *args, **kwargs: None)
+    monkeypatch.setattr(kube_module.Confirm, "ask", lambda *args, **kwargs: True)
+
+    deployments = [
+        SimpleNamespace(
+            metadata=SimpleNamespace(name="dep"),
+            spec=SimpleNamespace(replicas=2),
+        )
+    ]
+    statefulsets = [
+        SimpleNamespace(
+            metadata=SimpleNamespace(name="sts"),
+            spec=SimpleNamespace(replicas=3),
+        )
+    ]
+    monkeypatch.setattr(kube_module, "_get_workloads", lambda pattern, namespace=None: (deployments, statefulsets))
+
+    class DummyApps:
+        def __init__(self):
+            self.calls = []
+
+        def patch_namespaced_deployment_scale(self, name, namespace, body):
+            self.calls.append(("dep", name, namespace, body))
+
+        def patch_namespaced_stateful_set_scale(self, name, namespace, body):
+            self.calls.append(("sts", name, namespace, body))
+
+    dummy_apps = DummyApps()
+    monkeypatch.setattr(kube_module, "AppsV1Api", lambda: dummy_apps)
+
+    kube_module.suspend(kubecontext="demo/one", name_regex=".*", state_file=None, dry=True)
+
+    state_path = kube_module._state_file_for_context("demo/one")
+    assert state_path.exists()
+
+    with open(state_path) as fh:
+        saved = json.load(fh)
+
+    assert saved == {
+        "deployments": {"dep": 2},
+        "statefulsets": {"sts": 3},
+    }
+
+    assert dummy_apps.calls == []
+
+
 def test_resume_restores_and_deletes_state(monkeypatch, tmp_path):
     kube_module = _reload_kube(monkeypatch, tmp_path)
 

@@ -174,10 +174,11 @@ Show disk usage of `/var/solr` for matching pods.
 - `<pattern>` – pod name regex or node name when `--node` is used.
 - `--node` – interpret the pattern as a node name.
 
-### `suspend <regex> [--state-file <file>]`
+### `suspend <regex> [--state-file <file>] [--dry]`
 Scale workloads to zero replicas and record their previous state.
 - `<regex>` – regular expression matching deployment or statefulset names.
 - `--state-file` – optional path to write the state JSON (defaults to an application data file).
+- `--dry` – save the workload state without scaling replicas down.
 
 ### `resume [--state-file <file>]`
 Restore workloads that were previously suspended.

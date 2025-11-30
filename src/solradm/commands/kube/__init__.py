@@ -242,8 +242,12 @@ def suspend(
         name_regex: str = typer.Argument(..., help="Regex for deployment/statefulset names",
                                          autocompletion=workload_names),
         state_file: Path = typer.Option(None, "--state-file", help="File to store replica state", dir_okay=False),
+        dry: bool = typer.Option(False, "--dry", help="Save state without scaling workloads"),
 ):
     """Scale matching deployments and statefulsets to zero replicas."""
+
+    # Typer replaces option defaults with OptionInfo when invoked programmatically; normalize for tests/direct calls.
+    dry = bool(dry) if isinstance(dry, bool) else False
 
     target_context, namespace = _resolve_kubecontext(kubecontext)
     sf = state_file or _state_file_for_context(kubecontext)
@@ -260,7 +264,8 @@ def suspend(
         raise typer.Exit(1)
 
     _print_workloads(deployments, statefulsets)
-    if not Confirm.ask("Proceed with scaling these workloads to zero?"):
+    action = "saving state (dry run; no scaling)" if dry else "scaling these workloads to zero"
+    if not Confirm.ask(f"Proceed with {action}?"):
         raise typer.Exit(0)
 
     sf.parent.mkdir(parents=True, exist_ok=True)
@@ -270,6 +275,10 @@ def suspend(
     }
     with open(sf, "w") as f:
         json.dump(data, f)
+
+    if dry:
+        rich.print(f"[success]✅  Saved workload state for kubecontext '{kubecontext}' to {sf} (no scaling performed)")
+        return
 
     api = AppsV1Api()
     for d in deployments:
