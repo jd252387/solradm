@@ -15,9 +15,12 @@ from rich.text import Text
 from watchdog.observers import Observer
 
 from solradm.api import get_initialized_session
+from solradm.api.models import Collection
 from solradm.api.state import get_collections
 from solradm.api.utils import get_collections_using_config
 from solradm.commands.callbacks import add_verbosity_option
+from solradm.commands.filters.collection_name_filter import CollectionNameFilter
+from solradm.commands.filters.utils import with_cluster_state
 from solradm.commands.zk.utils import (
     open_vscode,
     create_or_update,
@@ -298,6 +301,68 @@ def upload(
                     collection_name_filter=
                     r"^(" + "|".join(re.escape(c) for c in to_reload) + r")$",
                     dry_run=False, coordinators=None
-                )
+            )
             )
             asyncio.run(get_initialized_session().close())
+
+
+@app.command()
+@with_cluster_state(CollectionNameFilter)
+def sync(
+        cluster_state: List[Collection],
+        dir: Path = typer.Option(
+            None,
+            "--dir",
+            "-d",
+            file_okay=False,
+            help="Override the default configsets directory when locating configs to upload",
+        ),
+        reload: bool = typer.Option(
+            False,
+            "--reload",
+            help="Reload the selected collections after syncing their configs",
+        ),
+):
+    """Upload configsets used by selected collections and optionally reload them."""
+
+    config_names = sorted({collection.configName for collection in cluster_state})
+
+    if dir is not None:
+        dir = dir.expanduser().resolve()
+        if not dir.is_dir():
+            rich.print(f"[error]❌ Provided directory {dir} does not exist or is not a directory")
+            raise typer.Exit(1)
+
+        missing_configs = [name for name in config_names if not (dir / name).exists()]
+        if missing_configs:
+            rich.print(
+                "[error]❌ Could not find the following configsets in the provided directory: "
+                + ", ".join(sorted(missing_configs))
+            )
+            raise typer.Exit(1)
+
+        upload_targets = [str((dir / name).resolve()) for name in config_names]
+    else:
+        upload_targets = config_names
+
+    upload(
+        paths=upload_targets,
+        znode_path="/configs",
+        include=None,
+        exclude=None,
+        only_used=True,
+        reload=False,
+        reload_exclude=None,
+        skip_checks=False,
+    )
+
+    if reload:
+        from solradm.commands.collections.maintenance import reload as reload_cmd
+
+        asyncio.run(
+            reload_cmd(
+                cluster_state=cluster_state,
+                coordinators=None,
+                skip_checks=False,
+            )
+        )
