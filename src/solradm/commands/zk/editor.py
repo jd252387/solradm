@@ -1,4 +1,5 @@
 import asyncio
+import difflib
 import re
 import subprocess
 import tempfile
@@ -8,7 +9,6 @@ from typing import List
 
 import rich
 import typer
-from redlines import OutputType, Redlines
 from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.table import Table
@@ -182,6 +182,21 @@ def _load_local_config_files(config_dir: Path) -> dict[str, str]:
     return files
 
 
+def _print_diff_lines(diff_lines: list[str]) -> None:
+    for line in diff_lines:
+        style = None
+        if line.startswith("@@"):
+            style = "cyan"
+        elif line.startswith("+++ ") or line.startswith("--- "):
+            style = "bright_black"
+        elif line.startswith("+"):
+            style = "green"
+        elif line.startswith("-"):
+            style = "red"
+
+        rich.print(Text(line, style=style))
+
+
 @app.command(help="Show diffs between local configsets and ZooKeeper.")
 def diff(
         config_pattern: str = typer.Argument(
@@ -270,6 +285,21 @@ def diff(
         for rel_path in file_paths:
             local_content = local_files.get(rel_path, "")
             zk_content = zk_files.get(rel_path, "")
+
+            diff_lines = list(
+                difflib.unified_diff(
+                    zk_content.splitlines(),
+                    local_content.splitlines(),
+                    fromfile=f"ZooKeeper/{rel_path}",
+                    tofile=f"Local/{rel_path}",
+                    lineterm="",
+                    n=1,
+                )
+            )
+
+            if not diff_lines:
+                continue
+
             flags: list[str] = []
             if rel_path not in local_files:
                 flags.append("(missing locally)")
@@ -278,8 +308,7 @@ def diff(
 
             header = " ".join([rel_path] + flags)
             rich.print(f"[cyan]{header}[/]")
-            diff_output = Redlines(zk_content, local_content, output_type=OutputType.RICH)
-            rich.print(diff_output.output_rich)
+            _print_diff_lines(diff_lines)
             rich.print()
 
 

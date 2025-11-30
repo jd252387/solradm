@@ -555,21 +555,6 @@ wheels = [
 ]
 
 [[package]]
-name = "redlines"
-version = "0.6.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "click" },
-    { name = "click-default-group" },
-    { name = "rich" },
-    { name = "rich-click" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/07/68/3b222458300a3aa0baf45dcc508ecaaa5dd5ab2d25e6d550699f392fdd3f/redlines-0.6.1.tar.gz", hash = "sha256:e5db4886b9a1b4d334d02ff7f03b8e702bbc40873ee222fe34b0054b4f55e836", size = 301889, upload-time = "2025-11-24T15:31:28.67Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7f/a1/fd575a81a363d8ef66997eaca21973ea98468ae6d8c8886f8d69472c3bbc/redlines-0.6.1-py3-none-any.whl", hash = "sha256:acf56b0f4f2c68b328b1c0890e5808fb34eaac89d199a0c7e4a5f4957c40c13a", size = 25520, upload-time = "2025-11-24T15:31:26.837Z" },
-]
-
-[[package]]
 name = "requests"
 version = "2.32.5"
 source = { registry = "https://pypi.org/simple" }
@@ -668,7 +653,6 @@ dependencies = [
     { name = "pydantic" },
     { name = "pytest" },
     { name = "pyyaml" },
-    { name = "redlines" },
     { name = "typer" },
     { name = "watchdog" },
 ]
@@ -684,7 +668,6 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "redlines", specifier = ">=0.6.1" },
     { name = "typer", specifier = ">=0.20.0" },
     { name = "watchdog", specifier = ">=6.0.0" },
 ]
