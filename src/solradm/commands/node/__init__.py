@@ -15,10 +15,10 @@ from solradm.api.utils import get_host_with_scheme
 from solradm.commands.callbacks import add_verbosity_option
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
-from solradm.commands.kube import load_configured_kubecontext
 from solradm.completion.nodes import node_names
 from solradm.kube.utils import (
     find_pods_by_node_name,
+    get_kube_context_info,
     run_command_in_pod,
 )
 from solradm.renderers.task_table import MultiTaskTable
@@ -103,12 +103,15 @@ async def drain(
             renderer=MultiTaskTable(metatasks, refresh_every=0.25)
         )
 
-    if not load_configured_kubecontext():
+    kube = None
+    try:
+        kube = get_kube_context_info()
+    except Exception:
         rich.print("[warning] ⚠️ No kubecontext configured; skipping disk cleanup")
         return
 
     for n in selected_nodes:
-        pods = find_pods_by_node_name(n)
+        pods = find_pods_by_node_name(kube, n)
         if not pods:
             rich.print(f"[warning] ⚠️ No pod found for node {n}, skipping disk cleanup")
             continue
@@ -117,11 +120,12 @@ async def drain(
         remaining_cores = await get_cores_from_node(n)
         core_names = {core.name for core in remaining_cores}
 
-        dirs_raw = run_command_in_pod(pod_name, "ls -1 /var/solr/data").split()
+        dirs_raw = run_command_in_pod(kube, pod_name, "ls -1 /var/solr/data").split()
         for d in dirs_raw:
             if d not in core_names:
                 has_index = (
                         run_command_in_pod(
+                            kube,
                             pod_name,
                             f"test -d /var/solr/data/{d}/index && echo yes || echo no",
                         ).strip()
@@ -130,7 +134,7 @@ async def drain(
                 if has_index:
                     rich.print(f"[text] Removing directory {d} from node {n}")
                     if not api_utils.is_dry_run:
-                        run_command_in_pod(pod_name, f"rm -rf /var/solr/data/{d}")
+                        run_command_in_pod(kube, pod_name, f"rm -rf /var/solr/data/{d}")
 
 
 @app.command(help="Open the overseer-elected node's Solr UI in a browser")

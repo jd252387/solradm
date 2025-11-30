@@ -8,8 +8,7 @@ import rich
 import typer
 import yaml
 from kazoo.handlers.threading import KazooTimeoutError
-from kubernetes.client import CoreV1Api, Configuration
-from kubernetes.config import load_kube_config
+from kubernetes.client import CoreV1Api
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
@@ -28,11 +27,7 @@ from solradm.config.util import (
     load_repo_contexts,
     save_repo_contexts,
 )
-from solradm.kube.utils import (
-    get_current_kubecontext,
-    get_current_kubecontext_namespace,
-    get_kubecontext,
-)
+from solradm.kube.utils import get_kube_context_info, get_kubecontext
 from solradm.zk import get_client
 
 app = Typer()
@@ -393,20 +388,11 @@ def connect(
 
 @app.command()
 def connect_current():
-    """Connect using the active kubecontext and NodePort service."""
+    """Connect using the configured kubecontext and NodePort service."""
 
-    current = get_current_kubecontext()
-    if not current:
-        raise typer.BadParameter("No current kubecontext configured!")
+    kube = get_kube_context_info()
 
-    namespace = get_current_kubecontext_namespace()
-    if not namespace:
-        raise typer.BadParameter(
-            "The current kubecontext does not map to a specific namespace!"
-        )
-
-    load_kube_config()
-    services = CoreV1Api().list_namespaced_service(namespace).items
+    services = CoreV1Api(kube.api_client).list_namespaced_service(kube.namespace).items
     zk_svc = next(
         (svc for svc in services if "zk-nodeport" in svc.metadata.name),
         None,
@@ -418,12 +404,12 @@ def connect_current():
         )
 
     node_port = zk_svc.spec.ports[0].node_port
-    api_host = urlparse(Configuration.get_default_copy().host).hostname
+    api_host = urlparse(kube.api_client.configuration.host).hostname
     if not api_host:
         raise typer.BadParameter("Unable to determine API server host")
 
     zk_address = f"{api_host}:{node_port}"
-    connect(zk_address, current["name"], namespace=namespace)
+    connect(zk_address, kube.name, namespace=kube.namespace)
 
 
 @app.command()

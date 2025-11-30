@@ -6,11 +6,10 @@ from .utils import _filter_starts_with
 
 def pod_names(ctx, args: List[str], incomplete: str) -> List[str]:
     try:
-        from solradm.commands.kube import load_configured_kubecontext
-        from solradm.kube.utils import find_pods
+        from solradm.kube.utils import find_pods, get_kube_context_info
 
-        load_configured_kubecontext()
-        pods = find_pods(re.compile(""))
+        kube = get_kube_context_info()
+        pods = find_pods(kube, re.compile(""))
         names = [p.metadata.name for p in pods]
     except Exception:
         names = []
@@ -19,11 +18,10 @@ def pod_names(ctx, args: List[str], incomplete: str) -> List[str]:
 
 def container_names(ctx, args: List[str], incomplete: str) -> List[str]:
     try:
-        from solradm.commands.kube import load_configured_kubecontext
-        from solradm.kube.utils import find_pods
+        from solradm.kube.utils import find_pods, get_kube_context_info
 
-        load_configured_kubecontext()
-        pods = find_pods(re.compile(""))
+        kube = get_kube_context_info()
+        pods = find_pods(kube, re.compile(""))
         containers = {c.name for p in pods for c in p.spec.containers}
         names = sorted(containers)
     except Exception:
@@ -33,10 +31,11 @@ def container_names(ctx, args: List[str], incomplete: str) -> List[str]:
 
 def workload_names(ctx, args: List[str], incomplete: str) -> List[str]:
     try:
-        from solradm.commands.kube import load_configured_kubecontext, _get_workloads
+        from solradm.commands.kube import _get_workloads
+        from solradm.kube.utils import get_kube_context_info
 
-        load_configured_kubecontext()
-        deployments, statefulsets = _get_workloads(re.compile(""))
+        kube = get_kube_context_info()
+        deployments, statefulsets = _get_workloads(kube, re.compile(""))
         names = [d.metadata.name for d in deployments] + [s.metadata.name for s in statefulsets]
     except Exception:
         names = []
