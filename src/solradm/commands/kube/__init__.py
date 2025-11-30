@@ -1,7 +1,6 @@
 import asyncio
 import json
 import re
-from typing import Any
 import webbrowser
 from itertools import cycle
 from pathlib import Path
@@ -11,7 +10,7 @@ import typer
 import urllib3
 from async_typer import AsyncTyper
 from kubernetes import client
-from kubernetes.client import ApiClient, Configuration, ApiException
+from kubernetes.client import ApiException
 from kubernetes.client import AppsV1Api
 from kubernetes.client import CoreV1Api
 from kubernetes.client import CustomObjectsApi
@@ -23,16 +22,11 @@ from rich.table import Table
 from solradm.commands.callbacks import add_verbosity_option
 from solradm.completion.kube import pod_names, container_names, workload_names
 from solradm.completion.nodes import node_names
-from solradm.config.util import get_current_context
-from solradm.exceptions.adm_exception import AdmException
 from solradm.kube.utils import (
-    get_configured_kubecontext,
     find_pods,
     find_pods_by_node_name,
-    get_current_kubecontext_namespace,
-    get_kubecontext,
+    get_kube_context_info,
     run_command_in_pod,
-    switch_current_kubecontext,
 )
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -52,32 +46,9 @@ def _state_file_for_context(context_name: str) -> Path:
     safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", context_name)
     return _ensure_state_dir() / f"{safe_name}.json"
 
-def load_configured_kubecontext(client_configuration: Configuration = None) -> tuple[Any | None, str]:
-    current_context = get_current_context()
-
-    if not current_context.kubecontext:
-        raise AdmException(
-            f"The current context does not define a kubecontext. Edit the {current_context.name} context and add one to it."
-            )
-    
-    configured_kubecontext = get_kubecontext(current_context.kubecontext)
-    
-    if configured_kubecontext is None:
-        raise AdmException(
-            f"Kubecontext {current_context.kubecontext} could not be found in your kubeconfig."
-        )
-
-    switch_current_kubecontext(
-        configured_kubecontext,
-        namespace=current_context.namespace,
-        client_configuration=client_configuration,
-    )
-
-    return configured_kubecontext, current_context.kubecontext
-
-def is_openshift_cluster() -> bool:
+def is_openshift_cluster(kube) -> bool:
     try:
-        groups = client.ApisApi().get_api_versions().groups
+        groups = client.ApisApi(api_client=kube.api_client).get_api_versions().groups
 
         for group in groups:
             if group.name == "route.openshift.io":
@@ -88,11 +59,9 @@ def is_openshift_cluster() -> bool:
 
     return False
 
-def _get_workloads(pattern: re.Pattern, namespace: str | None = None):
-    namespace = namespace or get_current_kubecontext_namespace()
-    if not namespace:
-        raise AdmException("The kubecontext does not map to a specific namespace!")
-    api = AppsV1Api()
+def _get_workloads(kube, pattern: re.Pattern, namespace: str | None = None):
+    namespace = namespace or kube.namespace
+    api = AppsV1Api(kube.api_client)
     deployments = [
         d
         for d in api.list_namespaced_deployment(namespace).items
@@ -126,20 +95,24 @@ async def logs(
                                              autocompletion=container_names),
 ):
     """Stream Kubernetes logs from pods matching PATTERN."""
-    load_configured_kubecontext()
-    pods = find_pods_by_node_name(pattern) if node else find_pods(re.compile(pattern))
+    kube = get_kube_context_info()
+    pods = (
+        find_pods_by_node_name(kube, pattern)
+        if node
+        else find_pods(kube, re.compile(pattern))
+    )
 
     if not pods:
         raise typer.BadParameter("No pods matched the given pattern")
 
-    namespace = get_current_kubecontext_namespace()
+    namespace = kube.namespace
 
     console = Console()
     color_cycle = cycle(["red", "green", "yellow", "blue", "magenta", "cyan"])
     pod_colors = {p.metadata.name: next(color_cycle) for p in pods}
 
     def _stream_logs(pod_name: str):
-        resp = CoreV1Api().read_namespaced_pod_log(
+        resp = CoreV1Api(kube.api_client).read_namespaced_pod_log(
             name=pod_name,
             namespace=namespace,
             container=container,
@@ -162,8 +135,12 @@ async def disk(
 ):
     """Display disk usage of /var/solr for pods matching PATTERN."""
 
-    load_configured_kubecontext()
-    pods = find_pods_by_node_name(pattern) if node else find_pods(re.compile(pattern))
+    kube = get_kube_context_info()
+    pods = (
+        find_pods_by_node_name(kube, pattern)
+        if node
+        else find_pods(kube, re.compile(pattern))
+    )
 
     if not pods:
         raise typer.BadParameter("No pods matched the given pattern")
@@ -176,7 +153,7 @@ async def disk(
     table.add_column("Use%", justify="right")
 
     async def _df(pod_name: str):
-        output = await asyncio.to_thread(run_command_in_pod, pod_name, "df -h /var/solr/data")
+        output = await asyncio.to_thread(run_command_in_pod, kube, pod_name, "df -h /var/solr/data")
         return pod_name, output
 
     results = await asyncio.gather(*(_df(p.metadata.name) for p in pods))
@@ -217,7 +194,7 @@ def suspend(
         dry: bool = typer.Option(False, "--dry", help="Save state without scaling workloads"),
 ):
     """Scale matching deployments and statefulsets to zero replicas."""
-    loaded_kubecontext, loaded_namespace = load_configured_kubecontext()
+    kube = get_kube_context_info(kubecontext=kubecontext)
 
     sf = state_file or _state_file_for_context(kubecontext)
     if sf.exists():
@@ -225,7 +202,7 @@ def suspend(
         raise typer.Exit(1)
 
     pattern = re.compile(name_regex)
-    deployments, statefulsets = _get_workloads(pattern)
+    deployments, statefulsets = _get_workloads(kube, pattern)
     if not deployments and not statefulsets:
         rich.print("[error] ❌ No deployments or statefulsets match the given pattern")
         raise typer.Exit(1)
@@ -247,11 +224,11 @@ def suspend(
         rich.print(f"[success]✅  Saved workload state for kubecontext '{kubecontext}' to {sf} (no scaling performed)")
         return
 
-    api = AppsV1Api()
+    api = AppsV1Api(kube.api_client)
     for d in deployments:
-        api.patch_namespaced_deployment_scale(d.metadata.name, loaded_namespace, {"spec": {"replicas": 0}})
+        api.patch_namespaced_deployment_scale(d.metadata.name, kube.namespace, {"spec": {"replicas": 0}})
     for s in statefulsets:
-        api.patch_namespaced_stateful_set_scale(s.metadata.name, loaded_namespace, {"spec": {"replicas": 0}})
+        api.patch_namespaced_stateful_set_scale(s.metadata.name, kube.namespace, {"spec": {"replicas": 0}})
 
     rich.print(f"[success]✅  Scaled workloads for kubecontext '{kubecontext}' and saved state to {sf}")
 
@@ -262,8 +239,8 @@ def resume(
         state_file: Path = typer.Option(None, "--state-file", help="State file to load", dir_okay=False),
 ):
     """Scale previously suspended workloads back to their original replicas."""
-    
-    loaded_kubecontext, loaded_namespace = load_configured_kubecontext()
+
+    kube = get_kube_context_info(kubecontext=kubecontext)
 
     sf = state_file or _state_file_for_context(kubecontext)
     if not sf.exists():
@@ -293,11 +270,11 @@ def resume(
     if not Confirm.ask("Proceed with restoring these workloads?"):
         raise typer.Exit(0)
 
-    api = AppsV1Api()
+    api = AppsV1Api(kube.api_client)
     for name, replicas in deployments.items():
-        api.patch_namespaced_deployment_scale(name, loaded_namespace, {"spec": {"replicas": replicas}})
+        api.patch_namespaced_deployment_scale(name, kube.namespace, {"spec": {"replicas": replicas}})
     for name, replicas in statefulsets.items():
-        api.patch_namespaced_stateful_set_scale(name, loaded_namespace, {"spec": {"replicas": replicas}})
+        api.patch_namespaced_stateful_set_scale(name, kube.namespace, {"spec": {"replicas": replicas}})
 
     sf.unlink(missing_ok=True)
 
@@ -317,15 +294,12 @@ def dir():
 def ui():
     """Open the OpenShift web console in a browser for the current namespace."""
 
-    load_configured_kubecontext()
-    if not is_openshift_cluster():
+    kube = get_kube_context_info()
+    if not is_openshift_cluster(kube):
         rich.print("[error] ❌ The current Kubernetes cluster is not of the OpenShift distribution.")
 
-    api = CustomObjectsApi(ApiClient())
-    namespace = get_current_kubecontext_namespace()
-    if not namespace:
-        rich.print("[error] ❌ The kubecontext does not map to a specific namespace!")
-        raise typer.Exit(1)
+    api = CustomObjectsApi(kube.api_client)
+    namespace = kube.namespace
 
     try:
         route = api.get_namespaced_custom_object(
@@ -350,12 +324,9 @@ def ui():
 def console():
     """Deprecated alias for the :func:`ui` command without OpenShift detection."""
 
-    load_configured_kubecontext()
-    api = CustomObjectsApi(ApiClient())
-    namespace = get_current_kubecontext_namespace()
-    if not namespace:
-        rich.print("[error] ❌ The kubecontext does not map to a specific namespace!")
-        raise typer.Exit(1)
+    kube = get_kube_context_info()
+    api = CustomObjectsApi(kube.api_client)
+    namespace = kube.namespace
 
     try:
         route = api.get_namespaced_custom_object(

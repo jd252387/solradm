@@ -5,8 +5,11 @@ def test_kube_console(monkeypatch):
     from solradm.commands import kube as kube_module
     importlib.reload(kube_module)
 
-    monkeypatch.setattr(kube_module, "load_configured_kubecontext", lambda: None)
-    monkeypatch.setattr(kube_module, "get_current_kubecontext_namespace", lambda: "demo")
+    class DummyKubeContextInfo:
+        def __init__(self):
+            self.api_client = DummyApiClient()
+            self.namespace = "demo"
+            self.name = "demo"
 
     class DummyApiClient:
         def call_api(self, *args, **kwargs):
@@ -19,7 +22,7 @@ def test_kube_console(monkeypatch):
         def get_namespaced_custom_object(self, group, version, namespace, plural, name):
             return {"spec": {"host": "console.example.com"}}
 
-    monkeypatch.setattr(kube_module, "ApiClient", DummyApiClient)
+    monkeypatch.setattr(kube_module, "get_kube_context_info", DummyKubeContextInfo)
     monkeypatch.setattr(kube_module, "CustomObjectsApi", DummyCOApi)
 
     opened = {}

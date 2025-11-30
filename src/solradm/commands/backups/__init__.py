@@ -14,10 +14,13 @@ from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
 from solradm.commands.filters.replica_type_filter import ReplicaTypeFilter
 from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
-from solradm.commands.kube import load_configured_kubecontext
 from solradm.completion.backups import backup_paths
 from solradm.config import settings
-from solradm.kube.utils import find_pods_by_node_name, run_command_in_pod
+from solradm.kube.utils import (
+    find_pods_by_node_name,
+    get_kube_context_info,
+    run_command_in_pod,
+)
 from solradm.renderers.task_table import MultiTaskTable
 from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
@@ -47,13 +50,17 @@ async def take(
     replicas = validate_num_replicas(get_replicas(cluster_state))
     base_location = PurePosixPath(base_location_str)
 
+    kube_for_dirs = None
     if create_directories:
-        load_configured_kubecontext()
-        overseer_pod = find_pods_by_node_name(get_overseer_leader())[0]
+        kube_for_dirs = get_kube_context_info()
+        overseer_pod = find_pods_by_node_name(kube_for_dirs, get_overseer_leader())[0]
         rich.print(
             f"[text] Making sure backup directories exist on {base_location} through overseer-elected pod {overseer_pod.metadata.name}...")
-        run_command_in_pod(overseer_pod.metadata.name,
-                           f"mkdir -p {" ".join([str(base_location / f"{replica.shard.collection.name}/{replica.shard.name}") for replica in replicas])}")
+        run_command_in_pod(
+            kube_for_dirs,
+            overseer_pod.metadata.name,
+            f"mkdir -p {" ".join([str(base_location / f"{replica.shard.collection.name}/{replica.shard.name}") for replica in replicas])}"
+        )
 
     global_params = {"numberToKeep": number_to_keep}
     tasks = [
@@ -139,9 +146,9 @@ async def restore_status(cluster_state: List[Collection]):
         rich.print("[success]✅  No restores are currently in progress for the selected replicas.")
         return
 
-    kube_loaded = False
+    kube_for_inspection = None
     try:
-        kube_loaded = load_configured_kubecontext()
+        kube_for_inspection = get_kube_context_info()
     except Exception as exc:  # pragma: no cover - defensive logging
         rich.print(f"[warning]⚠️  Failed to load configured kubecontext: {exc}")
 
@@ -150,9 +157,9 @@ async def restore_status(cluster_state: List[Collection]):
         pod_name = None
         latest_dir = None
         latest_size: int | None = None
-        if kube_loaded:
+        if kube_for_inspection:
             try:
-                pods = find_pods_by_node_name(replica.node_name)
+                pods = find_pods_by_node_name(kube_for_inspection, replica.node_name)
             except Exception as exc:  # pragma: no cover - defensive logging
                 rich.print(
                     f"[warning]⚠️  Failed to resolve pod for node {replica.node_name}: {exc}"
@@ -172,7 +179,9 @@ async def restore_status(cluster_state: List[Collection]):
                     "if [ -z \"$size\" ]; then size=0; fi; echo \"$size $latest\"; fi"
                 )
                 try:
-                    output = await asyncio.to_thread(run_command_in_pod, pod_name, command)
+                    output = await asyncio.to_thread(
+                        run_command_in_pod, kube_for_inspection, pod_name, command
+                    )
                 except Exception as exc:  # pragma: no cover - defensive logging
                     rich.print(
                         f"[warning]⚠️  Failed to inspect restore directory for core {replica.core} on {pod_name}: {exc}"
