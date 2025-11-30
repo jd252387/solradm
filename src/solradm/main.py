@@ -13,7 +13,7 @@ from solradm.commands.zk import editor
 from solradm.exceptions.adm_exception import AdmException
 from solradm.exceptions.solr_exception import SolrException
 from solradm.update import notify_if_outdated
-from solradm.commands.generic import version
+from solradm.commands.generic import version, current
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,6 +34,7 @@ app.add_typer(kube.app, name="kube", help="Manage Kubernetes workloads")
 app.add_typer(node.app, name="node", help="Manage Solr nodes")
 app.add_typer(state.app, name="state", help="Export or restore cluster state")
 app.command()(status_cmd)
+app.command()(current)
 app.command()(version)
 
 def run():
