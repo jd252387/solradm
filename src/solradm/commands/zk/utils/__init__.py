@@ -9,6 +9,7 @@ import rich
 import typer
 from typer.models import OptionInfo
 from kazoo.client import KazooClient
+from kazoo.exceptions import NoNodeError
 
 from solradm.exceptions.adm_exception import AdmException
 
@@ -157,3 +158,35 @@ def build_files_by_config(
             zk_path = f"{znode_path.rstrip('/')}/{config}/{rel_path}"
             files_by_config.setdefault(config, []).append((sub_file, zk_path))
     return files_by_config
+
+
+def collect_znode_files(zk: KazooClient, base_path: str) -> Dict[str, str]:
+    """Collect file-like zNode contents beneath ``base_path``.
+
+    Leaf nodes are treated as files; their data is decoded as UTF-8 with
+    replacement to avoid errors. Intermediate nodes with children are traversed.
+    Missing nodes return an empty mapping.
+    """
+
+    collected: Dict[str, str] = {}
+    normalized_base = base_path.rstrip("/") or "/"
+
+    def _walk(path: str, rel: str = "") -> None:
+        try:
+            children = zk.get_children(path)
+        except NoNodeError:
+            return
+
+        if not children:
+            data, _ = zk.get(path)
+            rel_path = rel or Path(path).name
+            collected[rel_path] = (data or b"").decode("utf-8", errors="ignore")
+            return
+
+        for child in children:
+            child_path = f"{path.rstrip('/')}/{child}" if path != "/" else f"/{child}"
+            child_rel = f"{rel}/{child}" if rel else child
+            _walk(child_path, child_rel)
+
+    _walk(normalized_base, "")
+    return collected

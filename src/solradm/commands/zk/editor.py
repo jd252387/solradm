@@ -8,6 +8,7 @@ from typing import List
 
 import rich
 import typer
+from redlines import OutputType, Redlines
 from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.table import Table
@@ -23,6 +24,7 @@ from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.utils import with_cluster_state
 from solradm.commands.zk.utils import (
     open_vscode,
+    collect_znode_files,
     create_or_update,
     build_files_by_config,
     compile_regex_patterns,
@@ -33,7 +35,10 @@ from solradm.commands.zk.utils.znode_copier import copy_znode_to_local
 from solradm.completion.collections import collection_names
 from solradm.completion.configs import config_names_or_paths
 from solradm.completion.znodes import znode_paths
-from solradm.config.util import resolve_config_name_to_abs_or_default_directory
+from solradm.config.util import (
+    get_default_configsets_config_dir,
+    resolve_config_name_to_abs_or_default_directory,
+)
 from solradm.exceptions.adm_exception import AdmException
 from solradm.zk import get_client
 from solradm.zk.utils import win_path_to_zk_path
@@ -168,6 +173,114 @@ def view(
         reload=False,
         read_only=True,
     )
+
+
+def _load_local_config_files(config_dir: Path) -> dict[str, str]:
+    files: dict[str, str] = {}
+    for abs_path, rel_path in iter_local_files(config_dir, None, None):
+        files[rel_path] = abs_path.read_text(encoding="utf-8", errors="ignore")
+    return files
+
+
+@app.command(help="Show diffs between local configsets and ZooKeeper.")
+def diff(
+        config_pattern: str = typer.Argument(
+            ..., help="Regex used to select configuration names to compare"
+        ),
+        dir: Path = typer.Option(
+            None,
+            "--dir",
+            "-d",
+            file_okay=False,
+            help="Override the configsets directory used for local files",
+        ),
+):
+    try:
+        pattern = re.compile(config_pattern)
+    except re.error as exc:
+        raise typer.BadParameter(
+            f"Invalid configuration regex '{config_pattern}': {exc}"
+        ) from exc
+
+    if dir:
+        configsets_dir = dir.expanduser().resolve()
+    else:
+        try:
+            configsets_dir = get_default_configsets_config_dir()
+        except TypeError:
+            configsets_dir = None
+    if configsets_dir is None:
+        rich.print(
+            "[error]❌ Default configsets directory is not configured. "
+            "Use sa context config-dir to set it or provide --dir."
+        )
+        raise typer.Exit(1)
+
+    if not configsets_dir.is_dir():
+        rich.print(
+            f"[error]❌ Provided configsets directory {configsets_dir} does not exist or is not a directory"
+        )
+        raise typer.Exit(1)
+
+    zk_client = get_client()
+    try:
+        zk_config_names = set(zk_client.get_children("/configs"))
+    except Exception:
+        zk_config_names = set()
+
+    local_config_names = {p.name for p in configsets_dir.iterdir() if p.is_dir()}
+    target_configs = sorted(
+        {name for name in local_config_names | zk_config_names if pattern.search(name)}
+    )
+
+    if not target_configs:
+        rich.print("[warning]⚠️ No configurations matched the provided pattern")
+        raise typer.Exit(1)
+
+    for idx, config_name in enumerate(target_configs):
+        if idx:
+            rich.print()
+
+        rich.print(
+            Panel.fit(
+                f"Comparing configset [bold]{config_name}[/]",
+                title="ZooKeeper Diff",
+            )
+        )
+
+        local_dir = configsets_dir / config_name
+        local_files = _load_local_config_files(local_dir) if local_dir.is_dir() else {}
+        if not local_dir.is_dir():
+            rich.print(
+                f"[warning]⚠️ Local configset {local_dir} not found; treating as empty."
+            )
+
+        zk_path = f"/configs/{config_name}"
+        zk_files = collect_znode_files(zk_client, zk_path)
+        if not zk_files and not zk_client.exists(zk_path):
+            rich.print(
+                f"[warning]⚠️ ZooKeeper path {zk_path} not found; treating as empty."
+            )
+
+        file_paths = sorted(set(local_files) | set(zk_files))
+        if not file_paths:
+            rich.print("[yellow]No files to compare.")
+            continue
+
+        for rel_path in file_paths:
+            local_content = local_files.get(rel_path, "")
+            zk_content = zk_files.get(rel_path, "")
+            flags: list[str] = []
+            if rel_path not in local_files:
+                flags.append("(missing locally)")
+            if rel_path not in zk_files:
+                flags.append("(missing in ZooKeeper)")
+
+            header = " ".join([rel_path] + flags)
+            rich.print(f"[cyan]{header}[/]")
+            diff_output = Redlines(zk_content, local_content, output_type=OutputType.RICH)
+            rich.print(diff_output.output_rich)
+            rich.print()
 
 
 @app.command(help="Upload local files or directories to a ZooKeeper znode.")

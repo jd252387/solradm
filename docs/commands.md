@@ -213,6 +213,11 @@ Interactively copy a znode subtree to a temporary directory, edit it locally and
 - `--no-vscode` – do not automatically launch VSCode.
 - `--reload` – automatically reload collections whose configuration changes.
 
+### `diff <config-regex> [--dir <path>]`
+Display rich diffs between local configsets and their counterparts in ZooKeeper.
+- `<config-regex>` – regular expression selecting which configuration names to compare.
+- `--dir, -d` – optional path to the `configsets` directory to read from; defaults to the configured directory.
+
 ### `upload <paths...> [--znode-path <path>] [--only-used/--all] [--reload] [--exclude <name>] [--skip-confirm]`
 Upload local files or directories into ZooKeeper.
 - `<paths...>` – one or more files or directories to upload. If omitted defaults to the configsets in the configured directory.

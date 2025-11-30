@@ -11,6 +11,9 @@ def _import_editor(monkeypatch):
     api_module = types.ModuleType("solradm.api")
     api_module.get_initialized_session = lambda: types.SimpleNamespace(close=lambda: None)
 
+    api_models_module = types.ModuleType("solradm.api.models")
+    api_models_module.Collection = type("Collection", (), {})
+
     api_state_module = types.ModuleType("solradm.api.state")
     api_state_module.get_collections = lambda: []
 
@@ -21,6 +24,7 @@ def _import_editor(monkeypatch):
     api_module.utils = api_utils_module
 
     monkeypatch.setitem(sys.modules, "solradm.api", api_module)
+    monkeypatch.setitem(sys.modules, "solradm.api.models", api_models_module)
     monkeypatch.setitem(sys.modules, "solradm.api.state", api_state_module)
     monkeypatch.setitem(sys.modules, "solradm.api.utils", api_utils_module)
 
@@ -59,6 +63,7 @@ def _import_editor(monkeypatch):
         return target
 
     util_module.resolve_config_name_to_abs_or_default_directory = _resolve_config_name
+    util_module.get_default_configsets_config_dir = lambda: None
     util_module.get_current_context = lambda: types.SimpleNamespace(zk="")
     config_module.util = util_module
     monkeypatch.setitem(sys.modules, "solradm.config", config_module)
