@@ -267,15 +267,17 @@ def diff(
         local_files = _load_local_config_files(local_dir) if local_dir.is_dir() else {}
         if not local_dir.is_dir():
             rich.print(
-                f"[warning]⚠️ Local configset {local_dir} was not found in ZooKeeper!"
+                f"[warning]⚠️ Configset {config_name} was not found locally! Searched under {local_dir}..."
             )
+            continue
 
         zk_path = f"/configs/{config_name}"
         zk_files = collect_znode_files(zk_client, zk_path)
         if not zk_files and not zk_client.exists(zk_path):
             rich.print(
-                f"[warning]⚠️ ZooKeeper path {zk_path} was not found locally!"
+                f"[warning]⚠️ Configset {config_name} was not found in ZooKeeper! Searched under {zk_path}..."
             )
+            continue
 
         file_paths = sorted(set(local_files) | set(zk_files))
         if not file_paths:
@@ -285,10 +287,12 @@ def diff(
         for rel_path in file_paths:
             local_content = local_files.get(rel_path)
             if not local_content:
-                rich.print(f"[warning]⚠️ Local file {rel_path} was not found in ZooKeeper!")
+                rich.print(f"[warning]⚠️ File {rel_path} was not found locally! Searched under {local_dir / rel_path}...")
+                continue
             zk_content = zk_files.get(rel_path, "")
             if not zk_content:
-                rich.print(f"[warning]⚠️ ZooKeeper file {rel_path} was not found locally!")
+                rich.print(f"[warning]⚠️ File {rel_path} was not found in ZooKeeper! Searched under {zk_path}/{rel_path}...")
+                continue
 
             diff_lines = list(
                 difflib.unified_diff(
