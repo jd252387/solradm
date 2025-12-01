@@ -644,19 +644,29 @@ def list_contexts():
 
     repo_list = _get_repo_list()
     ctx_map: dict[str, list[str]] = {}
+    ctx_data: dict[str, dict] = {}
 
     for repo in repo_list:
         repo_path = Path(repo["path"])
         for ctx in load_repo_contexts(repo_path):
             ctx_map.setdefault(ctx["name"], []).append(f"{repo['name']} ({repo_path})")
+            ctx_data[ctx["name"]] = ctx
 
     for ctx in local_contexts:
         ctx_map.setdefault(ctx["name"], []).append(str(config_path))
+        ctx_data[ctx["name"]] = ctx
 
-    table = Table("Context", "Locations")
+    table = Table("Context", "ZooKeeper", "Kubecontext", "Namespace", "Locations")
     for name, sources in sorted(ctx_map.items()):
         precedence = sources[-1]
         disp = [f"{src}{' *' if src == precedence else ''}" for src in sources]
-        table.add_row(name, ", ".join(disp))
+        data = ctx_data[name]
+        table.add_row(
+            name,
+            data.get("zk", "-"),
+            data.get("kubecontext") or "-",
+            data.get("namespace") or "-",
+            ", ".join(disp),
+        )
 
     rich.print(table)
