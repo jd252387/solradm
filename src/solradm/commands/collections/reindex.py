@@ -24,6 +24,7 @@ from solradm.commands.filters.utils import with_cluster_state
 from solradm.completion.collections import collection_names, source_collection_names
 from solradm.completion.contexts import context_names
 from solradm.config import settings
+from solradm.config.util import get_context
 
 
 def _parse_status(json_resp: dict) -> tuple[int, int | None, str | None]:
@@ -59,17 +60,6 @@ def _get_collection_from_zk(zk: str, collection: str) -> Collection:
     state = json.loads(data.decode("utf-8"))[collection]
     state["name"] = collection
     return Collection.model_validate(state)
-
-
-def _resolve_context(context_name: str | None, *, role: str):
-    if not context_name:
-        return None
-    context = next((c for c in settings.contexts.available if c.name == context_name), None)
-    if context:
-        return context
-    rich.print(f"[error]❌  {role} context {context_name} not found")
-    raise typer.Exit(1)
-
 
 def _resolve_collection(
     collection_name: str,
@@ -208,9 +198,23 @@ async def reindex(
     if (source_context and source_zk) or (target_context and target_zk):
         rich.print("[error]❌  Context and ZooKeeper overrides are mutually exclusive")
         raise typer.Exit(1)
+    
+    if (source_context):
+        resolved_source_context = get_context(source_context)
+        if not resolved_source_context:
+            rich.print(f"[error]❌  Source context {source_context} not found")
+            raise typer.Exit(1)
+    else:
+        resolved_source_context = None
+    
+    if (target_context):
+        resolved_target_context = get_context(target_context)
+        if not resolved_target_context:
+            rich.print(f"[error]❌  Target context {target_context} not found")
+            raise typer.Exit(1)
+    else:
+        resolved_target_context = None
 
-    resolved_source_context = _resolve_context(source_context, role="Source")
-    resolved_target_context = _resolve_context(target_context, role="Target")
 
     target_coll = _resolve_collection(
         target_collection,

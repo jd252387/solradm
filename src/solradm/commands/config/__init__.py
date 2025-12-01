@@ -28,6 +28,7 @@ from solradm.config.util import (
     save_repo_contexts,
 )
 from solradm.kube.utils import get_kube_context_info, get_kubecontext
+from solradm.config.util import get_current_context as _get_current_context
 from solradm.zk import get_client
 
 app = Typer()
@@ -390,7 +391,7 @@ def connect(
 def connect_current():
     """Connect using the configured kubecontext and NodePort service."""
 
-    kube = get_kube_context_info()
+    kube = get_kube_context_info(_get_current_context())
 
     services = CoreV1Api(kube.api_client).list_namespaced_service(kube.namespace).items
     zk_svc = next(

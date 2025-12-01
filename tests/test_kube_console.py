@@ -22,7 +22,7 @@ def test_kube_console(monkeypatch):
         def get_namespaced_custom_object(self, group, version, namespace, plural, name):
             return {"spec": {"host": "console.example.com"}}
 
-    monkeypatch.setattr(kube_module, "get_kube_context_info", DummyKubeContextInfo)
+    monkeypatch.setattr(kube_module, "get_kube_context_info", lambda ctx: DummyKubeContextInfo())
     monkeypatch.setattr(kube_module, "CustomObjectsApi", DummyCOApi)
 
     opened = {}

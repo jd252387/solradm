@@ -22,7 +22,10 @@ from rich.table import Table
 from solradm.commands.callbacks import add_verbosity_option
 from solradm.completion.kube import pod_names, container_names, workload_names
 from solradm.completion.nodes import node_names
+from solradm.config.context import Context
+from solradm.config.util import get_current_context
 from solradm.kube.utils import (
+    KubeContextInfo,
     find_pods,
     find_pods_by_node_name,
     get_kube_context_info,
@@ -46,7 +49,7 @@ def _state_file_for_context(context_name: str) -> Path:
     safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", context_name)
     return _ensure_state_dir() / f"{safe_name}.json"
 
-def is_openshift_cluster(kube) -> bool:
+def is_openshift_cluster(kube: KubeContextInfo) -> bool:
     try:
         groups = client.ApisApi(api_client=kube.api_client).get_api_versions().groups
 
@@ -59,7 +62,7 @@ def is_openshift_cluster(kube) -> bool:
 
     return False
 
-def _get_workloads(kube, pattern: re.Pattern, namespace: str | None = None):
+def _get_workloads(kube: KubeContextInfo, pattern: re.Pattern[str], namespace: str | None = None) -> tuple[list, list]:
     namespace = namespace or kube.namespace
     api = AppsV1Api(kube.api_client)
     deployments = [
@@ -75,7 +78,7 @@ def _get_workloads(kube, pattern: re.Pattern, namespace: str | None = None):
     return deployments, statefulsets
 
 
-def _print_workloads(deployments, statefulsets):
+def _print_workloads(deployments: list, statefulsets: list) -> None:
     table = Table(title="Workloads", header_style="bold magenta")
     table.add_column("Type")
     table.add_column("Name")
@@ -93,9 +96,9 @@ async def logs(
         node: bool = typer.Option(False, "--node", help="Treat pattern as node name", autocompletion=node_names),
         container: str | None = typer.Option(None, "--container", "-c", help="Container name",
                                              autocompletion=container_names),
-):
+) -> None:
     """Stream Kubernetes logs from pods matching PATTERN."""
-    kube = get_kube_context_info()
+    kube = get_kube_context_info(get_current_context())
     pods = (
         find_pods_by_node_name(kube, pattern)
         if node
@@ -111,7 +114,7 @@ async def logs(
     color_cycle = cycle(["red", "green", "yellow", "blue", "magenta", "cyan"])
     pod_colors = {p.metadata.name: next(color_cycle) for p in pods}
 
-    def _stream_logs(pod_name: str):
+    def _stream_logs(pod_name: str) -> None:
         resp = CoreV1Api(kube.api_client).read_namespaced_pod_log(
             name=pod_name,
             namespace=namespace,
@@ -132,10 +135,10 @@ async def disk(
         pattern: str = typer.Argument(..., help="Regex of pod or node name", autocompletion=pod_names),
         node: bool = typer.Option(False, "--node", help="Treat pattern as node name"),
         ascending: bool = typer.Option(False, "--ascending", "-a", help="Sort ascending by used space"),
-):
+) -> None:
     """Display disk usage of /var/solr for pods matching PATTERN."""
 
-    kube = get_kube_context_info()
+    kube = get_kube_context_info(get_current_context())
     pods = (
         find_pods_by_node_name(kube, pattern)
         if node
@@ -152,7 +155,7 @@ async def disk(
     table.add_column("Avail", justify="right")
     table.add_column("Use%", justify="right")
 
-    async def _df(pod_name: str):
+    async def _df(pod_name: str) -> tuple[str, str]:
         output = await asyncio.to_thread(run_command_in_pod, kube, pod_name, "df -h /var/solr/data")
         return pod_name, output
 
@@ -187,14 +190,20 @@ async def disk(
 
 @app.command(help="Scale workloads matching a regex down to zero and save their replicas")
 def suspend(
-        kubecontext: str = typer.Option(..., "--kubecontext", "-k", help="Kubecontext name to use"),
+        kubecontext: str | None = typer.Option(None, "--kubecontext", "-k", help="Kubecontext name to use (defaults to current context)"),
         name_regex: str = typer.Argument(..., help="Regex for deployment/statefulset names",
                                          autocompletion=workload_names),
-        state_file: Path = typer.Option(None, "--state-file", help="File to store replica state", dir_okay=False),
+        state_file: Path | None = typer.Option(None, "--state-file", help="File to store replica state", dir_okay=False),
         dry: bool = typer.Option(False, "--dry", help="Save state without scaling workloads"),
-):
+) -> None:
     """Scale matching deployments and statefulsets to zero replicas."""
-    kube = get_kube_context_info(kubecontext=kubecontext)
+    if kubecontext is None:
+        current = get_current_context()
+        kubecontext = current.kubecontext
+        if kubecontext is None:
+            rich.print("[error] ❌ No kubecontext specified and current context has no kubecontext configured")
+            raise typer.Exit(1)
+    kube = get_kube_context_info(Context(name=None, zk="", kubecontext=kubecontext))
 
     sf = state_file or _state_file_for_context(kubecontext)
     if sf.exists():
@@ -235,12 +244,14 @@ def suspend(
 
 @app.command(help="Restore replicas from a saved state file")
 def resume(
-        kubecontext: str = typer.Option(..., "--kubecontext", "-k", help="Kubecontext name to use"),
-        state_file: Path = typer.Option(None, "--state-file", help="State file to load", dir_okay=False),
-):
+        kubecontext: str | None = typer.Option(None, "--kubecontext", "-k", help="Kubecontext name to use (defaults to current context)"),
+        state_file: Path | None = typer.Option(None, "--state-file", help="State file to load", dir_okay=False),
+) -> None:
     """Scale previously suspended workloads back to their original replicas."""
-
-    kube = get_kube_context_info(kubecontext=kubecontext)
+    if kubecontext is None:
+        kube = get_kube_context_info(get_current_context()) 
+    else: 
+        kube = get_kube_context_info(Context(name=None, zk="", kubecontext=kubecontext))
 
     sf = state_file or _state_file_for_context(kubecontext)
     if not sf.exists():
@@ -282,7 +293,7 @@ def resume(
 
 
 @app.command(help="Open the directory that stores saved kube workload states")
-def dir():
+def dir() -> None:
     """Open the directory containing saved kube workload state files."""
 
     directory = _ensure_state_dir()
@@ -291,10 +302,10 @@ def dir():
 
 
 @app.command(help="Open OpenShift console for the current namespace")
-def ui():
+def ui() -> None:
     """Open the OpenShift web console in a browser for the current namespace."""
 
-    kube = get_kube_context_info()
+    kube = get_kube_context_info(get_current_context())
     if not is_openshift_cluster(kube):
         rich.print("[error] ❌ The current Kubernetes cluster is not of the OpenShift distribution.")
 
@@ -321,10 +332,10 @@ def ui():
 
 # Backwards compatibility with older command name
 @app.command(hidden=True)
-def console():
+def console() -> None:
     """Deprecated alias for the :func:`ui` command without OpenShift detection."""
 
-    kube = get_kube_context_info()
+    kube = get_kube_context_info(get_current_context())
     api = CustomObjectsApi(kube.api_client)
     namespace = kube.namespace
 

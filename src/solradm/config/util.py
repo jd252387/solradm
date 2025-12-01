@@ -14,16 +14,7 @@ def get_current_context() -> Context:
     current = settings.contexts.current
 
     if "name" in current:
-        context_dict = next(
-            (context for context in settings.contexts.available if context.name == settings.contexts.current.name),
-            None)
-
-        return Context(
-            context_dict.name,
-            context_dict.zk,
-            context_dict.get("kubecontext"),
-            context_dict.get("namespace"),
-        )
+        return get_context(current["name"])
     else:
         return Context(
             None,
@@ -32,6 +23,23 @@ def get_current_context() -> Context:
             current.get("namespace"),
         )
 
+def get_context(name: str) -> Context | None:
+    from solradm.config import settings
+
+    context_dict = next(
+        (context for context in settings.contexts.available if context.name == name),
+        None,
+    )
+
+    if context_dict is None:
+        return None
+
+    return Context(
+        context_dict.name,
+        context_dict.zk,
+        context_dict.get("kubecontext"),
+        context_dict.get("namespace"),
+    )
 
 def _get_default_znode_dir() -> Path | None:
     from solradm.config import settings

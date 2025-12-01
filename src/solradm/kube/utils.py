@@ -7,7 +7,7 @@ from kubernetes.client import ApiClient, CoreV1Api, V1PodList, V1Pod
 from kubernetes.config import list_kube_config_contexts
 from kubernetes.stream import stream
 
-from solradm.config.util import get_current_context
+from solradm.config.context import Context
 from solradm.exceptions.adm_exception import AdmException
 
 
@@ -23,11 +23,8 @@ def get_kubecontext(name: str) -> Any | None:
     return next((context for context in contexts if context["name"] == name), None)
 
 
-def get_kube_context_info(
-    kubecontext: str | None = None, namespace: str | None = None
-) -> KubeContextInfo:
-    current_context = get_current_context()
-    target_context_name = kubecontext or current_context.kubecontext
+def get_kube_context_info(context: Context) -> KubeContextInfo:
+    target_context_name = context.kubecontext
 
     if not target_context_name:
         raise AdmException(
@@ -41,7 +38,7 @@ def get_kube_context_info(
         )
 
     resolved_namespace = (
-        namespace or current_context.namespace or target_context["context"].get("namespace")
+        context.namespace or target_context["context"].get("namespace")
     )
 
     if not resolved_namespace:

@@ -1,11 +1,19 @@
 import importlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 import typer
 from kubernetes.client import Configuration
+
+
+@dataclass
+class FakeKubeContextInfo:
+    api_client: object
+    name: str
+    namespace: str
 
 
 def _reload_kube(monkeypatch, tmp_path):
@@ -29,18 +37,21 @@ def _reload_kube(monkeypatch, tmp_path):
 def test_suspend_requires_existing_kubecontext(monkeypatch, tmp_path):
     kube_module = _reload_kube(monkeypatch, tmp_path)
 
-    monkeypatch.setattr(kube_module, "get_kubecontext", lambda name: None)
+    from solradm.exceptions.adm_exception import AdmException
+    def raise_missing(ctx):
+        raise AdmException(f"Kubecontext {ctx.kubecontext} could not be found in your kubeconfig.")
 
-    with pytest.raises(typer.BadParameter):
+    monkeypatch.setattr(kube_module, "get_kube_context_info", raise_missing)
+
+    with pytest.raises(AdmException):
         kube_module.suspend(kubecontext="missing", name_regex=".*")
 
 
 def test_suspend_writes_state_per_kubecontext(monkeypatch, tmp_path):
     kube_module = _reload_kube(monkeypatch, tmp_path)
 
-    context_data = {"name": "demo/one", "context": {"namespace": "demo"}}
-    monkeypatch.setattr(kube_module, "get_kubecontext", lambda name: context_data)
-    monkeypatch.setattr(kube_module, "switch_current_kubecontext", lambda *args, **kwargs: None)
+    fake_kube_info = FakeKubeContextInfo(api_client=None, name="demo/one", namespace="demo")
+    monkeypatch.setattr(kube_module, "get_kube_context_info", lambda ctx: fake_kube_info)
     monkeypatch.setattr(kube_module.Confirm, "ask", lambda *args, **kwargs: True)
 
     deployments = [
@@ -55,20 +66,23 @@ def test_suspend_writes_state_per_kubecontext(monkeypatch, tmp_path):
             spec=SimpleNamespace(replicas=3),
         )
     ]
-    monkeypatch.setattr(kube_module, "_get_workloads", lambda pattern, namespace=None: (deployments, statefulsets))
+    monkeypatch.setattr(kube_module, "_get_workloads", lambda kube, pattern, namespace=None: (deployments, statefulsets))
 
     calls = []
 
     class DummyApps:
+        def __init__(self, api_client):
+            pass
+
         def patch_namespaced_deployment_scale(self, name, namespace, body):
             calls.append(("dep", name, namespace, body))
 
         def patch_namespaced_stateful_set_scale(self, name, namespace, body):
             calls.append(("sts", name, namespace, body))
 
-    monkeypatch.setattr(kube_module, "AppsV1Api", lambda: DummyApps())
+    monkeypatch.setattr(kube_module, "AppsV1Api", DummyApps)
 
-    kube_module.suspend(kubecontext="demo/one", name_regex=".*", state_file=None)
+    kube_module.suspend(kubecontext="demo/one", name_regex=".*", state_file=None, dry=False)
 
     state_path = kube_module._state_file_for_context("demo/one")
     assert state_path.exists()
@@ -95,9 +109,8 @@ def test_suspend_writes_state_per_kubecontext(monkeypatch, tmp_path):
 def test_suspend_dry_run_skips_scaling(monkeypatch, tmp_path):
     kube_module = _reload_kube(monkeypatch, tmp_path)
 
-    context_data = {"name": "demo/one", "context": {"namespace": "demo"}}
-    monkeypatch.setattr(kube_module, "get_kubecontext", lambda name: context_data)
-    monkeypatch.setattr(kube_module, "switch_current_kubecontext", lambda *args, **kwargs: None)
+    fake_kube_info = FakeKubeContextInfo(api_client=None, name="demo/one", namespace="demo")
+    monkeypatch.setattr(kube_module, "get_kube_context_info", lambda ctx: fake_kube_info)
     monkeypatch.setattr(kube_module.Confirm, "ask", lambda *args, **kwargs: True)
 
     deployments = [
@@ -112,10 +125,10 @@ def test_suspend_dry_run_skips_scaling(monkeypatch, tmp_path):
             spec=SimpleNamespace(replicas=3),
         )
     ]
-    monkeypatch.setattr(kube_module, "_get_workloads", lambda pattern, namespace=None: (deployments, statefulsets))
+    monkeypatch.setattr(kube_module, "_get_workloads", lambda kube, pattern, namespace=None: (deployments, statefulsets))
 
     class DummyApps:
-        def __init__(self):
+        def __init__(self, api_client):
             self.calls = []
 
         def patch_namespaced_deployment_scale(self, name, namespace, body):
@@ -124,8 +137,8 @@ def test_suspend_dry_run_skips_scaling(monkeypatch, tmp_path):
         def patch_namespaced_stateful_set_scale(self, name, namespace, body):
             self.calls.append(("sts", name, namespace, body))
 
-    dummy_apps = DummyApps()
-    monkeypatch.setattr(kube_module, "AppsV1Api", lambda: dummy_apps)
+    dummy_apps = DummyApps(None)
+    monkeypatch.setattr(kube_module, "AppsV1Api", lambda api_client: dummy_apps)
 
     kube_module.suspend(kubecontext="demo/one", name_regex=".*", state_file=None, dry=True)
 
@@ -146,9 +159,8 @@ def test_suspend_dry_run_skips_scaling(monkeypatch, tmp_path):
 def test_resume_restores_and_deletes_state(monkeypatch, tmp_path):
     kube_module = _reload_kube(monkeypatch, tmp_path)
 
-    context_data = {"name": "demo", "context": {"namespace": "demo"}}
-    monkeypatch.setattr(kube_module, "get_kubecontext", lambda name: context_data)
-    monkeypatch.setattr(kube_module, "switch_current_kubecontext", lambda *args, **kwargs: None)
+    fake_kube_info = FakeKubeContextInfo(api_client=None, name="demo", namespace="demo")
+    monkeypatch.setattr(kube_module, "get_kube_context_info", lambda ctx: fake_kube_info)
     monkeypatch.setattr(kube_module.Confirm, "ask", lambda *args, **kwargs: True)
 
     state_path = kube_module._state_file_for_context("demo")
@@ -161,13 +173,16 @@ def test_resume_restores_and_deletes_state(monkeypatch, tmp_path):
     calls = []
 
     class DummyApps:
+        def __init__(self, api_client):
+            pass
+
         def patch_namespaced_deployment_scale(self, name, namespace, body):
             calls.append(("dep", name, namespace, body))
 
         def patch_namespaced_stateful_set_scale(self, name, namespace, body):
             calls.append(("sts", name, namespace, body))
 
-    monkeypatch.setattr(kube_module, "AppsV1Api", lambda: DummyApps())
+    monkeypatch.setattr(kube_module, "AppsV1Api", DummyApps)
 
     kube_module.resume(kubecontext="demo", state_file=None)
 
@@ -182,13 +197,9 @@ def test_resume_restores_and_deletes_state(monkeypatch, tmp_path):
 def test_suspend_sets_namespace_from_context(monkeypatch, tmp_path):
     kube_module = _reload_kube(monkeypatch, tmp_path)
 
-    context_data = {"name": "demo/one", "context": {"namespace": "nondefault"}}
-    monkeypatch.setattr(kube_module, "get_kubecontext", lambda name: context_data)
+    fake_kube_info = FakeKubeContextInfo(api_client=None, name="demo/one", namespace="nondefault")
+    monkeypatch.setattr(kube_module, "get_kube_context_info", lambda ctx: fake_kube_info)
     monkeypatch.setattr(kube_module.Confirm, "ask", lambda *args, **kwargs: True)
-
-    cfg = Configuration()
-    cfg.namespace = "default"
-    Configuration.set_default(cfg)
 
     deployments = [
         SimpleNamespace(
@@ -204,7 +215,7 @@ def test_suspend_sets_namespace_from_context(monkeypatch, tmp_path):
     ]
 
     class DummyApps:
-        def __init__(self):
+        def __init__(self, api_client):
             self.list_calls = []
             self.patch_calls = []
 
@@ -222,36 +233,24 @@ def test_suspend_sets_namespace_from_context(monkeypatch, tmp_path):
         def patch_namespaced_stateful_set_scale(self, name, namespace, body):
             self.patch_calls.append(("sts", name, namespace, body))
 
-    dummy_apps = DummyApps()
-    monkeypatch.setattr(kube_module, "AppsV1Api", lambda: dummy_apps)
+    dummy_apps = DummyApps(None)
+    monkeypatch.setattr(kube_module, "AppsV1Api", lambda api_client: dummy_apps)
 
-    def _fake_switch(target_context, namespace=None, client_configuration=None):
-        cfg = client_configuration or Configuration.get_default_copy()
-        cfg.namespace = namespace or target_context["context"].get("namespace")
-        Configuration.set_default(cfg)
-
-    monkeypatch.setattr(kube_module, "switch_current_kubecontext", _fake_switch)
-
-    kube_module.suspend(kubecontext="demo/one", name_regex=".*", state_file=None)
+    kube_module.suspend(kubecontext="demo/one", name_regex=".*", state_file=None, dry=False)
 
     assert dummy_apps.list_calls == [("dep", "nondefault"), ("sts", "nondefault")]
     assert dummy_apps.patch_calls == [
         ("dep", "dep", "nondefault", {"spec": {"replicas": 0}}),
         ("sts", "sts", "nondefault", {"spec": {"replicas": 0}}),
     ]
-    assert Configuration.get_default_copy().namespace == "nondefault"
 
 
 def test_resume_uses_namespace_from_context(monkeypatch, tmp_path):
     kube_module = _reload_kube(monkeypatch, tmp_path)
 
-    context_data = {"name": "demo", "context": {"namespace": "nondefault"}}
-    monkeypatch.setattr(kube_module, "get_kubecontext", lambda name: context_data)
+    fake_kube_info = FakeKubeContextInfo(api_client=None, name="demo", namespace="nondefault")
+    monkeypatch.setattr(kube_module, "get_kube_context_info", lambda ctx: fake_kube_info)
     monkeypatch.setattr(kube_module.Confirm, "ask", lambda *args, **kwargs: True)
-
-    cfg = Configuration()
-    cfg.namespace = "default"
-    Configuration.set_default(cfg)
 
     state_path = kube_module._state_file_for_context("demo")
     with open(state_path, "w") as fh:
@@ -261,7 +260,7 @@ def test_resume_uses_namespace_from_context(monkeypatch, tmp_path):
         }, fh)
 
     class DummyApps:
-        def __init__(self):
+        def __init__(self, api_client):
             self.patch_calls = []
 
         def patch_namespaced_deployment_scale(self, name, namespace, body):
@@ -270,15 +269,8 @@ def test_resume_uses_namespace_from_context(monkeypatch, tmp_path):
         def patch_namespaced_stateful_set_scale(self, name, namespace, body):
             self.patch_calls.append(("sts", name, namespace, body))
 
-    dummy_apps = DummyApps()
-    monkeypatch.setattr(kube_module, "AppsV1Api", lambda: dummy_apps)
-
-    def _fake_switch(target_context, namespace=None, client_configuration=None):
-        cfg = client_configuration or Configuration.get_default_copy()
-        cfg.namespace = namespace or target_context["context"].get("namespace")
-        Configuration.set_default(cfg)
-
-    monkeypatch.setattr(kube_module, "switch_current_kubecontext", _fake_switch)
+    dummy_apps = DummyApps(None)
+    monkeypatch.setattr(kube_module, "AppsV1Api", lambda api_client: dummy_apps)
 
     kube_module.resume(kubecontext="demo", state_file=None)
 
@@ -286,7 +278,6 @@ def test_resume_uses_namespace_from_context(monkeypatch, tmp_path):
         ("dep", "dep", "nondefault", {"spec": {"replicas": 2}}),
         ("sts", "sts", "nondefault", {"spec": {"replicas": 3}}),
     ]
-    assert Configuration.get_default_copy().namespace == "nondefault"
 
 
 def test_dir_opens_state_directory(monkeypatch, tmp_path):

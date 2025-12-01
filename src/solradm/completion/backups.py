@@ -9,6 +9,7 @@ from .utils import _filter_starts_with
 
 def backup_paths(ctx, args: List[str], incomplete: str) -> List[str]:
     try:
+        from solradm.config.util import get_current_context
         from solradm.kube.utils import (
             find_pods_by_node_name,
             get_kube_context_info,
@@ -16,7 +17,7 @@ def backup_paths(ctx, args: List[str], incomplete: str) -> List[str]:
         )
         from solradm.zk.utils import get_overseer_leader
 
-        kube = get_kube_context_info()
+        kube = get_kube_context_info(get_current_context())
         pod = find_pods_by_node_name(kube, get_overseer_leader())[0]
         path = PurePosixPath(incomplete or "/")
         base = str(path if path.is_absolute() else Path("/") / path)

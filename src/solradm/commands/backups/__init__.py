@@ -16,6 +16,7 @@ from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
 from solradm.completion.backups import backup_paths
 from solradm.config import settings
+from solradm.config.util import get_current_context
 from solradm.kube.utils import (
     find_pods_by_node_name,
     get_kube_context_info,
@@ -52,7 +53,7 @@ async def take(
 
     kube_for_dirs = None
     if create_directories:
-        kube_for_dirs = get_kube_context_info()
+        kube_for_dirs = get_kube_context_info(get_current_context())
         overseer_pod = find_pods_by_node_name(kube_for_dirs, get_overseer_leader())[0]
         rich.print(
             f"[text] Making sure backup directories exist on {base_location} through overseer-elected pod {overseer_pod.metadata.name}...")
@@ -148,7 +149,7 @@ async def restore_status(cluster_state: List[Collection]):
 
     kube_for_inspection = None
     try:
-        kube_for_inspection = get_kube_context_info()
+        kube_for_inspection = get_kube_context_info(get_current_context())
     except Exception as exc:  # pragma: no cover - defensive logging
         rich.print(f"[warning]⚠️  Failed to load configured kubecontext: {exc}")
 

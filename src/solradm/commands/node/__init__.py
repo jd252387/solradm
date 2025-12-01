@@ -16,6 +16,7 @@ from solradm.commands.callbacks import add_verbosity_option
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
 from solradm.completion.nodes import node_names
+from solradm.config.util import get_current_context
 from solradm.kube.utils import (
     find_pods_by_node_name,
     get_kube_context_info,
@@ -105,7 +106,7 @@ async def drain(
 
     kube = None
     try:
-        kube = get_kube_context_info()
+        kube = get_kube_context_info(get_current_context())
     except Exception:
         rich.print("[warning] ⚠️ No kubecontext configured; skipping disk cleanup")
         return
