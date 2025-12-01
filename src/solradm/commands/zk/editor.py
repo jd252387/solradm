@@ -267,14 +267,14 @@ def diff(
         local_files = _load_local_config_files(local_dir) if local_dir.is_dir() else {}
         if not local_dir.is_dir():
             rich.print(
-                f"[warning]⚠️ Local configset {local_dir} not found; treating as empty."
+                f"[warning]⚠️ Local configset {local_dir} was not found in ZooKeeper!"
             )
 
         zk_path = f"/configs/{config_name}"
         zk_files = collect_znode_files(zk_client, zk_path)
         if not zk_files and not zk_client.exists(zk_path):
             rich.print(
-                f"[warning]⚠️ ZooKeeper path {zk_path} not found; treating as empty."
+                f"[warning]⚠️ ZooKeeper path {zk_path} was not found locally!"
             )
 
         file_paths = sorted(set(local_files) | set(zk_files))
@@ -283,8 +283,12 @@ def diff(
             continue
 
         for rel_path in file_paths:
-            local_content = local_files.get(rel_path, "")
+            local_content = local_files.get(rel_path)
+            if not local_content:
+                rich.print(f"[warning]⚠️ Local file {rel_path} was not found in ZooKeeper!")
             zk_content = zk_files.get(rel_path, "")
+            if not zk_content:
+                rich.print(f"[warning]⚠️ ZooKeeper file {rel_path} was not found locally!")
 
             diff_lines = list(
                 difflib.unified_diff(
@@ -300,14 +304,7 @@ def diff(
             if not diff_lines:
                 continue
 
-            flags: list[str] = []
-            if rel_path not in local_files:
-                flags.append("(missing locally)")
-            if rel_path not in zk_files:
-                flags.append("(missing in ZooKeeper)")
-
-            header = " ".join([rel_path] + flags)
-            rich.print(f"[cyan]{header}[/]")
+            rich.print(f"[cyan]{rel_path}[/]")
             _print_diff_lines(diff_lines)
             rich.print()
 
