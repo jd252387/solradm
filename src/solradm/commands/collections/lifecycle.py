@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable
 import os
 import re
 from collections import Counter
@@ -35,6 +36,37 @@ from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 from solradm.zk.utils import get_overseer_leader
 
+def _compile_node_patterns(
+    patterns: Sequence[str] | None, option_display: str
+) -> list[re.Pattern[str]]:
+    compiled: list[re.Pattern[str]] = []
+    for pattern in patterns or []:
+        try:
+            compiled.append(re.compile(pattern))
+        except re.error as exc:
+            raise typer.BadParameter(
+                f"Invalid regular expression for {option_display} '{pattern}': {exc}"
+            ) from exc
+    return compiled
+
+
+def _select_nodes(
+    available_nodes: Iterable[str],
+    include_patterns: Sequence[str] | None,
+    exclude_patterns: Sequence[str] | None,
+) -> list[str]:
+    nodes = list(available_nodes)
+    include_regexes = _compile_node_patterns(include_patterns, "--node")
+    exclude_regexes = _compile_node_patterns(exclude_patterns, "--exclude-node")
+
+    def matches(node: str) -> bool:
+        if include_regexes and not any(regex.search(node) for regex in include_regexes):
+            return False
+        if exclude_regexes and any(regex.search(node) for regex in exclude_regexes):
+            return False
+        return True
+
+    return sorted({node for node in nodes if matches(node)})
 
 def _sort_nodes(selected_nodes: Sequence[str], node_order: str) -> list[str]:
     if node_order == "alphabetical":
