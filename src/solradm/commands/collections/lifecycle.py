@@ -389,6 +389,17 @@ async def delete(
         rich.print("[error] ❌ No collections match the given pattern")
         raise typer.Exit(1)
 
+    table = Table(title="Collections to Delete", header_style="bold magenta")
+    table.add_column("Collection", style="cyan")
+    table.add_column("Shards", justify="right", style="green")
+
+    for coll in cluster_state:
+        table.add_row(coll.name, str(len(coll.shards)))
+
+    rich.print(table)
+    if not Confirm.ask("Proceed with deleting the above collections?"):
+        raise typer.Exit(0)
+
     await depopulate(
         cluster_state=cluster_state,
         dry_run=api_utils.is_dry_run,
