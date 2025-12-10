@@ -4,6 +4,7 @@ import re
 import webbrowser
 from itertools import cycle
 from pathlib import Path
+from rich.prompt import Confirm
 
 import rich
 import typer
@@ -207,8 +208,8 @@ def suspend(
 
     sf = state_file or _state_file_for_context(kubecontext)
     if sf.exists():
-        rich.print(f"[error] ❌ A saved state already exists for kubecontext '{kubecontext}' at {sf}")
-        raise typer.Exit(1)
+        if not Confirm.ask(f"[warning]⚠️ A saved state already exists for kubecontext '{kubecontext}' at {sf}. Are you sure you would like to overwrite it?"):
+            raise typer.Exit(1)
 
     pattern = re.compile(name_regex)
     deployments, statefulsets = _get_workloads(kube, pattern)
