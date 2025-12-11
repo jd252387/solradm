@@ -23,5 +23,4 @@ def version() -> None:
 
 def current() -> None:
     """Show the currently active context."""
-
-    config.current()
+    config.print_current_context()

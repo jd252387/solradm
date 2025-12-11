@@ -128,13 +128,6 @@ def print_current_context(*, console: Console | None = None):
     )
 
 
-@app.command()
-def current():
-    """Show the currently active context."""
-
-    print_current_context()
-
-
 def _verify_zk_connection() -> bool:
     try:
         get_client()
@@ -147,11 +140,6 @@ def _verify_zk_connection() -> bool:
             f'[warning] The ZooKeeper host "{get_current_context().zk}" is not responding. Do you still want to continue?'
         )
 
-
-verify_zk_connection = _verify_zk_connection
-
-
-@app.command()
 def switch(
         name: str = typer.Argument(
             ..., help="Context name", autocompletion=context_names

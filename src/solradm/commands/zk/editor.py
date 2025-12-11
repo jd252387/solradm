@@ -507,5 +507,6 @@ def sync(
                 cluster_state=cluster_state,
                 coordinators=None,
                 skip_checks=False,
+                dry_run=False,
             )
         )

@@ -98,7 +98,7 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
             f"[blue]🔄 Syncing {len(self.pending_changes)} changes to ZooKeeper..."
         )
 
-        to_reload = []
+        to_reload = set()
         errors = []
 
         for file_path, change_type in self.pending_changes.items():
