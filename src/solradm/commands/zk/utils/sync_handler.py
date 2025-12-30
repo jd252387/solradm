@@ -111,7 +111,7 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
                     split_path = [part for part in zk_path.split("/") if part]
                     if len(split_path) >= 2 and split_path[0] == "configs":
                         to_reload.update(
-                            get_collections_using_config(get_collections(), split_path[1])
+                            [collection.name for collection in get_collections_using_config(get_collections(), split_path[1])]
                         )
             except Exception as e:
                 error_message = (
@@ -122,7 +122,7 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
 
         if len(to_reload) > 0:
             asyncio.run(reload(
-                collection_name_filter=r"^(" + "|".join(re.escape(collection.name) for collection in to_reload) + r")$", coordinators=None,
+                collection_name_filter=r"^(" + "|".join(re.escape(collection) for collection in to_reload) + r")$", coordinators=None,
                 dry_run=False,
                 skip_checks=True))
             asyncio.run(get_initialized_session().close())
