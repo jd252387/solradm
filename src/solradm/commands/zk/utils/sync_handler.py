@@ -110,7 +110,7 @@ class ZooKeeperSyncHandler(FileSystemEventHandler):
                 if self.reload:
                     split_path = [part for part in zk_path.split("/") if part]
                     if len(split_path) >= 2 and split_path[0] == "configs":
-                        to_reload.extend(
+                        to_reload.update(
                             get_collections_using_config(get_collections(), split_path[1])
                         )
             except Exception as e:

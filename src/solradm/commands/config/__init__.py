@@ -22,13 +22,13 @@ from solradm.config.context import Context
 from solradm.config.interactive.setup_context import setup
 from solradm.config.util import (
     get_current_context,
-    validate_config_dir,
     is_valid_context_repo,
     load_repo_contexts,
     save_repo_contexts,
 )
-from solradm.kube.utils import get_kube_context_info, get_kubecontext
-from solradm.config.util import get_current_context as _get_current_context
+from solradm.exceptions.adm_exception import AdmException
+from solradm.kube.utils import get_kube_context_info, get_kubecontext, list_kube_config_contexts
+from solradm.config.util import get_current_context
 from solradm.zk import get_client
 
 app = Typer()
@@ -377,9 +377,13 @@ def connect(
 
 @app.command()
 def connect_current():
-    """Connect using the configured kubecontext and NodePort service."""
+    """Connect using the currently active kubecontext on the machine."""
+    _, current = list_kube_config_contexts()
+    
+    if not current or not current.get("name"):
+        raise AdmException("No active kubecontext is available on your machine!")
 
-    kube = get_kube_context_info(_get_current_context())
+    kube = get_kube_context_info(Context(name=None, zk="", kubecontext=current.get("name")))
 
     services = CoreV1Api(kube.api_client).list_namespaced_service(kube.namespace).items
     zk_svc = next(
