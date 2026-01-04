@@ -66,19 +66,20 @@ def _resolve_collection(
     *,
     cluster_state: Sequence[Collection],
     context,
-    zk_override: str | None,
-    role: str,
-) -> Collection:
-    if zk_override:
-        return _get_collection_from_zk(zk_override, collection_name)
-    if context:
-        return _get_collection_from_zk(context.zk, collection_name)
+    zk_override: str | None) -> Collection:
+    try: 
+        if zk_override:
+            return _get_collection_from_zk(zk_override, collection_name)
+        if context:
+            return _get_collection_from_zk(context.zk, collection_name)
+    except Exception:
+        return None
+    
     for collection in cluster_state:
         if collection.name == collection_name:
             return collection
-    rich.print(f"[error]❌  {role} collection {collection_name} not found!")
-    raise typer.Exit(1)
-
+        
+    return None
 
 def _map_source_to_targets(
     source_shards: Sequence[Shard], target_shards: Sequence[Shard]
@@ -181,7 +182,7 @@ async def reindex(
         autocompletion=context_names,
     ),
     handler: str = typer.Option("/dataimport", "--handler", help="Path of the dataimport handler"),
-    fq: tuple[str] | None = typer.Option(
+    fq: List[str] | None = typer.Option(
         None,
         "--fq",
         help="Filter query to pass to the dataimport handler",
@@ -220,16 +221,21 @@ async def reindex(
         target_collection,
         cluster_state=cluster_state,
         context=resolved_target_context,
-        zk_override=target_zk,
-        role="Target",
-    )
+        zk_override=target_zk)
+
+    if not target_coll:
+        rich.print(f"[error]❌  Target collection {target_collection} not found!")
+        raise typer.Exit(1)
+
     source_coll = _resolve_collection(
         source_collection,
         cluster_state=cluster_state,
         context=resolved_source_context,
-        zk_override=source_zk,
-        role="Source",
-    )
+        zk_override=source_zk)
+
+    if not source_coll:
+        rich.print(f"[error]❌  Source collection {source_collection} not found!")
+        raise typer.Exit(1)
 
     src_shards = sorted(
         (s for s in source_coll.shards if not source_shard or s.name in source_shard),
