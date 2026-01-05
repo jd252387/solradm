@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from urllib.parse import quote, urlparse, urlunparse
 from contextlib import contextmanager
 from typing import Iterator, List, Sequence
 
@@ -93,6 +94,31 @@ def _map_source_to_targets(
 
 def _leaders_by_shard(shards: Sequence[Shard]) -> dict[str, Replica | None]:
     return {shard.name: next((r for r in shard.replicas if r.leader), None) for shard in shards}
+
+
+def _with_basic_auth(url: str) -> str:
+    auth = settings.get("auth")
+    if not auth:
+        return url
+
+    user = settings.auth.user
+    password = settings.auth.password
+
+    if user is None or password is None:
+        return url
+
+    parsed = urlparse(url)
+    if not parsed.hostname:
+        return url
+
+    encoded_user = quote(str(user), safe="")
+    encoded_password = quote(str(password), safe="")
+    netloc = parsed.hostname
+    if parsed.port:
+        netloc = f"{netloc}:{parsed.port}"
+    netloc = f"{encoded_user}:{encoded_password}@{netloc}"
+
+    return urlunparse(parsed._replace(netloc=netloc))
 
 
 @contextmanager
@@ -288,6 +314,7 @@ async def reindex(
                     get_host_with_scheme(source_replica.base_url, "http").rstrip("/")
                     + f"/{source_replica.core}"
                 )
+                source_core_url = _with_basic_auth(source_core_url)
                 params = {
                     "command": "full-import",
                     "clean": "false",
