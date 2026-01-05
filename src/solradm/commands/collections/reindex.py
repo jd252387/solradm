@@ -21,11 +21,39 @@ from rich.progress import (
 from solradm.api.models import Collection, Replica, Shard
 from solradm.api.utils import get_host_with_scheme, send_request
 from solradm.commands.collections.subapp import app
+from solradm.commands.filters.shard_filter import ShardFilter
 from solradm.commands.filters.utils import with_cluster_state
-from solradm.completion.collections import collection_names, source_collection_names
+from solradm.completion.collections import (
+    collection_names,
+    shard_numbers,
+    source_collection_names,
+)
 from solradm.completion.contexts import context_names
 from solradm.config import settings
 from solradm.config.util import get_context
+
+
+def _parse_shard_spec(spec: str):
+    return ShardFilter()._parse_spec(spec)
+
+
+def _matches_shard(rules, shard_name: str) -> bool:
+    match = re.findall(r"\d+", shard_name)
+    shard_num = int(match[0]) if match else None
+    if shard_num is None:
+        return False
+    for rule in rules:
+        kind = rule[0]
+        if kind == "eq" and shard_num == rule[1]:
+            return True
+        if kind == "range" and rule[1] <= shard_num <= rule[2]:
+            return True
+        if kind == "seq":
+            start, step, end = rule[1], rule[2], rule[3]
+            if shard_num >= start and (shard_num - start) % step == 0:
+                if end is None or shard_num <= end:
+                    return True
+    return False
 
 
 def _parse_status(json_resp: dict) -> tuple[int, int | None, str | None]:
@@ -213,8 +241,12 @@ async def reindex(
         "--fq",
         help="Filter query to pass to the dataimport handler",
     ),
-    shards: List[str] | None = typer.Option(
-        None, "--shards", "--source-shard", help="Source shards to reindex"
+    shards: str | None = typer.Option(
+        None,
+        "--shards",
+        "--source-shard",
+        help="Source shard numbers to reindex (e.g. '1,3-5,2+3-7,+4-16')",
+        autocompletion=shard_numbers,
     ),
     all_shards: bool = typer.Option(
         False, "--all", help="Reindex all source shards"
@@ -274,23 +306,18 @@ async def reindex(
         rich.print(f"[error]❌  Source collection {source_collection} not found!")
         raise typer.Exit(1)
 
-    selected_shards = set(shards or [])
-    if shards:
-        missing_shards = sorted(selected_shards - {s.name for s in source_coll.shards})
-        if missing_shards:
-            rich.print(
-                f"[error]❌  Source shards not found: {', '.join(missing_shards)}"
-            )
+    if all_shards:
+        src_shards = sorted(source_coll.shards, key=lambda s: s.name)
+    else:
+        try:
+            shard_rules = _parse_shard_spec(shards)
+        except typer.BadParameter as exc:
+            rich.print(f"[error]❌  {exc}")
             raise typer.Exit(1)
-
-    src_shards = sorted(
-        (
-            shard
-            for shard in source_coll.shards
-            if all_shards or shard.name in selected_shards
-        ),
-        key=lambda s: s.name,
-    )
+        src_shards = sorted(
+            (shard for shard in source_coll.shards if _matches_shard(shard_rules, shard.name)),
+            key=lambda s: s.name,
+        )
     if not src_shards:
         rich.print("[error]❌  No source shards matched")
         raise typer.Exit(1)
