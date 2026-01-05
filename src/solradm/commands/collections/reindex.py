@@ -213,8 +213,11 @@ async def reindex(
         "--fq",
         help="Filter query to pass to the dataimport handler",
     ),
-    source_shard: List[str] | None = typer.Option(
-        None, "--source-shard", help="Source shards to reindex"
+    shards: List[str] | None = typer.Option(
+        None, "--shards", "--source-shard", help="Source shards to reindex"
+    ),
+    all_shards: bool = typer.Option(
+        False, "--all", help="Reindex all source shards"
     ),
     rows: int = typer.Option(2000, "--rows", help="How many rows to fetch per cursorMark request from the source collection."), 
     sort: str = typer.Option("first_timestamp asc, item_id asc", help="Sort criteria for the cursorMark requests from the source collection"),
@@ -224,6 +227,14 @@ async def reindex(
 ) -> None:
     if (source_context and source_zk) or (target_context and target_zk):
         rich.print("[error]❌  Context and ZooKeeper overrides are mutually exclusive")
+        raise typer.Exit(1)
+
+    if all_shards and shards:
+        rich.print("[error]❌  --shards and --all are mutually exclusive")
+        raise typer.Exit(1)
+
+    if not all_shards and not shards:
+        rich.print("[error]❌  Either --shards or --all must be provided")
         raise typer.Exit(1)
     
     if (source_context):
@@ -263,8 +274,21 @@ async def reindex(
         rich.print(f"[error]❌  Source collection {source_collection} not found!")
         raise typer.Exit(1)
 
+    selected_shards = set(shards or [])
+    if shards:
+        missing_shards = sorted(selected_shards - {s.name for s in source_coll.shards})
+        if missing_shards:
+            rich.print(
+                f"[error]❌  Source shards not found: {', '.join(missing_shards)}"
+            )
+            raise typer.Exit(1)
+
     src_shards = sorted(
-        (s for s in source_coll.shards if not source_shard or s.name in source_shard),
+        (
+            shard
+            for shard in source_coll.shards
+            if all_shards or shard.name in selected_shards
+        ),
         key=lambda s: s.name,
     )
     if not src_shards:
@@ -301,7 +325,13 @@ async def reindex(
             if not leader or not leader.base_url:
                 rich.print(f"[error]❌  No leader with a base URL found for target shard {target_name}")
                 raise typer.Exit(1)
-            task_id = progress.add_task(target_name, total=100)
+            target_task_id = progress.add_task(
+                f"[bold]{target_name}", total=len(source_shards_for_target)
+            )
+            source_tasks = {
+                shard.name: progress.add_task(f"  ↳ {shard.name}", total=100)
+                for shard in source_shards_for_target
+            }
             for shard in source_shards_for_target:
                 source_replica = (
                     next((r for r in shard.replicas if r.leader), None)
@@ -322,20 +352,23 @@ async def reindex(
                     "distrib": "false",
                     "wt": "json",
                     "url": source_core_url,
-                    "qt": qt, 
-                    "fl": fl, 
+                    "qt": qt,
+                    "fl": fl,
                     "timeout": timeout,
-                    "rows": rows, 
+                    "rows": rows,
                     "sort": sort
                 }
                 if fq_param:
                     params["fqs"] = fq_param
                 await send_request(leader.base_url, dataimport_path, params=params)
-                await _watch_dataimport_status(progress, task_id, leader.base_url, dataimport_path)
+                await _watch_dataimport_status(
+                    progress, source_tasks[shard.name], leader.base_url, dataimport_path
+                )
+                progress.advance(target_task_id)
             progress.update(
-                task_id,
-                completed=progress.tasks[task_id].total
-                or progress.tasks[task_id].completed,
+                target_task_id,
+                completed=progress.tasks[target_task_id].total
+                or progress.tasks[target_task_id].completed,
             )
 
         await asyncio.gather(*(run_target(name, shards) for name, shards in shard_map.items()))
