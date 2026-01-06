@@ -130,14 +130,15 @@ Execute a Lucene query and pretty‑print the results. Requests target coordinat
 - `--param` – repeatable arbitrary query parameter of the form `name=value`.
 - `--debug` – include the debug section from Solr in the output.
 
-### `reindex --source <collection> --target <collection> [--source-context <ctx>] [--handler <path>] [--fq <query>] [--source-shard <shard>]`
-Reindex documents from one collection into another using the DataImportHandler.
+### `reindex --source <collection> --target <collection> [--source-context <ctx>] [--handler <path>] [--fq <query>] (--shards <spec> | --all)`
+Reindex documents from one collection into another using the DataImportHandler. You must specify either `--shards` to target specific source shards or `--all` to reindex every shard from the source collection. The `--shards` option uses the shard number syntax (for example `1,3-5,2+3-7,+4-16`).
 - `--source` – collection to read from.
 - `--target` – collection to write to.
 - `--source-context` – optional context in which the source collection resides.
 - `--handler` – path of the DataImportHandler, default `/dataimport`.
 - `--fq` – repeatable filter query passed to the handler.
-- `--source-shard` – limit reindexing to specific shards.
+- `--shards, --source-shard` – limit reindexing to specific shards using shard number ranges, sequences, and lists (required unless `--all` is supplied).
+- `--all` – reindex every source shard.
 
 ## `backup`
 Create or restore index backups via the Replication API. All backup commands honour the same filtering options as collection commands.
