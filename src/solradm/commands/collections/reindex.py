@@ -22,6 +22,10 @@ from solradm.api.models import Collection, Replica, Shard
 from solradm.api.utils import get_host_with_scheme, send_request
 from solradm.commands.collections.subapp import app
 from solradm.commands.filters.shard_filter import ShardFilter
+from solradm.commands.filters.shard_utils import (
+    matches_shard_name,
+    parse_shard_spec,
+)
 from solradm.commands.filters.utils import with_cluster_state
 from solradm.completion.collections import (
     collection_names,
@@ -31,30 +35,6 @@ from solradm.completion.collections import (
 from solradm.completion.contexts import context_names
 from solradm.config import settings
 from solradm.config.util import get_context
-
-
-def _parse_shard_spec(spec: str):
-    return ShardFilter()._parse_spec(spec)
-
-
-def _matches_shard(rules, shard_name: str) -> bool:
-    match = re.findall(r"\d+", shard_name)
-    shard_num = int(match[0]) if match else None
-    if shard_num is None:
-        return False
-    for rule in rules:
-        kind = rule[0]
-        if kind == "eq" and shard_num == rule[1]:
-            return True
-        if kind == "range" and rule[1] <= shard_num <= rule[2]:
-            return True
-        if kind == "seq":
-            start, step, end = rule[1], rule[2], rule[3]
-            if shard_num >= start and (shard_num - start) % step == 0:
-                if end is None or shard_num <= end:
-                    return True
-    return False
-
 
 def _parse_status(json_resp: dict) -> tuple[int, int | None, str | None]:
     msgs = json_resp.get("statusMessages", {})
@@ -310,12 +290,16 @@ async def reindex(
         src_shards = sorted(source_coll.shards, key=lambda s: s.name)
     else:
         try:
-            shard_rules = _parse_shard_spec(shards)
+            shard_rules = parse_shard_spec(shards)
         except typer.BadParameter as exc:
             rich.print(f"[error]❌  {exc}")
             raise typer.Exit(1)
         src_shards = sorted(
-            (shard for shard in source_coll.shards if _matches_shard(shard_rules, shard.name)),
+            (
+                shard
+                for shard in source_coll.shards
+                if matches_shard_name(shard_rules, shard.name)
+            ),
             key=lambda s: s.name,
         )
     if not src_shards:
