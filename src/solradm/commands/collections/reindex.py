@@ -141,6 +141,31 @@ def _dataimport_progress() -> Iterator[Progress]:
         yield progress
 
 
+async def _get_shard_doc_count(
+    source_replica: Replica,
+    source_collection: str,
+    shard_name: str,
+    fq: List[str] | None,
+) -> int:
+    """Query the source shard to get the number of documents matching the filter queries."""
+    if not source_replica.base_url or not source_replica.core:
+        return 0
+    params = {
+        "q": "*:*",
+        "rows": "0",
+        "wt": "json",
+        "shards": shard_name,
+    }
+    if fq:
+        params["fq"] = fq
+    resp = await send_request(
+        source_replica.base_url,
+        f"/{source_collection}/select",
+        params=params,
+    )
+    return resp.get("response", {}).get("numFound", 0)
+
+
 async def _watch_dataimport_status(
     progress: Progress,
     task_id: int,
@@ -336,13 +361,9 @@ async def reindex(
             if not leader or not leader.base_url:
                 rich.print(f"[error]❌  No leader with a base URL found for target shard {target_name}")
                 raise typer.Exit(1)
-            target_task_id = progress.add_task(
-                f"[bold]{target_name}", total=len(source_shards_for_target)
-            )
-            source_tasks = {
-                shard.name: progress.add_task(f"  ↳ {shard.name}", total=100)
-                for shard in source_shards_for_target
-            }
+
+            # Collect replicas and document counts for all source shards
+            shard_info: dict[str, tuple[Replica, int]] = {}
             for shard in source_shards_for_target:
                 source_replica = (
                     next((r for r in shard.replicas if r.leader), None)
@@ -351,6 +372,23 @@ async def reindex(
                 if not source_replica or not source_replica.base_url or not source_replica.core:
                     rich.print(f"[error]❌  No usable replica found for source shard {shard.name}")
                     raise typer.Exit(1)
+                doc_count = await brew tap steveyegge/beads_get_shard_doc_count(
+                    source_replica, source_collection, shard.name, fq
+                )
+                shard_info[shard.name] = (source_replica, doc_count)
+
+            target_task_id = progress.add_task(
+                f"[bold]{target_name}", total=len(source_shards_for_target)
+            )
+            source_tasks = {
+                shard.name: progress.add_task(
+                    f"  ↳ {shard.name}",
+                    total=min(shard_info[shard.name][1], rows) if shard_info[shard.name][1] > 0 else rows,
+                )
+                for shard in source_shards_for_target
+            }
+            for shard in source_shards_for_target:
+                source_replica = shard_info[shard.name][0]
                 source_core_url = (
                     get_host_with_scheme(source_replica.base_url, "http").rstrip("/")
                     + f"/{source_replica.core}"
