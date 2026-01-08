@@ -372,7 +372,7 @@ async def reindex(
                 if not source_replica or not source_replica.base_url or not source_replica.core:
                     rich.print(f"[error]❌  No usable replica found for source shard {shard.name}")
                     raise typer.Exit(1)
-                doc_count = await brew tap steveyegge/beads_get_shard_doc_count(
+                doc_count = await _get_shard_doc_count(
                     source_replica, source_collection, shard.name, fq
                 )
                 shard_info[shard.name] = (source_replica, doc_count)

@@ -6,13 +6,11 @@ from typing import List
 
 import rich
 import typer
-from aiohttp import ContentTypeError
 
 import solradm.api.utils as api_utils
-from solradm.api import get_session
 from solradm.api.models import Collection
 from solradm.api.state import get_nodes_by_role
-from solradm.api.utils import get_host_with_scheme, send_request
+from solradm.api.utils import send_request
 from solradm.commands.collections.subapp import app
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
 from solradm.commands.filters.utils import with_cluster_state, with_dry_run
@@ -36,145 +34,99 @@ def _escape_stream_value(value: str) -> str:
 
 
 async def _get_field_definition(base: str, collection: str, field: str) -> dict:
-    session = get_session()
-    base_url = get_host_with_scheme(base, "http").rstrip("/")
-    for endpoint in ("field", "fields"):
-        url = f"{base_url}/solr/{collection}/schema/{endpoint}/{field}"
-        async with session.get(url, params={"wt": "json"}) as resp:
-            if resp.status == 404:
-                continue
-            if resp.status != 200:
-                body = await resp.text()
-                rich.print(
-                    f"[error] ❌ Failed to fetch schema metadata for field {field!r}: [yellow]{body}"
-                )
-                raise typer.Exit(1)
-            try:
-                data = await resp.json()
-            except ContentTypeError:
-                body = await resp.text()
-                rich.print(
-                    f"[error] ❌ Unexpected response while inspecting field {field!r}: [yellow]{body}"
-                )
-                raise typer.Exit(1)
-        if endpoint == "field" and data.get("field"):
-            return data["field"]
-        if endpoint == "fields" and data.get("fields"):
-            fields = data["fields"]
-            if fields:
-                return fields[0]
+    resp = await send_request(
+        base,
+        f"/{collection}/schema/fields/{field}",
+        params={"wt": "json"},
+        return_raw=True,
+    )
+    if resp["status"] == 404:
+        raise typer.BadParameter(
+            f"Field {field!r} was not found in the schema for collection {collection!r}"
+        )
+    if not resp["ok"]:
+        error_text = resp["error_text"] or str(resp["data"])
+        rich.print(
+            f"[error] ❌ Failed to fetch schema metadata for field {field!r}: [yellow]{error_text}"
+        )
+        raise typer.Exit(1)
+    if resp["data"] is None:
+        rich.print(
+            f"[error] ❌ Unexpected response while inspecting field {field!r}: [yellow]{resp['error_text']}"
+        )
+        raise typer.Exit(1)
+    data = resp["data"]
+    field = data.get("field")
+    if field:
+        return field
     raise typer.BadParameter(
         f"Field {field!r} was not found in the schema for collection {collection!r}"
     )
 
 
-async def _export_via_export_handler(
-    base: str,
+def _build_stream_expr_params(
     collection: str,
-    output: Path,
     query: str,
     fq: List[str] | None,
     fields: List[str],
-    requested_fields: List[str],
-    unique_key: str,
-) -> int:
-    session = get_session()
-    base_url = get_host_with_scheme(base, "http").rstrip("/")
-    url = f"{base_url}/solr/{collection}/export"
-    params: dict[str, object] = {
-        "q": query,
-        "fl": ",".join(fields),
-        "sort": f"{unique_key} asc",
-        "wt": "json",
-    }
-    if fq:
-        params["fq"] = fq
-    data: dict
-    async with session.get(url, params=params) as resp:
-        if resp.status != 200:
-            body = await resp.text()
-            rich.print(
-                f"[error] ❌ Received HTTP {resp.status} from {url}: [yellow]{body}"
-            )
-            raise typer.Exit(1)
-        try:
-            data = await resp.json()
-        except ContentTypeError:
-            body = await resp.text()
-            rich.print(
-                f"[error] ❌ Unexpected response from {url}: [yellow]{body}"
-            )
-            raise typer.Exit(1)
-    if "error" in data:
-        rich.print(
-            f"[error] ❌ Export handler returned an error: [yellow]{data['error'].get('msg', data['error'])}"
-        )
-        raise typer.Exit(1)
-    docs = data.get("response", {}).get("docs", [])
-    output.parent.mkdir(parents=True, exist_ok=True)
-    count = 0
-    with output.open("w", encoding="utf-8") as fh:
-        for doc in docs:
-            record = {field: doc.get(field) for field in requested_fields}
-            fh.write(json.dumps(record, ensure_ascii=False))
-            fh.write("\n")
-            count += 1
-    return count
-
-
-async def _export_via_stream_handler(
-    base: str,
-    collection: str,
-    output: Path,
-    query: str,
-    fq: List[str] | None,
-    fields: List[str],
-    requested_fields: List[str],
-    unique_key: str,
-) -> int:
-    session = get_session()
-    base_url = get_host_with_scheme(base, "http").rstrip("/")
-    url = f"{base_url}/solr/{collection}/stream"
+    sort_field: str,
+    qt: str = "/select",
+) -> dict[str, str]:
+    """Build parameters for the /stream handler using streaming expressions."""
     fl_value = ",".join(fields)
     stream_params = [
         f'q="{_escape_stream_value(query)}"',
         f'fl="{_escape_stream_value(fl_value)}"',
-        f'sort="{_escape_stream_value(unique_key)} asc"',
-        'qt="/select"',
+        f'sort="{_escape_stream_value(sort_field)}"',
+        f'qt="{qt}"',
     ]
     if fq:
         for item in fq:
             stream_params.append(f'fq="{_escape_stream_value(item)}"')
-    expr = f"search(\"{_escape_stream_value(collection)}\", {', '.join(stream_params)})"
-    params = {"expr": expr, "wt": "json"}
-    data: dict
-    async with session.get(url, params=params) as resp:
-        if resp.status != 200:
-            body = await resp.text()
-            rich.print(
-                f"[error] ❌ Received HTTP {resp.status} from {url}: [yellow]{body}"
-            )
-            raise typer.Exit(1)
-        try:
-            data = await resp.json()
-        except ContentTypeError:
-            body = await resp.text()
-            rich.print(
-                f"[error] ❌ Unexpected response from {url}: [yellow]{body}"
-            )
-            raise typer.Exit(1)
-    result_set = data.get("result-set", {})
-    docs = result_set.get("docs", [])
+    expr = f'search("{_escape_stream_value(collection)}", {", ".join(stream_params)})'
+    return {"expr": expr, "wt": "json"}
+
+
+async def _stream_export_docs(
+    base: str,
+    collection: str,
+    output: Path,
+    query: str,
+    fq: List[str] | None,
+    fields: List[str],
+    requested_fields: List[str],
+    sort_field: str,
+    use_export_handler: bool,
+) -> int:
+    """
+    Export documents using HTTP streaming via the /stream endpoint.
+
+    Uses qt=/export when use_export_handler is True (requires docValues, no multiValued),
+    otherwise uses qt=/select.
+    """
+    from solradm.api.streaming import (
+        StreamingError,
+        stream_json_docs,
+    )
+
+    endpoint = f"/{collection}/stream"
+    qt = "/export" if use_export_handler else "/select"
+    params = _build_stream_expr_params(collection, query, fq, fields, sort_field, qt)
+
     output.parent.mkdir(parents=True, exist_ok=True)
     count = 0
-    with output.open("w", encoding="utf-8") as fh:
-        for doc in docs:
-            if doc.get("EOF"):
-                continue
-            record = {field: doc.get(field) for field in requested_fields}
-            fh.write(json.dumps(record, ensure_ascii=False))
-            fh.write("\n")
-            count += 1
+
+    try:
+        with output.open("w", encoding="utf-8") as fh:
+            async for doc in stream_json_docs(base, endpoint, params):
+                record = {field: doc.get(field) for field in requested_fields}
+                fh.write(json.dumps(record, ensure_ascii=False))
+                fh.write("\n")
+                count += 1
+    except StreamingError as e:
+        rich.print(f"[error] ❌ Export failed: [yellow]{e}")
+        raise typer.Exit(1)
+
     return count
 
 
@@ -187,21 +139,22 @@ async def _post_json_docs(
     if not docs or api_utils.is_dry_run:
         return
 
-    session = get_session()
-    base_url = get_host_with_scheme(base, "http").rstrip("/")
-    url = f"{base_url}/solr/{collection}/update/json/docs"
     request_params = {"wt": "json", **params}
+    resp = await send_request(
+        base,
+        f"/{collection}/update/json/docs",
+        params=request_params,
+        method="POST",
+        json_body=docs,
+        return_raw=True,
+    )
+    if not resp["ok"]:
+        error_text = resp["error_text"] or str(resp["data"])
+        raise SolrException(resp["status"], f"HTTP {resp['status']}: {error_text}")
+    if resp["data"] is None:
+        raise SolrException(resp["status"], f"Unexpected response: {resp['error_text']}")
 
-    async with session.post(url, params=request_params, json=docs) as resp:
-        if resp.status != 200:
-            body = await resp.text()
-            raise SolrException(resp.status, f"HTTP {resp.status}: {body}")
-        try:
-            data = await resp.json()
-        except ContentTypeError:
-            body = await resp.text()
-            raise SolrException(resp.status, f"Unexpected response: {body}")
-
+    data = resp["data"]
     status = data.get("responseHeader", {}).get("status")
     if status != 0:
         message = data.get("error", {}).get(
@@ -214,23 +167,25 @@ async def _send_commit_request(base: str, collection: str, soft_commit: bool) ->
     if api_utils.is_dry_run:
         return
 
-    session = get_session()
-    base_url = get_host_with_scheme(base, "http").rstrip("/")
-    url = f"{base_url}/solr/{collection}/update"
     payload = {"commit": {}}
     if soft_commit:
         payload["commit"]["softCommit"] = True
 
-    async with session.post(url, params={"wt": "json"}, json=payload) as resp:
-        if resp.status != 200:
-            body = await resp.text()
-            raise SolrException(resp.status, f"HTTP {resp.status}: {body}")
-        try:
-            data = await resp.json()
-        except ContentTypeError:
-            body = await resp.text()
-            raise SolrException(resp.status, f"Unexpected response: {body}")
+    resp = await send_request(
+        base,
+        f"/{collection}/update",
+        params={"wt": "json"},
+        method="POST",
+        json_body=payload,
+        return_raw=True,
+    )
+    if not resp["ok"]:
+        error_text = resp["error_text"] or str(resp["data"])
+        raise SolrException(resp["status"], f"HTTP {resp['status']}: {error_text}")
+    if resp["data"] is None:
+        raise SolrException(resp["status"], f"Unexpected response: {resp['error_text']}")
 
+    data = resp["data"]
     status = data.get("responseHeader", {}).get("status")
     if status != 0:
         message = data.get("error", {}).get(
@@ -253,6 +208,12 @@ async def export_documents(
     ),
     fq: List[str] | None = typer.Option(None, "--fq", help="Filter query to apply"),
     query: str = typer.Option("*:*", "--query", "-q", help="Main query to select documents"),
+    sort: str | None = typer.Option(
+        None,
+        "--sort",
+        "-s",
+        help="Sort order for export (e.g., 'field1 asc, field2 desc'). Defaults to first field ascending.",
+    ),
 ) -> None:
     requested_fields = _dedupe_preserve_order(field)
     if not requested_fields:
@@ -264,32 +225,19 @@ async def export_documents(
         coordinators = []
     base = coordinators[0] if coordinators else get_overseer_leader()
 
-    unique_resp = await send_request(
-        base,
-        f"/{collection}/schema/uniquekey",
-        params={"wt": "json"},
-    )
-    unique_key = unique_resp.get("uniqueKey")
-    if not unique_key:
-        rich.print(f"[error] ❌ Unable to determine uniqueKey for collection {collection}")
-        raise typer.Exit(1)
-
-    export_fields = _dedupe_preserve_order(requested_fields + [unique_key])
-    field_info: dict[str, dict] = {}
+    export_fields = requested_fields
     missing_docvalues: set[str] = set()
     multi_valued: set[str] = set()
     non_retrievable: set[str] = set()
 
     for name in export_fields:
         info = await _get_field_definition(base, collection, name)
-        field_info[name] = info
-        if name in requested_fields:
-            if not info.get("docValues", False):
-                missing_docvalues.add(name)
-            if info.get("multiValued", False):
-                multi_valued.add(name)
-            if not info.get("docValues", False) and not info.get("stored", False):
-                non_retrievable.add(name)
+        if not info.get("docValues", False):
+            missing_docvalues.add(name)
+        if info.get("multiValued", False):
+            multi_valued.add(name)
+        if not info.get("docValues", False) and not info.get("stored", False):
+            non_retrievable.add(name)
 
     if non_retrievable:
         joined = ", ".join(sorted(non_retrievable))
@@ -297,12 +245,7 @@ async def export_documents(
             f"Field(s) {joined} are neither docValues enabled nor stored; unable to export their values."
         )
 
-    unique_info = field_info.get(unique_key, {})
-    export_supported = (
-        not missing_docvalues
-        and not multi_valued
-        and unique_info.get("docValues", False)
-    )
+    export_supported = not missing_docvalues and not multi_valued
 
     if not export_supported:
         reasons: list[str] = []
@@ -312,8 +255,6 @@ async def export_documents(
             )
         if multi_valued:
             reasons.append(f"multiValued fields: {', '.join(sorted(multi_valued))}")
-        if not unique_info.get("docValues", False):
-            reasons.append(f"uniqueKey field {unique_key} lacks docValues")
         if reasons:
             rich.print(
                 "[warning]⚠️  Requested fields are incompatible with /export ("
@@ -321,34 +262,20 @@ async def export_documents(
                 + "). Falling back to /stream."
             )
 
-    try:
-        if export_supported:
-            count = await _export_via_export_handler(
-                base,
-                collection,
-                output,
-                query,
-                fq,
-                export_fields,
-                requested_fields,
-                unique_key,
-            )
-            handler = "/export"
-        else:
-            count = await _export_via_stream_handler(
-                base,
-                collection,
-                output,
-                query,
-                fq,
-                export_fields,
-                requested_fields,
-                unique_key,
-            )
-            handler = "/stream"
-    except SolrException as exc:
-        rich.print(f"[error] ❌ Solr returned an error: [yellow]{exc}\n")
-        raise typer.Exit(1)
+    sort_field = sort if sort else f"{requested_fields[0]} asc"
+    handler = "/export" if export_supported else "/stream"
+
+    count = await _stream_export_docs(
+        base,
+        collection,
+        output,
+        query,
+        fq,
+        export_fields,
+        requested_fields,
+        sort_field,
+        use_export_handler=export_supported,
+    )
 
     rich.print(f"[success]✅  Exported {count} documents to {output} using {handler}")
 
