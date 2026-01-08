@@ -16,6 +16,7 @@ from rich.progress import (
     SpinnerColumn,
     TextColumn,
     TimeRemainingColumn,
+    MofNCompleteColumn
 )
 
 from solradm.api.models import Collection, Replica, Shard
@@ -136,6 +137,7 @@ def _dataimport_progress() -> Iterator[Progress]:
         TextColumn("{task.description}"),
         BarColumn(),
         TimeRemainingColumn(),
+        MofNCompleteColumn()
     )
     with Progress(*columns) as progress:
         yield progress
@@ -154,7 +156,7 @@ async def _get_shard_doc_count(
         "q": "*:*",
         "rows": "0",
         "wt": "json",
-        "shards": shard_name,
+        "distrib": "false",
     }
     if fq:
         params["fq"] = fq
@@ -344,7 +346,7 @@ async def reindex(
     if busy_shards:
         rich.print("[warning]⚠️  Dataimport already running on some shards. Monitoring progress...")
         with _dataimport_progress() as progress:
-            tasks = {name: progress.add_task(name, total=100) for name, _ in busy_shards}
+            tasks = {name: progress.add_task(name, total=None) for name, _ in busy_shards}
             await asyncio.gather(
                 *(
                     _watch_dataimport_status(progress, tasks[name], replica.base_url, dataimport_path)
