@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "aiohttp==3.12.15",
     "async-typer>=0.1.10",
+    "debugpy>=1.8.0",
     "dynaconf>=3.2.11",
     "kazoo>=2.10.0",
     "kubernetes>=33.1.0",
@@ -21,6 +22,7 @@ dependencies = [
 [project.scripts]
 solradm = "solradm.main:run"
 sa = "solradm.main:run"
+sad = "solradm.main:run_debug"
 
 [build-system]
 requires = ["setuptools>=69", "wheel"]

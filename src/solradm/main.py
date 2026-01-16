@@ -60,5 +60,14 @@ def run():
             asyncio.run(get_initialized_session().close())
 
 
+def run_debug():
+    import debugpy
+    debugpy.listen(5678)
+    print("Waiting for debugger to attach on port 5678...")
+    debugpy.wait_for_client()
+    print("Debugger attached!")
+    run()
+
+
 if __name__ == "__main__":
     run()
