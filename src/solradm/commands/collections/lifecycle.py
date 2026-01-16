@@ -75,14 +75,14 @@ def _sort_nodes(selected_nodes: Sequence[str], node_order: str) -> list[str]:
     if node_order == "numerical":
         sorted_nodes: list[tuple[int, str]] = []
         for node in selected_nodes:
-            match = re.search(r"\d+", node)
+            match = re.search(r"-(\d+)", node)
             if not match:
                 raise typer.BadParameter(
                     f"Selected node '{node}' lacks digits required for numerical ordering"
                 )
-            sorted_nodes.append((int(match.group()), node))
+            sorted_nodes.append((int(match.group(0)), node))
 
-        return [node for _, node in sorted(sorted_nodes, key=lambda item: (item[0], item[1]))]
+        return [node for _, node in sorted(sorted_nodes, key=lambda item: (item[0], item[1]), reverse=True)]
 
     raise typer.BadParameter("--node-order must be either 'alphabetical' or 'numerical'")
 
