@@ -322,37 +322,10 @@ def ui() -> None:
             name="console",
         )
         host = route["spec"]["host"]
-    except Exception:
-        rich.print("[error] ❌ Unable to determine OpenShift console host")
+    except Exception as e:
+        rich.print(f"[error] ❌ Unable to determine OpenShift console host - {e}")
         raise typer.Exit(1)
 
     url = f"https://{host}/k8s/ns/{namespace}/core~v1~Pod"
-    webbrowser.open(url)
-    rich.print(f"[success]✅  Opened OpenShift console at {url}")
-
-
-# Backwards compatibility with older command name
-@app.command(hidden=True)
-def console() -> None:
-    """Deprecated alias for the :func:`ui` command without OpenShift detection."""
-
-    kube = get_kube_context_info(get_current_context())
-    api = CustomObjectsApi(kube.api_client)
-    namespace = kube.namespace
-
-    try:
-        route = api.get_namespaced_custom_object(
-            group="route.openshift.io",
-            version="v1",
-            namespace="openshift-console",
-            plural="routes",
-            name="console",
-        )
-        host = route["spec"]["host"]
-    except Exception:
-        rich.print("[error] ❌ Unable to determine OpenShift console host")
-        raise typer.Exit(1)
-
-    url = f"https://{host}/k8s/ns/{namespace}"
     webbrowser.open(url)
     rich.print(f"[success]✅  Opened OpenShift console at {url}")
