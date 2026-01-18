@@ -371,7 +371,7 @@ def connect(
     if _verify_zk_connection():
         persist()
         rich.print(
-            "Switched to temporary context. Use [italic]context persist[/] to save the context permanently."
+            "Switched to temporary context. Use [italic]context save <name>[/] to save the context permanently."
         )
 
 
@@ -407,7 +407,7 @@ def connect_current():
 
 @app.command()
 def save(name: str = typer.Argument(..., help="Context name")):
-    """Persist the current temporary context under a new name."""
+    """Save the current temporary context under a new name."""
 
     if "name" not in settings.contexts.current:
         add(
@@ -415,6 +415,7 @@ def save(name: str = typer.Argument(..., help="Context name")):
             settings.contexts.current.zk,
             settings.contexts.current.get("kubecontext"),
             namespace=settings.contexts.current.get("namespace"),
+            interactive=False,
         )
     else:
         rich.print(
