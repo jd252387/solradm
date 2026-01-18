@@ -45,11 +45,6 @@ def _ensure_state_dir() -> Path:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     return STATE_DIR
 
-
-def _state_file_for_context(context_name: str) -> Path:
-    safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", context_name)
-    return _ensure_state_dir() / f"{safe_name}.json"
-
 def is_openshift_cluster(kube: KubeContextInfo) -> bool:
     try:
         groups = client.ApisApi(api_client=kube.api_client).get_api_versions().groups
@@ -206,7 +201,7 @@ def suspend(
             raise typer.Exit(1)
     kube = get_kube_context_info(Context(name=None, zk="", kubecontext=kubecontext))
 
-    sf = state_file or _state_file_for_context(kubecontext)
+    sf = state_file or (_ensure_state_dir() / f"{kubecontext}.json")
     if sf.exists():
         if not Confirm.ask(f"[warning]⚠️ A saved state already exists for kubecontext '{kubecontext}' at {sf}. Are you sure you would like to overwrite it?"):
             raise typer.Exit(1)
@@ -254,7 +249,7 @@ def resume(
     else: 
         kube = get_kube_context_info(Context(name=None, zk="", kubecontext=kubecontext))
 
-    sf = state_file or _state_file_for_context(kubecontext)
+    sf = state_file or (_ensure_state_dir() / f"{kubecontext}.json")
     if not sf.exists():
         rich.print(f"[error] ❌ State file {sf} does not exist")
         raise typer.Exit(1)
