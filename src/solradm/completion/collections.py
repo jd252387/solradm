@@ -7,46 +7,8 @@ from .utils import _filter_starts_with
 
 def collection_names(ctx, args: List[str], incomplete: str) -> List[str]:
     try:
-        from solradm.api.state import get_collection_names
-
-        names = get_collection_names()
-    except Exception as e:
-        return autocompletion_error(incomplete, e)
-    return _filter_starts_with(sorted(names), incomplete)
-
-
-def source_collection_names(ctx, args: List[str], incomplete: str) -> List[str]:
-    try:
-        context = ctx.params.get("source_context")
-        if context:
-            from kazoo.client import KazooClient
-            from solradm.config import settings
-
-            ctx_obj = next(
-                (c for c in settings.contexts.available if c.name == context), None
-            )
-            if not ctx_obj:
-                names = []
-            else:
-                zk = KazooClient(hosts=ctx_obj.zk, timeout=5)
-                zk.start()
-                try:
-                    names = zk.get_children("/collections")
-                finally:
-                    zk.stop()
-                    zk.close()
-        else:
-            from solradm.api.state import get_collection_names
-
-            names = get_collection_names()
-    except Exception as e:
-        return autocompletion_error(incomplete, e)
-    return _filter_starts_with(sorted(names), incomplete)
-
-
-def target_collection_names(ctx, args: List[str], incomplete: str) -> List[str]:
-    try:
-        context = ctx.params.get("target_context")
+        # Check for source_context or target_context parameters
+        context = ctx.params.get("source_context") or ctx.params.get("target_context")
         if context:
             from kazoo.client import KazooClient
             from solradm.config import settings
