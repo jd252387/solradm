@@ -304,3 +304,58 @@ async def reindex(
         await asyncio.gather(*(run_target(name, shards) for name, shards in shard_map.items()))
 
     rich.print("[success]✅  Reindex completed")
+
+
+@app.async_command(
+    name="abort-reindex",
+    help="Abort an in-progress dataimport operation on a collection",
+)
+@with_cluster_state()
+async def abort_reindex(
+    cluster_state: List[Collection],
+    collection: str = typer.Option(
+        ..., "--collection", "-c", help="Collection to abort reindex on", autocompletion=collection_names
+    ),
+    context: str | None = typer.Option(
+        None, "--context", help="Context of the collection", autocompletion=context_names
+    ),
+    zk: str | None = typer.Option(
+        None, "--zk", help="ZooKeeper host where the collection resides"
+    ),
+    handler: str = typer.Option("/dataimport", "--handler", help="Path of the dataimport handler"),
+) -> None:
+    if context and zk:
+        rich.print("[error]❌  Context and ZooKeeper overrides are mutually exclusive")
+        raise typer.Exit(1)
+
+    resolved_context = _resolve_context(context, role="Collection")
+
+    coll = _resolve_collection(
+        collection,
+        cluster_state=cluster_state,
+        context=resolved_context,
+        zk_override=zk,
+        role="Collection",
+    )
+
+    shards = sorted(coll.shards, key=lambda s: s.name)
+    if not shards:
+        rich.print("[error]❌  Collection has no shards")
+        raise typer.Exit(1)
+
+    leaders = _leaders_by_shard(shards)
+    dataimport_path = f"/{collection}{handler}"
+
+    for shard_name, leader in leaders.items():
+        if not leader or not leader.base_url:
+            rich.print(f"[warning]⚠️  No leader with a base URL found for shard {shard_name}, skipping")
+            continue
+
+        params = {
+            "command": "abort",
+            "wt": "json",
+        }
+        await send_request(leader.base_url, dataimport_path, params=params)
+        rich.print(f"[info]Sent abort to shard {shard_name}")
+
+    rich.print("[success]✅  Abort command sent to all shards")

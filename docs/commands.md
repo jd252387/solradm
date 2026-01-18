@@ -139,6 +139,13 @@ Reindex documents from one collection into another using the DataImportHandler.
 - `--fq` – repeatable filter query passed to the handler.
 - `--source-shard` – limit reindexing to specific shards.
 
+### `abort-reindex --collection <collection> [--context <ctx>] [--handler <path>]`
+Abort an in-progress dataimport operation on a collection.
+- `--collection, -c` – collection to abort reindex on.
+- `--context` – optional context in which the collection resides.
+- `--zk` – ZooKeeper host where the collection resides.
+- `--handler` – path of the DataImportHandler, default `/dataimport`.
+
 ## `backup`
 Create or restore index backups via the Replication API. All backup commands honour the same filtering options as collection commands.
 
