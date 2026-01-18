@@ -32,6 +32,7 @@ from solradm.completion.collections import (
     collection_names,
     shard_numbers,
     source_collection_names,
+    target_collection_names,
 )
 from solradm.completion.contexts import context_names
 from solradm.config import settings
@@ -221,7 +222,7 @@ async def reindex(
         ..., "--source", help="Collection to reindex from", autocompletion=source_collection_names
     ),
     target_collection: str = typer.Option(
-        ..., "--target", help="Collection to reindex into", autocompletion=collection_names
+        ..., "--target", help="Collection to reindex into", autocompletion=target_collection_names
     ),
     source_context: str | None = typer.Option(
         None, "--source-context", help="Context of the source collection", autocompletion=context_names
