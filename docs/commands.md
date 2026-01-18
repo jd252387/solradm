@@ -140,6 +140,13 @@ Reindex documents from one collection into another using the DataImportHandler. 
 - `--shards, --source-shard` – limit reindexing to specific shards using shard number ranges, sequences, and lists (required unless `--all` is supplied).
 - `--all` – reindex every source shard.
 
+### `abort-reindex --collection <collection> [--handler <path>] (--shards <spec> | --all)`
+Abort a running reindex operation on a collection using the DataImportHandler. You must specify either `--shards` to target specific shards or `--all` to abort reindex on every shard in the collection.
+- `--collection, -c` – collection to abort reindex on.
+- `--handler` – path of the DataImportHandler, default `/dataimport`.
+- `--shards` – limit abort to specific shards using shard number ranges, sequences, and lists (required unless `--all` is supplied).
+- `--all` – abort reindex on every shard in the collection.
+
 ## `backup`
 Create or restore index backups via the Replication API. All backup commands honour the same filtering options as collection commands.
 
