@@ -19,7 +19,6 @@ from solradm.api.state import get_collections, get_nodes_by_role
 from solradm.api.utils import (
     get_replicas,
     send_request,
-    validate_num_replicas,
 )
 from solradm.commands.collections.subapp import app
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
@@ -113,6 +112,12 @@ async def depopulate(
 
     replicas = get_replicas(cluster_state)
 
+    # If no replicas to remove, return early (allows delete to proceed)
+    if len(replicas) == 0:
+        if not skip_checks:
+            rich.print("[info]No replicas to remove.")
+        return
+
     if not skip_checks:
         table = Table(title="Cluster State", header_style="bold magenta")
         table.add_column("Collection", style="cyan")
@@ -163,7 +168,6 @@ async def depopulate(
         if not Confirm.ask("Proceed with removing replicas?"):
             raise typer.Exit(0)
 
-    replicas = validate_num_replicas(replicas)
     tasks = [
         MetaTask(
             [replica.shard.collection.name, replica.shard.name, replica.name],
