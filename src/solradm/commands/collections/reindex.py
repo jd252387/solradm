@@ -363,8 +363,10 @@ async def reindex(
                 rich.print(f"[error]❌  No leader with a base URL found for target shard {target_name}")
                 raise typer.Exit(1)
 
-            # Collect replicas and document counts for all source shards
-            shard_info: dict[str, tuple[Replica, int]] = {}
+            target_task_id = progress.add_task(
+                f"[bold]{target_name}", total=len(source_shards_for_target)
+            )
+
             for shard in source_shards_for_target:
                 source_replica = (
                     next((r for r in shard.replicas if r.leader), None)
@@ -373,23 +375,16 @@ async def reindex(
                 if not source_replica or not source_replica.base_url or not source_replica.core:
                     rich.print(f"[error]❌  No usable replica found for source shard {shard.name}")
                     raise typer.Exit(1)
+
                 doc_count = await _get_shard_doc_count(
                     source_replica, source_collection, shard.name, fq
                 )
-                shard_info[shard.name] = (source_replica, doc_count)
 
-            target_task_id = progress.add_task(
-                f"[bold]{target_name}", total=len(source_shards_for_target)
-            )
-            source_tasks = {
-                shard.name: progress.add_task(
+                source_task_id = progress.add_task(
                     f"  ↳ {shard.name}",
-                    total=min(shard_info[shard.name][1], rows) if shard_info[shard.name][1] > 0 else rows,
+                    total=min(doc_count, rows) if doc_count > 0 else rows,
                 )
-                for shard in source_shards_for_target
-            }
-            for shard in source_shards_for_target:
-                source_replica = shard_info[shard.name][0]
+
                 source_core_url = (
                     get_host_with_scheme(source_replica.base_url, "http").rstrip("/")
                     + f"/{source_replica.core}"
@@ -412,9 +407,12 @@ async def reindex(
                     params["fqs"] = fq_param
                 await send_request(leader.base_url, dataimport_path, params=params)
                 await _watch_dataimport_status(
-                    progress, source_tasks[shard.name], leader.base_url, dataimport_path
+                    progress, source_task_id, leader.base_url, dataimport_path
                 )
+
+                progress.remove_task(source_task_id)
                 progress.advance(target_task_id)
+
             progress.update(
                 target_task_id,
                 completed=progress.tasks[target_task_id].total
