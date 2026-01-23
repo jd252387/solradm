@@ -366,6 +366,9 @@ async def reindex(
             target_task_id = progress.add_task(
                 f"[bold]{target_name}", total=len(source_shards_for_target)
             )
+            source_task_id = progress.add_task(
+                "  ↳ waiting", total=0, visible=False
+            )
 
             for shard in source_shards_for_target:
                 source_replica = (
@@ -380,9 +383,12 @@ async def reindex(
                     source_replica, source_collection, shard.name, fq
                 )
 
-                source_task_id = progress.add_task(
-                    f"  ↳ {shard.name}",
+                progress.reset(source_task_id)
+                progress.update(
+                    source_task_id,
+                    description=f"  ↳ {shard.name}",
                     total=min(doc_count, rows) if doc_count > 0 else rows,
+                    visible=True,
                 )
 
                 source_core_url = (
@@ -410,8 +416,9 @@ async def reindex(
                     progress, source_task_id, leader.base_url, dataimport_path
                 )
 
-                progress.remove_task(source_task_id)
                 progress.advance(target_task_id)
+
+            progress.update(source_task_id, visible=False)
 
             progress.update(
                 target_task_id,
