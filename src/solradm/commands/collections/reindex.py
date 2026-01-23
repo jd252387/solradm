@@ -41,10 +41,10 @@ class OrderedProgress(Progress):
     """Progress display that groups source tasks directly below their parent target task."""
 
     def __init__(self, *args, max_visible: int = 10, **kwargs):
-        super().__init__(*args, **kwargs)
         self._max_visible = max_visible
         self._target_order: list[TaskID] = []
         self._target_children: dict[TaskID, TaskID | None] = {}
+        super().__init__(*args, **kwargs)
 
     def add_target_task(self, description, **kwargs) -> TaskID:
         task_id = self.add_task(description, **kwargs)
