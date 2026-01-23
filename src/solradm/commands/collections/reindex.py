@@ -66,17 +66,25 @@ class OrderedProgress(Progress):
             yield from super().get_renderables()
             return
 
-        ordered = []
+        active = []
+        completed = []
         for tid in self._target_order:
             task = self._tasks.get(tid)
-            if task and task.visible:
-                ordered.append(task)
+            if not task or not task.visible:
+                continue
+            group = []
+            group.append(task)
             child_id = self._target_children.get(tid)
             if child_id is not None:
                 child = self._tasks.get(child_id)
                 if child and child.visible:
-                    ordered.append(child)
+                    group.append(child)
+            if task.finished:
+                completed.extend(group)
+            else:
+                active.extend(group)
 
+        ordered = active + completed
         if self._max_visible > 0 and len(ordered) > self._max_visible:
             ordered = ordered[: self._max_visible]
 
