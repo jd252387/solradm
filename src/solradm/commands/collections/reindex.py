@@ -14,6 +14,7 @@ from rich.progress import (
     BarColumn,
     Progress,
     SpinnerColumn,
+    TaskID,
     TextColumn,
     TimeRemainingColumn,
     MofNCompleteColumn
@@ -35,6 +36,52 @@ from solradm.completion.collections import (
 from solradm.completion.contexts import context_names
 from solradm.config import settings
 from solradm.config.util import get_context
+
+class OrderedProgress(Progress):
+    """Progress display that groups source tasks directly below their parent target task."""
+
+    def __init__(self, *args, max_visible: int = 10, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._max_visible = max_visible
+        self._target_order: list[TaskID] = []
+        self._target_children: dict[TaskID, TaskID | None] = {}
+
+    def add_target_task(self, description, **kwargs) -> TaskID:
+        task_id = self.add_task(description, **kwargs)
+        self._target_order.append(task_id)
+        self._target_children[task_id] = None
+        return task_id
+
+    def add_source_task(self, parent_id: TaskID, description, **kwargs) -> TaskID:
+        task_id = self.add_task(description, **kwargs)
+        self._target_children[parent_id] = task_id
+        return task_id
+
+    def remove_source_task(self, parent_id: TaskID, task_id: TaskID) -> None:
+        self._target_children[parent_id] = None
+        self.remove_task(task_id)
+
+    def get_renderables(self):
+        if not self._target_order:
+            yield from super().get_renderables()
+            return
+
+        ordered = []
+        for tid in self._target_order:
+            task = self._tasks.get(tid)
+            if task and task.visible:
+                ordered.append(task)
+            child_id = self._target_children.get(tid)
+            if child_id is not None:
+                child = self._tasks.get(child_id)
+                if child and child.visible:
+                    ordered.append(child)
+
+        if self._max_visible > 0 and len(ordered) > self._max_visible:
+            ordered = ordered[: self._max_visible]
+
+        yield self.make_tasks_table(ordered)
+
 
 def _parse_status(json_resp: dict) -> tuple[int, int | None, str | None]:
     msgs = json_resp.get("statusMessages", {})
@@ -130,7 +177,7 @@ def _with_basic_auth(url: str) -> str:
 
 
 @contextmanager
-def _dataimport_progress() -> Iterator[Progress]:
+def _dataimport_progress(max_visible: int = 10) -> Iterator[OrderedProgress]:
     columns = (
         SpinnerColumn(),
         TextColumn("{task.description}"),
@@ -138,7 +185,7 @@ def _dataimport_progress() -> Iterator[Progress]:
         TimeRemainingColumn(),
         MofNCompleteColumn()
     )
-    with Progress(*columns) as progress:
+    with OrderedProgress(*columns, max_visible=max_visible) as progress:
         yield progress
 
 
@@ -261,7 +308,8 @@ async def reindex(
     sort: str = typer.Option("first_timestamp asc, item_id asc", help="Sort criteria for the cursorMark requests from the source collection"),
     qt: str = typer.Option("/dih", help="Request handler to fetch from the source collection."), 
     fl: str = typer.Option("*,ignored_tmp1:_version_", help="Fields to reindex. By default, reindexes all fields."), 
-    timeout: int = typer.Option("300", help="The query timeout from the source collection, in seconds."), 
+    timeout: int = typer.Option("300", help="The query timeout from the source collection, in seconds."),
+    max_bars: int = typer.Option(10, "--max-bars", help="Maximum number of shard progress bars to display"),
 ) -> None:
     if (source_context and source_zk) or (target_context and target_zk):
         rich.print("[error]❌  Context and ZooKeeper overrides are mutually exclusive")
@@ -356,18 +404,15 @@ async def reindex(
 
     fq_param = ",".join(fq) if fq else None
 
-    with _dataimport_progress() as progress:
+    with _dataimport_progress(max_visible=max_bars) as progress:
         async def run_target(target_name: str, source_shards_for_target: List[Shard]) -> None:
             leader = leaders.get(target_name)
             if not leader or not leader.base_url:
                 rich.print(f"[error]❌  No leader with a base URL found for target shard {target_name}")
                 raise typer.Exit(1)
 
-            target_task_id = progress.add_task(
+            target_task_id = progress.add_target_task(
                 f"[bold]{target_name}", total=len(source_shards_for_target)
-            )
-            source_task_id = progress.add_task(
-                "  ↳ waiting", total=0, visible=False
             )
 
             for shard in source_shards_for_target:
@@ -383,12 +428,10 @@ async def reindex(
                     source_replica, source_collection, shard.name, fq
                 )
 
-                progress.reset(source_task_id)
-                progress.update(
-                    source_task_id,
-                    description=f"  ↳ {shard.name}",
+                source_task_id = progress.add_source_task(
+                    target_task_id,
+                    f"  ↳ {shard.name}",
                     total=min(doc_count, rows) if doc_count > 0 else rows,
-                    visible=True,
                 )
 
                 source_core_url = (
@@ -416,9 +459,8 @@ async def reindex(
                     progress, source_task_id, leader.base_url, dataimport_path
                 )
 
+                progress.remove_source_task(target_task_id, source_task_id)
                 progress.advance(target_task_id)
-
-            progress.update(source_task_id, visible=False)
 
             progress.update(
                 target_task_id,
