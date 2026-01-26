@@ -71,6 +71,9 @@ venv.bak/
 # Mac / Linux / Windows junk
 .DS_Store
 Thumbs.db
+
+# Git worktrees
+.worktrees/
 # Node / VitePress artifacts
 node_modules/
 docs/.vitepress/cache/
