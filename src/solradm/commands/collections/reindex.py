@@ -10,7 +10,7 @@ from kazoo.client import KazooClient
 from solradm.api.models import Collection, Replica, Shard
 from solradm.api.utils import send_request
 from solradm.commands.collections.reindex_engine import ReindexConfig, ReindexEngine
-from solradm.commands.collections.reindex_ui import ReindexApp
+from solradm.commands.collections.reindex_ui import BusyDataimportApp, ReindexApp
 from solradm.commands.collections.subapp import app
 from solradm.commands.filters.shard_utils import (
     matches_shard_name,
@@ -90,6 +90,25 @@ async def _detect_busy_shards(
         if status.get("status") == "busy":
             busy.append((name, replica))
     return busy
+
+
+async def _handle_busy_shards(
+    busy_shards: list[tuple[str, Replica]],
+    leaders: dict[str, Replica | None],
+    dataimport_path: str,
+) -> None:
+    busy_count = len(busy_shards)
+    rich.print(
+        f"[warning]⚠️  Dataimport is already running on {busy_count} shard(s)."
+    )
+    open_ui = typer.confirm(
+        "Open the textual UI to display dataimport progress?",
+        default=True,
+    )
+    if open_ui:
+        ui = BusyDataimportApp(leaders, dataimport_path)
+        await ui.run_async()
+    raise typer.Exit(1)
 
 
 @app.async_command(
@@ -225,10 +244,7 @@ async def reindex(
 
     busy_shards = await _detect_busy_shards(leaders, dataimport_path)
     if busy_shards:
-        rich.print("[warning]⚠️  Dataimport already running on some shards:")
-        for name, _ in busy_shards:
-            rich.print(f"  - {name}")
-        raise typer.Exit(1)
+        await _handle_busy_shards(busy_shards, leaders, dataimport_path)
 
     config = ReindexConfig(
         source_collection=source_collection,
