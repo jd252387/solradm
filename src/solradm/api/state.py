@@ -1,6 +1,8 @@
 import json
 from typing import List, Literal, Dict
 
+from kazoo.exceptions import NoNodeError
+
 from solradm.api.models import Collection
 from solradm.zk import get_client
 
@@ -23,7 +25,15 @@ def get_collection_state(collection: str) -> Collection:
 
 def get_collections() -> List[Collection]:
     collection_names = get_collection_names()
-    return [get_collection_state(collection) for collection in collection_names]
+    collections = []
+    for collection in collection_names:
+        try:
+            collections.append(get_collection_state(collection))
+        except NoNodeError:
+            # Some znodes under /collections may not have a state.json child.
+            # Ignore those and continue processing valid collections.
+            continue
+    return collections
 
 
 def get_nodes_by_role(role: Literal["coordinator", "data", "overseer"]) -> Dict[str, str]:
