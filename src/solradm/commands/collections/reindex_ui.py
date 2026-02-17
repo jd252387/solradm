@@ -217,6 +217,7 @@ class BusyDataimportApp(App):
         self._dataimport_path = dataimport_path
         self._states = [BusyShardState(name=name, leader=leader) for name, leader in sorted(leaders.items())]
         self._stop = asyncio.Event()
+        self._col_keys: dict[str, object] = {}
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -225,10 +226,10 @@ class BusyDataimportApp(App):
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
-        table.add_column("Target Shard", width=20)
-        table.add_column("Status", width=16)
-        table.add_column("Progress", width=28)
-        table.add_column("Message", width=50)
+        self._col_keys["Target Shard"] = table.add_column("Target Shard", width=20)
+        self._col_keys["Status"] = table.add_column("Status", width=16)
+        self._col_keys["Progress"] = table.add_column("Progress", width=28)
+        self._col_keys["Message"] = table.add_column("Message", width=50)
 
         for shard in self._states:
             table.add_row(shard.name, "Checking", "", "", key=shard.name)
@@ -273,9 +274,9 @@ class BusyDataimportApp(App):
         }
 
         for shard in self._states:
-            table.update_cell(shard.name, 1, status_labels.get(shard.status, shard.status))
-            table.update_cell(shard.name, 2, shard.progress)
-            table.update_cell(shard.name, 3, shard.message)
+            table.update_cell(shard.name, self._col_keys["Status"], status_labels.get(shard.status, shard.status))
+            table.update_cell(shard.name, self._col_keys["Progress"], shard.progress)
+            table.update_cell(shard.name, self._col_keys["Message"], shard.message)
 
     def action_quit(self) -> None:
         self._stop.set()
