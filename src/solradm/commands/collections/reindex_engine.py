@@ -151,7 +151,7 @@ class ReindexEngine:
         self._leaders = leaders
         self._cancelled = False
         self._done_event = asyncio.Event()
-        self._dataimport_path = f"/{config.target_collection}{config.handler}"
+        self._dataimport_path = f"{config.handler}"
 
         # Build target states from shard_map
         self._target_states: list[TargetShardState] = []
@@ -276,8 +276,8 @@ class ReindexEngine:
                 if fq_param:
                     params["fqs"] = fq_param
 
-                await send_request(leader.base_url, self._dataimport_path, params=params)
-                await self._poll_dataimport(source_state, leader.base_url, self._dataimport_path)
+                await send_request(leader.base_url, f'/{leader.core}{self._dataimport_path}', params=params)
+                await self._poll_dataimport(source_state, leader.base_url, f'/{leader.core}{self._dataimport_path}')
 
                 source_state.status = "done"
 
