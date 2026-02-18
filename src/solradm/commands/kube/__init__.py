@@ -28,6 +28,7 @@ from solradm.config.util import get_current_context
 from solradm.kube.utils import (
     KubeContextInfo,
     find_pods,
+    find_pods_by_label,
     find_pods_by_node_name,
     get_kube_context_info,
     run_command_in_pod,
@@ -141,23 +142,18 @@ async def logs(
     )
 
 
-@app.async_command(help="Show /var/solr/data disk usage for matching pods")
+@app.async_command(help="Show /var/solr/data disk usage for pods matching the solr-cloud label")
 async def disk(
-        pattern: str = typer.Argument(..., help="Regex of pod or node name", autocompletion=pod_names),
-        node: bool = typer.Option(False, "--node", help="Treat pattern as node name"),
+        solr_cloud: str = typer.Argument(..., help='Exact value of the "solr-cloud" pod label'),
         ascending: bool = typer.Option(False, "--ascending", "-a", help="Sort ascending by used space"),
 ) -> None:
-    """Display disk usage of /var/solr for pods matching PATTERN."""
+    """Display disk usage of /var/solr for pods matching the given solr-cloud label value."""
 
     kube = get_kube_context_info(get_current_context())
-    pods = (
-        find_pods_by_node_name(kube, pattern)
-        if node
-        else find_pods(kube, re.compile(pattern))
-    )
+    pods = find_pods_by_label(kube, "solr-cloud", solr_cloud)
 
     if not pods:
-        raise typer.BadParameter("No pods matched the given pattern")
+        raise typer.BadParameter('No pods matched label selector "solr-cloud=<value>"')
 
     table = Table(title="Disk usage", header_style="bold magenta")
     table.add_column("Pod")
