@@ -58,7 +58,7 @@ def is_openshift_cluster(kube: KubeContextInfo) -> bool:
 
     return False
 
-def _get_workloads(kube: KubeContextInfo, pattern: re.Pattern[str], namespace: str | None = None) -> tuple[list, list]:
+def _get_workloads_by_pattern(kube: KubeContextInfo, pattern: re.Pattern[str], namespace: str | None = None) -> tuple[list, list]:
     namespace = namespace or kube.namespace
     api = AppsV1Api(kube.api_client)
     deployments = [
@@ -72,6 +72,21 @@ def _get_workloads(kube: KubeContextInfo, pattern: re.Pattern[str], namespace: s
         if pattern.search(s.metadata.name)
     ]
     return deployments, statefulsets
+
+
+def _get_workloads_by_labels(kube: KubeContextInfo, label_selectors: list[str], namespace: str | None = None) -> tuple[list, list]:
+    namespace = namespace or kube.namespace
+    api = AppsV1Api(kube.api_client)
+
+    deployment_by_name = {}
+    statefulset_by_name = {}
+    for selector in label_selectors:
+        for deployment in api.list_namespaced_deployment(namespace, label_selector=selector).items:
+            deployment_by_name[deployment.metadata.name] = deployment
+        for statefulset in api.list_namespaced_stateful_set(namespace, label_selector=selector).items:
+            statefulset_by_name[statefulset.metadata.name] = statefulset
+
+    return list(deployment_by_name.values()), list(statefulset_by_name.values())
 
 
 def _print_workloads(deployments: list, statefulsets: list) -> None:
@@ -187,12 +202,17 @@ async def disk(
 @app.command(help="Scale workloads matching a regex down to zero and save their replicas")
 def suspend(
         kubecontext: str | None = typer.Option(None, "--kubecontext", "-k", help="Kubecontext name to use (defaults to current context)"),
-        name_regex: str = typer.Argument(..., help="Regex for deployment/statefulset names",
-                                         autocompletion=workload_names),
+        pattern: str | None = typer.Option(None, "--pattern", "-p", help="Regex for deployment/statefulset names",
+                                           autocompletion=workload_names),
+        label: list[str] | None = typer.Option(None, "--label", "-l", help="Label selector for deployment/statefulsets (can be specified multiple times)"),
         state_file: Path | None = typer.Option(None, "--state-file", help="File to store replica state", dir_okay=False),
         dry: bool = typer.Option(False, "--dry", help="Save state without scaling workloads"),
 ) -> None:
     """Scale matching deployments and statefulsets to zero replicas."""
+    if bool(pattern) == bool(label):
+        rich.print("[error] ❌ Exactly one of --pattern/-p or --label/-l must be specified")
+        raise typer.Exit(1)
+
     if kubecontext is None:
         current = get_current_context()
         kubecontext = current.kubecontext
@@ -206,8 +226,12 @@ def suspend(
         if not Confirm.ask(f"[warning]⚠️ A saved state already exists for kubecontext '{kubecontext}' at {sf}. Are you sure you would like to overwrite it?"):
             raise typer.Exit(1)
 
-    pattern = re.compile(name_regex)
-    deployments, statefulsets = _get_workloads(kube, pattern)
+    if pattern is not None:
+        workloads = _get_workloads_by_pattern(kube, re.compile(pattern))
+    else:
+        workloads = _get_workloads_by_labels(kube, label)
+
+    deployments, statefulsets = workloads
     if not deployments and not statefulsets:
         rich.print("[error] ❌ No deployments or statefulsets match the given pattern")
         raise typer.Exit(1)

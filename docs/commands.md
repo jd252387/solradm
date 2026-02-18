@@ -182,9 +182,11 @@ Show disk usage of `/var/solr` for matching pods.
 - `<pattern>` – pod name regex or node name when `--node` is used.
 - `--node` – interpret the pattern as a node name.
 
-### `suspend <regex> [--state-file <file>] [--dry]`
+### `suspend (--pattern <regex> | --label <selector>...) [--state-file <file>] [--dry]`
 Scale workloads to zero replicas and record their previous state.
-- `<regex>` – regular expression matching deployment or statefulset names.
+- `--pattern, -p` – regular expression matching deployment or statefulset names.
+- `--label, -l` – Kubernetes label selector to match deployment/statefulset workloads. Can be specified multiple times.
+- Exactly one selector mode must be used: `--pattern` or one or more `--label` options.
 - `--state-file` – optional path to write the state JSON (defaults to an application data file).
 - `--dry` – save the workload state without scaling replicas down.
 
