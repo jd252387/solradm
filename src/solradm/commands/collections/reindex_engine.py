@@ -51,7 +51,7 @@ class ReindexConfig:
     target_collection: str
     handler: str
     fq: list[str] | None
-    rows: int
+    rows: int | None
     sort: str
     qt: str
     fl: str
@@ -270,9 +270,10 @@ class ReindexEngine:
                     "qt": self._config.qt,
                     "fl": self._config.fl,
                     "timeout": self._config.timeout,
-                    "rows": self._config.rows,
                     "sort": self._config.sort,
                 }
+                if self._config.rows is not None:
+                    params["rows"] = self._config.rows
                 if fq_param:
                     params["fqs"] = fq_param
 

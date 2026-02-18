@@ -159,7 +159,11 @@ async def reindex(
     all_shards: bool = typer.Option(
         False, "--all", help="Reindex all source shards"
     ),
-    rows: int = typer.Option(2000, "--rows", help="How many rows to fetch per cursorMark request from the source collection."),
+    rows: int | None = typer.Option(
+        None,
+        "--rows",
+        help="How many rows to fetch per cursorMark request from the source collection. If omitted, no rows parameter is sent.",
+    ),
     sort: str = typer.Option("first_timestamp asc, item_id asc", help="Sort criteria for the cursorMark requests from the source collection"),
     qt: str = typer.Option("/dih", help="Request handler to fetch from the source collection."),
     fl: str = typer.Option("*,ignored_tmp1:_version_", help="Fields to reindex. By default, reindexes all fields."),
