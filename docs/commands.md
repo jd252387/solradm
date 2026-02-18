@@ -180,6 +180,7 @@ Stream logs from matching pods.
 ### `disk <solr-cloud>`
 Show disk usage of `/var/solr` for pods selected by the `solr-cloud` label.
 - `<solr-cloud>` – exact value for the pod label `solr-cloud`.
+- `--sort-by <used|pct-used>` – sort ascending by absolute used space (`used`, default) or by usage percentage (`pct-used`).
 
 ### `suspend (--pattern <regex> | --label <selector>...) [--state-file <file>] [--dry]`
 Scale workloads to zero replicas and record their previous state.

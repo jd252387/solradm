@@ -4,6 +4,7 @@ import re
 import webbrowser
 from itertools import cycle
 from pathlib import Path
+from typing import Literal
 from rich.prompt import Confirm
 
 import rich
@@ -145,7 +146,11 @@ async def logs(
 @app.async_command(help="Show /var/solr/data disk usage for pods matching the solr-cloud label")
 async def disk(
         solr_cloud: str = typer.Argument(..., help='Exact value of the "solr-cloud" pod label'),
-        ascending: bool = typer.Option(False, "--ascending", "-a", help="Sort ascending by used space"),
+        sort_by: Literal["used", "pct-used"] = typer.Option(
+            "used",
+            "--sort-by",
+            help="Sort ascending by absolute used space (used) or by percentage used (pct-used)",
+        ),
 ) -> None:
     """Display disk usage of /var/solr for pods matching the given solr-cloud label value."""
 
@@ -177,6 +182,12 @@ async def disk(
         except Exception:
             return 0
 
+    def _parse_pct(s: str) -> float:
+        try:
+            return float(s.replace("%", ""))
+        except Exception:
+            return 0
+
     rows = []
     for pod_name, output in results:
         lines = [l for l in output.strip().splitlines() if l]
@@ -184,12 +195,13 @@ async def disk(
             parts = lines[1].split()
             if len(parts) >= 5:
                 size, used, avail, pct = parts[1:5]
-                rows.append((pod_name, size, used, avail, pct, _parse_size(used)))
+                rows.append((pod_name, size, used, avail, pct, _parse_size(used), _parse_pct(pct)))
                 continue
-        rows.append((pod_name, "-", "-", "-", "-", 0))
+        rows.append((pod_name, "-", "-", "-", "-", 0, 0))
 
-    rows.sort(key=lambda r: r[5], reverse=not ascending)
-    for pod_name, size, used, avail, pct, _ in rows:
+    sort_index = 6 if sort_by == "pct-used" else 5
+    rows.sort(key=lambda r: r[sort_index])
+    for pod_name, size, used, avail, pct, _, _ in rows:
         table.add_row(pod_name, size, used, avail, pct)
 
     rich.print(table)
