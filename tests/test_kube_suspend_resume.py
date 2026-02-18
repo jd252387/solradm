@@ -44,7 +44,7 @@ def test_suspend_requires_existing_kubecontext(monkeypatch, tmp_path):
     monkeypatch.setattr(kube_module, "get_kube_context_info", raise_missing)
 
     with pytest.raises(AdmException):
-        kube_module.suspend(kubecontext="missing", name_regex=".*")
+        kube_module.suspend(kubecontext="missing", pattern=".*")
 
 
 
@@ -92,7 +92,7 @@ def test_suspend_sets_namespace_from_context(monkeypatch, tmp_path):
     dummy_apps = DummyApps(None)
     monkeypatch.setattr(kube_module, "AppsV1Api", lambda api_client: dummy_apps)
 
-    kube_module.suspend(kubecontext="demo/one", name_regex=".*", state_file=None, dry=False)
+    kube_module.suspend(kubecontext="demo/one", pattern=".*", state_file=None, dry=False)
 
     assert dummy_apps.list_calls == [("dep", "nondefault"), ("sts", "nondefault")]
     assert dummy_apps.patch_calls == [
@@ -129,3 +129,13 @@ def test_dir_opens_state_directory(monkeypatch, tmp_path):
     kube_module.dir()
 
     assert launched["path"] == str(tmp_path)
+
+
+def test_suspend_requires_exactly_one_selector(monkeypatch, tmp_path):
+    kube_module = _reload_kube(monkeypatch, tmp_path)
+
+    with pytest.raises(typer.Exit):
+        kube_module.suspend(kubecontext="demo", pattern=".*", label=["app=solr"])
+
+    with pytest.raises(typer.Exit):
+        kube_module.suspend(kubecontext="demo", pattern=None, label=None)
