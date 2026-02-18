@@ -10,7 +10,7 @@ from kazoo.client import KazooClient
 from solradm.api.models import Collection, Replica, Shard
 from solradm.api.utils import send_request
 from solradm.commands.collections.reindex_engine import ReindexConfig, ReindexEngine
-from solradm.commands.collections.reindex_ui import BusyDataimportApp, ReindexApp
+from solradm.commands.collections.reindex_ui import ReindexApp
 from solradm.commands.collections.subapp import app
 from solradm.commands.filters.shard_utils import (
     matches_shard_name,
@@ -73,8 +73,9 @@ def _leaders_by_shard(shards: Sequence[Shard]) -> dict[str, Replica | None]:
 
 async def _detect_busy_shards(
     leaders: dict[str, Replica | None],
-    dataimport_path: str,
+    handler: str,
 ) -> list[tuple[str, Replica]]:
+    dataimport_handler = handler if handler.startswith("/") else f"/{handler}"
     busy: list[tuple[str, Replica]] = []
     for name, replica in leaders.items():
         if replica is None:
@@ -84,7 +85,7 @@ async def _detect_busy_shards(
             raise typer.Exit(1)
         status = await send_request(
             replica.base_url,
-            dataimport_path,
+            f"/{replica.core}{dataimport_handler}",
             params={"command": "status", "wt": "json"},
         )
         if status.get("status") == "busy":
@@ -95,7 +96,7 @@ async def _detect_busy_shards(
 async def _handle_busy_shards(
     busy_shards: list[tuple[str, Replica]],
     leaders: dict[str, Replica | None],
-    dataimport_path: str,
+    handler: str,
 ) -> None:
     busy_count = len(busy_shards)
     rich.print(
@@ -106,7 +107,7 @@ async def _handle_busy_shards(
         default=True,
     )
     if open_ui:
-        ui = BusyDataimportApp(leaders, dataimport_path)
+        ui = ReindexApp(leaders=leaders, dataimport_handler=handler)
         await ui.run_async()
     raise typer.Exit(1)
 
@@ -240,11 +241,9 @@ async def reindex(
 
     shard_map = _map_source_to_targets(src_shards, tgt_shards)
     leaders = _leaders_by_shard(tgt_shards)
-    dataimport_path = f"/{target_collection}{handler}"
-
-    busy_shards = await _detect_busy_shards(leaders, dataimport_path)
+    busy_shards = await _detect_busy_shards(leaders, handler)
     if busy_shards:
-        await _handle_busy_shards(busy_shards, leaders, dataimport_path)
+        await _handle_busy_shards(busy_shards, leaders, handler)
 
     config = ReindexConfig(
         source_collection=source_collection,
