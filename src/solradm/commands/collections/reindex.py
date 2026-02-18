@@ -111,6 +111,16 @@ async def _handle_busy_shards(
     raise typer.Exit(1)
 
 
+def _confirm_launch_when_idle() -> None:
+    rich.print("[info]ℹ️  No reindex is currently running on any shard.")
+    launch_reindex = typer.confirm(
+        "Do you want to launch the reindex now?",
+        default=True,
+    )
+    if not launch_reindex:
+        raise typer.Exit(0)
+
+
 @app.async_command(
     help="Reindex documents from a source collection into a target collection using the dataimport handler"
 )
@@ -245,6 +255,7 @@ async def reindex(
     busy_shards = await _detect_busy_shards(leaders, dataimport_path)
     if busy_shards:
         await _handle_busy_shards(busy_shards, leaders, dataimport_path)
+    _confirm_launch_when_idle()
 
     config = ReindexConfig(
         source_collection=source_collection,

@@ -93,3 +93,25 @@ def test_parse_busy_status_marks_not_running(monkeypatch, tmp_path):
     status, progress = reindex_ui._parse_busy_status({"status": "idle", "statusMessages": {}})
     assert status == "not_running"
     assert progress == ""
+
+
+def test_confirm_launch_when_idle_confirms_by_default(monkeypatch, capsys, tmp_path):
+    reindex, _reindex_ui, _models = _load_modules(monkeypatch, tmp_path)
+
+    monkeypatch.setattr(reindex.typer, "confirm", lambda *_args, **_kwargs: True)
+
+    reindex._confirm_launch_when_idle()
+
+    out = capsys.readouterr().out
+    assert "No reindex is currently running on any shard" in out
+
+
+def test_confirm_launch_when_idle_exits_when_declined(monkeypatch, tmp_path):
+    reindex, _reindex_ui, _models = _load_modules(monkeypatch, tmp_path)
+
+    monkeypatch.setattr(reindex.typer, "confirm", lambda *_args, **_kwargs: False)
+
+    with pytest.raises(typer.Exit) as exc_info:
+        reindex._confirm_launch_when_idle()
+
+    assert exc_info.value.exit_code == 0
