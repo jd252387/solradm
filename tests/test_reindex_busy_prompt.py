@@ -107,6 +107,32 @@ def test_detect_busy_shards_uses_core_dataimport_path(monkeypatch, tmp_path):
     assert called["path"] == "/r1_core/dataimport"
 
 
+def test_prompt_launch_when_idle_cancels_on_decline(monkeypatch, capsys, tmp_path):
+    reindex, _reindex_ui, _models = _load_modules(monkeypatch, tmp_path)
+
+    monkeypatch.setattr(reindex.typer, "confirm", lambda *_args, **_kwargs: False)
+
+    with pytest.raises(typer.Exit) as exc:
+        reindex._prompt_launch_when_idle()
+
+    out = capsys.readouterr().out
+    assert "No reindex is currently running" in out
+    assert "Reindex cancelled" in out
+    assert exc.value.exit_code == 0
+
+
+def test_prompt_launch_when_idle_continues_on_confirm(monkeypatch, capsys, tmp_path):
+    reindex, _reindex_ui, _models = _load_modules(monkeypatch, tmp_path)
+
+    monkeypatch.setattr(reindex.typer, "confirm", lambda *_args, **_kwargs: True)
+
+    reindex._prompt_launch_when_idle()
+
+    out = capsys.readouterr().out
+    assert "No reindex is currently running" in out
+    assert "Reindex cancelled" not in out
+
+
 def test_parse_busy_status_marks_not_running(monkeypatch, tmp_path):
     _reindex, reindex_ui, _models = _load_modules(monkeypatch, tmp_path)
 
