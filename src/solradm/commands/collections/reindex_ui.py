@@ -110,9 +110,20 @@ class ReindexApp(App):
     }
     """
 
-    def __init__(self, engine: ReindexEngine) -> None:
+    def __init__(
+        self,
+        engine: ReindexEngine | None = None,
+        *,
+        leaders: dict[str, Replica | None] | None = None,
+        dataimport_handler: str = "/dataimport",
+    ) -> None:
         super().__init__()
         self._engine = engine
+        self._leaders = leaders or {}
+        self._busy_states = [BusyShardState(name=name, leader=leader) for name, leader in sorted(self._leaders.items())]
+        self._busy_stop = asyncio.Event()
+        self._busy_started_at: float | None = None
+        self._dataimport_handler = dataimport_handler if dataimport_handler.startswith("/") else f"/{dataimport_handler}"
         self._col_keys: dict[str, object] = {}
         self._auto_exit_at: float | None = None
 
@@ -137,28 +148,93 @@ class ReindexApp(App):
             key = table.add_column(label, width=width)
             self._col_keys[label] = key
 
-        for target in self._engine.get_state():
-            table.add_row(
-                target.name,
-                _format_status("pending"),
-                "",
-                "",
-                f"0/{target.sources_total}",
-                "",
-                "",
-                key=target.name,
-            )
+        if self._engine:
+            for target in self._engine.get_state():
+                table.add_row(
+                    target.name,
+                    _format_status("pending"),
+                    "",
+                    "",
+                    f"0/{target.sources_total}",
+                    "",
+                    "",
+                    key=target.name,
+                )
+            self._start_engine()
+        else:
+            self._busy_started_at = time.monotonic()
+            for shard in self._busy_states:
+                table.add_row(
+                    shard.name,
+                    _format_status("pending"),
+                    "",
+                    "",
+                    "-",
+                    "",
+                    "",
+                    key=shard.name,
+                )
+            self._start_busy_polling()
 
-        self._start_engine()
         self.set_interval(0.2, self._refresh_table)
 
     @work(thread=False)
     async def _start_engine(self) -> None:
         await self._engine.run()
 
+    @work(thread=False)
+    async def _start_busy_polling(self) -> None:
+        while not self._busy_stop.is_set():
+            await asyncio.gather(*(self._poll_busy_shard(shard) for shard in self._busy_states))
+            await asyncio.sleep(1.0)
+
+    async def _poll_busy_shard(self, shard: BusyShardState) -> None:
+        if not shard.leader or not shard.leader.base_url:
+            shard.status = "failed"
+            shard.progress = ""
+            shard.message = "No leader/base URL"
+            return
+
+        try:
+            response = await send_request(
+                shard.leader.base_url,
+                f"/{shard.leader.core}{self._dataimport_handler}",
+                params={"command": "status", "wt": "json"},
+            )
+            busy_status, shard.progress = _parse_busy_status(response)
+            shard.status = "running" if busy_status == "running" else "done"
+            shard.message = str(response.get("statusMessages", ""))[:200]
+        except Exception as exc:
+            shard.status = "failed"
+            shard.progress = ""
+            shard.message = str(exc)
+
     def _refresh_table(self) -> None:
         table = self.query_one(DataTable)
         summary_bar = self.query_one(SummaryBar)
+
+        if not self._engine:
+            running_targets = sum(1 for shard in self._busy_states if shard.status == "running")
+            failed_targets = sum(1 for shard in self._busy_states if shard.status == "failed")
+            completed_targets = sum(1 for shard in self._busy_states if shard.status == "done")
+            summary_bar.update(
+                f"Running: {running_targets}/{len(self._busy_states)} | "
+                f"Completed: {completed_targets} | "
+                f"Failed: {failed_targets} | "
+                "Docs: n/a"
+            )
+            for shard in self._busy_states:
+                table.update_cell(shard.name, self._col_keys["Status"], _format_status(shard.status))
+                table.update_cell(shard.name, self._col_keys["Progress"], shard.progress)
+                table.update_cell(
+                    shard.name,
+                    self._col_keys["Elapsed"],
+                    _format_elapsed(self._busy_started_at, None),
+                )
+                if shard.message:
+                    table.update_cell(shard.name, self._col_keys["Error"], shard.message)
+            return
+
         summary_bar.update_summary(self._engine)
 
         for target in self._engine.get_state():
@@ -204,80 +280,10 @@ class ReindexApp(App):
                 self.exit()
 
     def action_quit_app(self) -> None:
-        self._engine.request_cancel()
+        self._busy_stop.set()
+        if self._engine:
+            self._engine.request_cancel()
         self.exit()
 
 
-class BusyDataimportApp(App):
-    BINDINGS = [Binding("q", "quit", "Quit")]
-
-    def __init__(self, leaders: dict[str, Replica | None], dataimport_path: str) -> None:
-        super().__init__()
-        self._leaders = leaders
-        self._dataimport_path = dataimport_path
-        self._states = [BusyShardState(name=name, leader=leader) for name, leader in sorted(leaders.items())]
-        self._stop = asyncio.Event()
-        self._col_keys: dict[str, object] = {}
-
-    def compose(self) -> ComposeResult:
-        yield Header()
-        yield DataTable(cursor_type="row")
-        yield Footer()
-
-    def on_mount(self) -> None:
-        table = self.query_one(DataTable)
-        self._col_keys["Target Shard"] = table.add_column("Target Shard", width=20)
-        self._col_keys["Status"] = table.add_column("Status", width=16)
-        self._col_keys["Progress"] = table.add_column("Progress", width=28)
-        self._col_keys["Message"] = table.add_column("Message", width=50)
-
-        for shard in self._states:
-            table.add_row(shard.name, "Checking", "", "", key=shard.name)
-
-        self._start_polling()
-        self.set_interval(0.25, self._refresh_table)
-
-    @work(thread=False)
-    async def _start_polling(self) -> None:
-        while not self._stop.is_set():
-            await asyncio.gather(*(self._poll_shard(shard) for shard in self._states))
-            await asyncio.sleep(1.0)
-
-    async def _poll_shard(self, shard: BusyShardState) -> None:
-        if not shard.leader or not shard.leader.base_url:
-            shard.status = "unavailable"
-            shard.progress = ""
-            shard.message = "No leader/base URL"
-            return
-
-        try:
-            response = await send_request(
-                shard.leader.base_url,
-                self._dataimport_path,
-                params={"command": "status", "wt": "json"},
-            )
-            shard.status, shard.progress = _parse_busy_status(response)
-            shard.message = str(response.get("statusMessages", ""))[:200]
-        except Exception as exc:
-            shard.status = "error"
-            shard.progress = ""
-            shard.message = str(exc)
-
-    def _refresh_table(self) -> None:
-        table = self.query_one(DataTable)
-        status_labels = {
-            "checking": Text("Checking", style="dim"),
-            "running": Text("Running", style="green"),
-            "not_running": Text("Not Running", style="yellow"),
-            "unavailable": Text("Unavailable", style="red"),
-            "error": Text("Error", style="red"),
-        }
-
-        for shard in self._states:
-            table.update_cell(shard.name, self._col_keys["Status"], status_labels.get(shard.status, shard.status))
-            table.update_cell(shard.name, self._col_keys["Progress"], shard.progress)
-            table.update_cell(shard.name, self._col_keys["Message"], shard.message)
-
-    def action_quit(self) -> None:
-        self._stop.set()
-        self.exit()
+BusyDataimportApp = ReindexApp

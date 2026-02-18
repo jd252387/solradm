@@ -55,7 +55,7 @@ def test_handle_busy_shards_prompts_with_count_only(monkeypatch, capsys, tmp_pat
     monkeypatch.setattr(reindex.typer, "confirm", lambda *_args, **_kwargs: False)
 
     with pytest.raises(typer.Exit):
-        asyncio.run(reindex._handle_busy_shards(busy, leaders, "/target/dataimport"))
+        asyncio.run(reindex._handle_busy_shards(busy, leaders, "/dataimport"))
 
     out = capsys.readouterr().out
     assert "running on 1 shard(s)" in out
@@ -68,23 +68,43 @@ def test_handle_busy_shards_opens_ui_when_confirmed(monkeypatch, tmp_path):
     busy = [("shard1", leaders["shard1"])]
     called = {}
 
-    class FakeBusyDataimportApp:
-        def __init__(self, arg_leaders, arg_path):
-            called["leaders"] = arg_leaders
-            called["path"] = arg_path
+    class FakeReindexApp:
+        def __init__(self, *args, **kwargs):
+            called["leaders"] = kwargs["leaders"]
+            called["handler"] = kwargs["dataimport_handler"]
 
         async def run_async(self):
             called["ran"] = True
 
     monkeypatch.setattr(reindex.typer, "confirm", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(reindex, "BusyDataimportApp", FakeBusyDataimportApp)
+    monkeypatch.setattr(reindex, "ReindexApp", FakeReindexApp)
 
     with pytest.raises(typer.Exit):
-        asyncio.run(reindex._handle_busy_shards(busy, leaders, "/target/dataimport"))
+        asyncio.run(reindex._handle_busy_shards(busy, leaders, "/dataimport"))
 
     assert called["leaders"] == leaders
-    assert called["path"] == "/target/dataimport"
+    assert called["handler"] == "/dataimport"
     assert called["ran"] is True
+
+
+def test_detect_busy_shards_uses_core_dataimport_path(monkeypatch, tmp_path):
+    reindex, _reindex_ui, models = _load_modules(monkeypatch, tmp_path)
+    leaders = {"shard1": _replica(models, "r1")}
+    called = {}
+
+    async def fake_send_request(base_url, path, params):
+        called["base_url"] = base_url
+        called["path"] = path
+        called["params"] = params
+        return {"status": "busy"}
+
+    monkeypatch.setattr(reindex, "send_request", fake_send_request)
+
+    busy = asyncio.run(reindex._detect_busy_shards(leaders, "/dataimport"))
+
+    assert busy == [("shard1", leaders["shard1"])]
+    assert called["base_url"] == "http://localhost:8983/solr"
+    assert called["path"] == "/r1_core/dataimport"
 
 
 def test_parse_busy_status_marks_not_running(monkeypatch, tmp_path):
