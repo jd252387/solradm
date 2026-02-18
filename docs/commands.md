@@ -177,10 +177,9 @@ Stream logs from matching pods.
 - `--node` – treat the pattern as a node name and stream logs from pods on that node.
 - `--container, -c` – if a pod has multiple containers, limit the stream to the specified one.
 
-### `disk <pattern> [--node]`
-Show disk usage of `/var/solr` for matching pods.
-- `<pattern>` – pod name regex or node name when `--node` is used.
-- `--node` – interpret the pattern as a node name.
+### `disk <solr-cloud>`
+Show disk usage of `/var/solr` for pods selected by the `solr-cloud` label.
+- `<solr-cloud>` – exact value for the pod label `solr-cloud`.
 
 ### `suspend (--pattern <regex> | --label <selector>...) [--state-file <file>] [--dry]`
 Scale workloads to zero replicas and record their previous state.

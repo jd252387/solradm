@@ -56,6 +56,14 @@ def find_pods(kube: KubeContextInfo, pattern: re.Pattern) -> List[V1Pod]:
     return [pod for pod in pods.items if pattern.search(pod.metadata.name)]
 
 
+def find_pods_by_label(kube: KubeContextInfo, label_name: str, label_value: str) -> List[V1Pod]:
+    v1 = CoreV1Api(kube.api_client)
+    selector = f"{label_name}={label_value}"
+    pods: V1PodList = v1.list_namespaced_pod(kube.namespace, label_selector=selector)
+
+    return pods.items
+
+
 def find_pods_by_node_name(kube: KubeContextInfo, node_name: str):
     without_subnet = node_name.partition(".")
     pod_name = without_subnet[0].partition(kube.namespace)[2][1:]
