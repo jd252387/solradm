@@ -130,7 +130,7 @@ Execute a Lucene query and pretty‑print the results. Requests target coordinat
 - `--param` – repeatable arbitrary query parameter of the form `name=value`.
 - `--debug` – include the debug section from Solr in the output.
 
-### `reindex --source <collection> --target <collection> [--source-context <ctx>] [--handler <path>] [--fq <query>] (--shards <spec> | --all)`
+### `reindex --source <collection> --target <collection> [--source-context <ctx>] [--handler <path>] [--fq <query>] [--commit] [--optimize] (--shards <spec> | --all)`
 Reindex documents from one collection into another using the DataImportHandler. You must specify either `--shards` to target specific source shards or `--all` to reindex every shard from the source collection. The `--shards` option uses the shard number syntax (for example `1,3-5,2+3-7,+4-16`).
 - `--source` – collection to read from.
 - `--target` – collection to write to.
@@ -139,6 +139,8 @@ Reindex documents from one collection into another using the DataImportHandler. 
 - `--fq` – repeatable filter query passed to the handler.
 - `--shards, --source-shard` – limit reindexing to specific shards using shard number ranges, sequences, and lists (required unless `--all` is supplied).
 - `--all` – reindex every source shard.
+- `--commit` – request commit=true in full-import (default false).
+- `--optimize` – request optimize=true in full-import (default false).
 
 ### `abort-reindex --collection <collection> [--handler <path>] (--shards <spec> | --all)`
 Abort a running reindex operation on a collection using the DataImportHandler. You must specify either `--shards` to target specific shards or `--all` to abort reindex on every shard in the collection.
