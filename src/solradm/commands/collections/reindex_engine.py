@@ -263,8 +263,8 @@ class ReindexEngine:
                 params = {
                     "command": "full-import",
                     "clean": "false",
-                    "commit": "true",
-                    "distrib": "false",
+                    "commit": "false",
+                    "optimize": "false",
                     "wt": "json",
                     "url": source_core_url,
                     "qt": self._config.qt,
