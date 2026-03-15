@@ -73,6 +73,70 @@ def test_get_collections_ignores_collections_without_state_json(monkeypatch, tmp
     assert [collection.name for collection in collections] == ["alpha", "beta"]
 
 
+def test_get_collections_ignores_collections_with_invalid_state_json(monkeypatch, tmp_path):
+    state = _import_state_module(monkeypatch, tmp_path)
+
+    class InvalidJsonClient(FakeZkClient):
+        def get(self, path):
+            if path == "/collections/broken/state.json":
+                return b"not json", None
+            return super().get(path)
+
+    zk = InvalidJsonClient(
+        children=["alpha", "broken"],
+        states={
+            "/collections/alpha/state.json": {
+                "pullReplicas": 0,
+                "configName": "cfg",
+                "replicationFactor": 1,
+                "router": {"name": "compositeId"},
+                "nrtReplicas": 1,
+                "tlogReplicas": 0,
+                "shards": {},
+            },
+        },
+    )
+
+    monkeypatch.setattr(state, "get_client", lambda: zk)
+
+    collections = state.get_collections()
+
+    assert [collection.name for collection in collections] == ["alpha"]
+
+
+def test_get_collections_ignores_collections_with_invalid_state_schema(monkeypatch, tmp_path):
+    state = _import_state_module(monkeypatch, tmp_path)
+
+    zk = FakeZkClient(
+        children=["alpha", "invalid"],
+        states={
+            "/collections/alpha/state.json": {
+                "pullReplicas": 0,
+                "configName": "cfg",
+                "replicationFactor": 1,
+                "router": {"name": "compositeId"},
+                "nrtReplicas": 1,
+                "tlogReplicas": 0,
+                "shards": {},
+            },
+            "/collections/invalid/state.json": {
+                "pullReplicas": 0,
+                "replicationFactor": 1,
+                "router": {"name": "compositeId"},
+                "nrtReplicas": 1,
+                "tlogReplicas": 0,
+                "shards": {},
+            },
+        },
+    )
+
+    monkeypatch.setattr(state, "get_client", lambda: zk)
+
+    collections = state.get_collections()
+
+    assert [collection.name for collection in collections] == ["alpha"]
+
+
 def test_get_collections_raises_non_no_node_errors(monkeypatch, tmp_path):
     state = _import_state_module(monkeypatch, tmp_path)
 
