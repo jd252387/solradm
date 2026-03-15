@@ -120,6 +120,41 @@ def test_suspend_sets_namespace_from_context(monkeypatch, tmp_path):
     ]
 
 
+def test_resume_uses_current_context_state_file_when_unspecified(monkeypatch, tmp_path):
+    kube_module = _reload_kube(monkeypatch, tmp_path)
+
+    state_path = tmp_path / "demo.json"
+    state_path.write_text(json.dumps({"deployments": {"dep": 2}, "statefulsets": {"sts": 3}}))
+
+    fake_current = SimpleNamespace(kubecontext="demo")
+    fake_kube_info = FakeKubeContextInfo(api_client=None, name="demo", namespace="nondefault")
+
+    monkeypatch.setattr(kube_module, "get_current_context", lambda: fake_current)
+    monkeypatch.setattr(kube_module, "get_kube_context_info", lambda ctx: fake_kube_info)
+    monkeypatch.setattr(kube_module.Confirm, "ask", lambda *args, **kwargs: True)
+
+    class DummyApps:
+        def __init__(self, api_client):
+            self.patch_calls = []
+
+        def patch_namespaced_deployment_scale(self, name, namespace, body):
+            self.patch_calls.append(("dep", name, namespace, body))
+
+        def patch_namespaced_stateful_set_scale(self, name, namespace, body):
+            self.patch_calls.append(("sts", name, namespace, body))
+
+    dummy_apps = DummyApps(None)
+    monkeypatch.setattr(kube_module, "AppsV1Api", lambda api_client: dummy_apps)
+
+    kube_module.resume(kubecontext=None, state_file=None)
+
+    assert dummy_apps.patch_calls == [
+        ("dep", "dep", "nondefault", {"spec": {"replicas": 2}}),
+        ("sts", "sts", "nondefault", {"spec": {"replicas": 3}}),
+    ]
+    assert not state_path.exists()
+
+
 def test_dir_opens_state_directory(monkeypatch, tmp_path):
     kube_module = _reload_kube(monkeypatch, tmp_path)
 

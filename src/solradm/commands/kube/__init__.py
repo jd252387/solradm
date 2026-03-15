@@ -277,8 +277,13 @@ def resume(
 ) -> None:
     """Scale previously suspended workloads back to their original replicas."""
     if kubecontext is None:
-        kube = get_kube_context_info(get_current_context()) 
-    else: 
+        current = get_current_context()
+        kubecontext = current.kubecontext
+        if kubecontext is None:
+            rich.print("[error] ❌ No kubecontext specified and current context has no kubecontext configured")
+            raise typer.Exit(1)
+        kube = get_kube_context_info(current)
+    else:
         kube = get_kube_context_info(Context(name=None, zk="", kubecontext=kubecontext))
 
     sf = state_file or (_ensure_state_dir() / f"{kubecontext}.json")
