@@ -61,9 +61,14 @@ def _map_source_to_targets(
     source_shards: Sequence[Shard], target_shards: Sequence[Shard]
 ) -> dict[str, List[Shard]]:
     shard_map: dict[str, List[Shard]] = {}
-    for idx, shard in enumerate(source_shards):
-        target_name = target_shards[idx % len(target_shards)].name
-        shard_map.setdefault(target_name, []).append(shard)
+    source_count = len(source_shards)
+    target_count = len(target_shards)
+
+    for idx, target in enumerate(target_shards):
+        start = idx * source_count // target_count
+        end = (idx + 1) * source_count // target_count
+        if start < end:
+            shard_map[target.name] = list(source_shards[start:end])
     return shard_map
 
 
