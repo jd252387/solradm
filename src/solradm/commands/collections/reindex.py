@@ -179,6 +179,8 @@ async def reindex(
     qt: str = typer.Option("/dih", help="Request handler to fetch from the source collection."),
     fl: str = typer.Option("*,ignored_tmp1:_version_", help="Fields to reindex. By default, reindexes all fields."),
     timeout: int = typer.Option("300", help="The query timeout from the source collection, in seconds."),
+    commit: bool = typer.Option(False, "--commit", help="Request a hard commit when each full-import completes."),
+    optimize: bool = typer.Option(False, "--optimize", help="Request optimize when each full-import completes."),
 ) -> None:
     if (source_context and source_zk) or (target_context and target_zk):
         rich.print("[error]❌  Context and ZooKeeper overrides are mutually exclusive")
@@ -272,6 +274,8 @@ async def reindex(
         qt=qt,
         fl=fl,
         timeout=timeout,
+        commit=commit,
+        optimize=optimize,
     )
     engine = ReindexEngine(shard_map, leaders, config)
     ui = ReindexApp(engine)

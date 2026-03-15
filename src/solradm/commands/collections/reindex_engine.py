@@ -56,6 +56,8 @@ class ReindexConfig:
     qt: str
     fl: str
     timeout: int
+    commit: bool
+    optimize: bool
 
 
 @dataclass
@@ -263,8 +265,8 @@ class ReindexEngine:
                 params = {
                     "command": "full-import",
                     "clean": "false",
-                    "commit": "false",
-                    "optimize": "false",
+                    "commit": str(self._config.commit).lower(),
+                    "optimize": str(self._config.optimize).lower(),
                     "wt": "json",
                     "url": source_core_url,
                     "qt": self._config.qt,

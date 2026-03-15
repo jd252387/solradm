@@ -36,7 +36,7 @@ def _target_leader() -> Replica:
     )
 
 
-def _build_engine(rows: int | None) -> ReindexEngine:
+def _build_engine(rows: int | None, commit: bool = False, optimize: bool = False) -> ReindexEngine:
     shard = _source_shard()
     shard_map = {"target_shard1": [shard]}
     leaders = {"target_shard1": _target_leader()}
@@ -50,6 +50,8 @@ def _build_engine(rows: int | None) -> ReindexEngine:
         qt="/dih",
         fl="*",
         timeout=60,
+        commit=commit,
+        optimize=optimize,
     )
     return ReindexEngine(shard_map, leaders, config)
 
@@ -94,3 +96,47 @@ def test_reindex_omits_rows_when_not_specified(monkeypatch):
     asyncio.run(engine.run())
 
     assert "rows" not in captured_full_import_params
+
+
+def test_reindex_uses_commit_and_optimize_flags(monkeypatch):
+    engine = _build_engine(rows=100, commit=True, optimize=True)
+    captured_full_import_params = {}
+
+    async def fake_send_request(base_url, path, params):
+        if params.get("q") == "*:*":
+            return {"response": {"numFound": 1}}
+        if params.get("command") == "full-import":
+            captured_full_import_params.update(params)
+            return {"status": "busy"}
+        if params.get("command") == "status":
+            return {"status": "idle", "statusMessages": {}}
+        raise AssertionError(f"unexpected request params: {params}")
+
+    monkeypatch.setattr("solradm.commands.collections.reindex_engine.send_request", fake_send_request)
+
+    asyncio.run(engine.run())
+
+    assert captured_full_import_params["commit"] == "true"
+    assert captured_full_import_params["optimize"] == "true"
+
+
+def test_reindex_defaults_commit_and_optimize_to_false(monkeypatch):
+    engine = _build_engine(rows=100)
+    captured_full_import_params = {}
+
+    async def fake_send_request(base_url, path, params):
+        if params.get("q") == "*:*":
+            return {"response": {"numFound": 1}}
+        if params.get("command") == "full-import":
+            captured_full_import_params.update(params)
+            return {"status": "busy"}
+        if params.get("command") == "status":
+            return {"status": "idle", "statusMessages": {}}
+        raise AssertionError(f"unexpected request params: {params}")
+
+    monkeypatch.setattr("solradm.commands.collections.reindex_engine.send_request", fake_send_request)
+
+    asyncio.run(engine.run())
+
+    assert captured_full_import_params["commit"] == "false"
+    assert captured_full_import_params["optimize"] == "false"
