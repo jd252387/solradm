@@ -166,3 +166,82 @@ def test_upload_surfaces_invalid_include_pattern(monkeypatch, tmp_path):
             reload=False,
             skip_checks=True,
         )
+
+
+def test_upload_interactive_shows_diff_and_requires_approval(monkeypatch, tmp_path):
+    editor, uploaded = _patch_upload_dependencies(monkeypatch)
+
+    config_dir = tmp_path / "configA"
+    config_dir.mkdir()
+    (config_dir / "managed-schema").write_text("local")
+
+    diff_calls = []
+
+    class _ZkClient:
+        def exists(self, _path):
+            return True
+
+    monkeypatch.setattr(editor, "collect_znode_files", lambda *_args, **_kwargs: {"managed-schema": "remote"})
+    monkeypatch.setattr(editor, "get_client", lambda: _ZkClient())
+    monkeypatch.setattr(editor.Confirm, "ask", lambda prompt: diff_calls.append(prompt) or True)
+
+    editor.upload(
+        paths=[str(config_dir)],
+        znode_path="/configs",
+        include=None,
+        exclude=None,
+        only_used=False,
+        reload=False,
+        skip_checks=True,
+        interactive=True,
+    )
+
+    assert diff_calls == ["Approve these ZooKeeper config changes?"]
+    assert [path for path, _ in uploaded] == ["/configs/configA/managed-schema"]
+
+
+def test_upload_interactive_cancels_when_not_approved(monkeypatch, tmp_path):
+    editor, uploaded = _patch_upload_dependencies(monkeypatch)
+
+    config_dir = tmp_path / "configA"
+    config_dir.mkdir()
+    (config_dir / "managed-schema").write_text("local")
+
+    class _ZkClient:
+        def exists(self, _path):
+            return True
+
+    monkeypatch.setattr(editor, "collect_znode_files", lambda *_args, **_kwargs: {"managed-schema": "remote"})
+    monkeypatch.setattr(editor, "get_client", lambda: _ZkClient())
+    monkeypatch.setattr(editor.Confirm, "ask", lambda _prompt: False)
+
+    with pytest.raises(typer.Exit):
+        editor.upload(
+            paths=[str(config_dir)],
+            znode_path="/configs",
+            include=None,
+            exclude=None,
+            only_used=False,
+            reload=False,
+            skip_checks=True,
+            interactive=True,
+        )
+
+    assert uploaded == []
+
+
+def test_sync_passes_interactive_to_upload(monkeypatch, tmp_path):
+    editor = _import_editor(monkeypatch)
+
+    config_dir = tmp_path / "configs"
+    config_dir.mkdir()
+    (config_dir / "alpha").mkdir()
+
+    calls = []
+
+    monkeypatch.setattr(editor, "upload", lambda **kwargs: calls.append(kwargs))
+
+    collection = types.SimpleNamespace(configName="alpha")
+    editor.sync(cluster_state=[collection], dir=config_dir, reload=False, interactive=True)
+
+    assert calls[0]["interactive"] is True
