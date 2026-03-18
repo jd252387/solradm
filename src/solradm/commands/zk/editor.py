@@ -7,6 +7,8 @@ import time
 from pathlib import Path
 from typing import List
 
+from typer.models import OptionInfo
+
 import rich
 import typer
 from rich.panel import Panel
@@ -45,6 +47,10 @@ from solradm.zk.utils import win_path_to_zk_path
 
 app = typer.Typer()
 add_verbosity_option(app)
+
+
+def _coerce_optional_option(value):
+    return value.default if isinstance(value, OptionInfo) else value
 
 
 def _open_znode_session(
@@ -197,6 +203,81 @@ def _print_diff_lines(diff_lines: list[str]) -> None:
         rich.print(Text(line, style=style))
 
 
+def _show_config_diff(local_config_dirs: dict[str, Path]) -> None:
+    zk_client = get_client()
+
+    for idx, config_name in enumerate(sorted(local_config_dirs)):
+        if idx:
+            rich.print()
+
+        rich.print(
+            Panel.fit(
+                f"Comparing configset [bold]{config_name}[/]",
+                title="ZooKeeper Diff",
+            )
+        )
+
+        local_dir = local_config_dirs[config_name]
+        local_files = _load_local_config_files(local_dir) if local_dir.is_dir() else {}
+        if not local_dir.is_dir():
+            rich.print(
+                f"[warning]⚠️ Configset {config_name} was not found locally! Searched under {local_dir}..."
+            )
+            continue
+
+        zk_path = f"/configs/{config_name}"
+        zk_files = collect_znode_files(zk_client, zk_path)
+        if not zk_files and not zk_client.exists(zk_path):
+            rich.print(
+                f"[warning]⚠️ Configset {config_name} was not found in ZooKeeper! Searched under {zk_path}..."
+            )
+            continue
+
+        file_paths = sorted(set(local_files) | set(zk_files))
+        if not file_paths:
+            rich.print("[yellow]No files to compare.")
+            continue
+
+        for rel_path in file_paths:
+            local_content = local_files.get(rel_path)
+            if not local_content:
+                rich.print(
+                    f"[warning]⚠️ File {rel_path} was not found locally! Searched under {local_dir / rel_path}..."
+                )
+                continue
+            zk_content = zk_files.get(rel_path, "")
+            if not zk_content:
+                rich.print(
+                    f"[warning]⚠️ File {rel_path} was not found in ZooKeeper! Searched under {zk_path}/{rel_path}..."
+                )
+                continue
+
+            diff_lines = list(
+                difflib.unified_diff(
+                    zk_content.splitlines(),
+                    local_content.splitlines(),
+                    fromfile=f"ZooKeeper/{rel_path}",
+                    tofile=f"Local/{rel_path}",
+                    lineterm="",
+                    n=1,
+                )
+            )
+
+            if not diff_lines:
+                continue
+
+            rich.print(f"[cyan]{rel_path}[/]")
+            _print_diff_lines(diff_lines)
+            rich.print()
+
+
+def _prompt_for_interactive_upload(local_config_dirs: dict[str, Path]) -> None:
+    _show_config_diff(local_config_dirs)
+    if not Confirm.ask("Approve these ZooKeeper config changes?"):
+        rich.print("[warning]⚠️ Upload cancelled")
+        raise typer.Exit()
+
+
 @app.command(help="Show diffs between local configsets and ZooKeeper.")
 def diff(
         config_pattern: str = typer.Argument(
@@ -252,65 +333,7 @@ def diff(
         rich.print("[warning]⚠️ No configurations matched the provided pattern")
         raise typer.Exit(1)
 
-    for idx, config_name in enumerate(target_configs):
-        if idx:
-            rich.print()
-
-        rich.print(
-            Panel.fit(
-                f"Comparing configset [bold]{config_name}[/]",
-                title="ZooKeeper Diff",
-            )
-        )
-
-        local_dir = configsets_dir / config_name
-        local_files = _load_local_config_files(local_dir) if local_dir.is_dir() else {}
-        if not local_dir.is_dir():
-            rich.print(
-                f"[warning]⚠️ Configset {config_name} was not found locally! Searched under {local_dir}..."
-            )
-            continue
-
-        zk_path = f"/configs/{config_name}"
-        zk_files = collect_znode_files(zk_client, zk_path)
-        if not zk_files and not zk_client.exists(zk_path):
-            rich.print(
-                f"[warning]⚠️ Configset {config_name} was not found in ZooKeeper! Searched under {zk_path}..."
-            )
-            continue
-
-        file_paths = sorted(set(local_files) | set(zk_files))
-        if not file_paths:
-            rich.print("[yellow]No files to compare.")
-            continue
-
-        for rel_path in file_paths:
-            local_content = local_files.get(rel_path)
-            if not local_content:
-                rich.print(f"[warning]⚠️ File {rel_path} was not found locally! Searched under {local_dir / rel_path}...")
-                continue
-            zk_content = zk_files.get(rel_path, "")
-            if not zk_content:
-                rich.print(f"[warning]⚠️ File {rel_path} was not found in ZooKeeper! Searched under {zk_path}/{rel_path}...")
-                continue
-
-            diff_lines = list(
-                difflib.unified_diff(
-                    zk_content.splitlines(),
-                    local_content.splitlines(),
-                    fromfile=f"ZooKeeper/{rel_path}",
-                    tofile=f"Local/{rel_path}",
-                    lineterm="",
-                    n=1,
-                )
-            )
-
-            if not diff_lines:
-                continue
-
-            rich.print(f"[cyan]{rel_path}[/]")
-            _print_diff_lines(diff_lines)
-            rich.print()
+    _show_config_diff({name: configsets_dir / name for name in target_configs})
 
 
 @app.command(help="Upload local files or directories to a ZooKeeper znode.")
@@ -351,14 +374,27 @@ def upload(
             autocompletion=collection_names,
         ),
         skip_checks: bool = typer.Option(False, "--skip-confirm", "-y", help="Skip confirmation prompt"),
+        interactive: bool = typer.Option(
+            False,
+            "--interactive",
+            "-i",
+            help="Show zoo diff output for config uploads and require approval before uploading",
+        ),
 ):
     """Upload local files or directories to a ZooKeeper znode.
 
     Exclude patterns are evaluated before include patterns when filtering discovered files.
     """
 
+    skip_checks = _coerce_optional_option(skip_checks)
+    interactive = _coerce_optional_option(interactive)
+
     if only_used and znode_path != "/configs":
         rich.print("[error] ❌ You cannot use only_used when the znode_path is not /configs!")
+        raise typer.Exit(1)
+
+    if interactive and znode_path != "/configs":
+        rich.print("[error] ❌ --interactive is only supported when uploading to /configs")
         raise typer.Exit(1)
 
     include_regexes = compile_regex_patterns(include, "--include")
@@ -406,6 +442,11 @@ def upload(
                 for cfg, cols in config_usage.items():
                     table.add_row(cfg, ", ".join(c.name for c in cols) if cols else "-")
                 rich.print(table)
+
+        if interactive:
+            _prompt_for_interactive_upload(
+                {path.name: path for path in resolved_paths if path.name in files_by_config}
+            )
     else:
         files_to_upload = []
         for path in resolved_paths:
@@ -423,7 +464,7 @@ def upload(
 
             rich.print(table)
 
-    if not skip_checks and not Confirm.ask("Proceed with upload?"):
+    if not interactive and not skip_checks and not Confirm.ask("Proceed with upload?"):
         raise typer.Exit()
 
     for local_path, zk_path in files_to_upload:
@@ -465,8 +506,16 @@ def sync(
             "--reload",
             help="Reload the selected collections after syncing their configs",
         ),
+        interactive: bool = typer.Option(
+            False,
+            "--interactive",
+            "-i",
+            help="Show zoo diff output and require approval before syncing configs",
+        ),
 ):
     """Upload configsets used by selected collections and optionally reload them."""
+
+    interactive = _coerce_optional_option(interactive)
 
     config_names = sorted({collection.configName for collection in cluster_state})
 
@@ -497,6 +546,7 @@ def sync(
         reload=False,
         reload_exclude=None,
         skip_checks=False,
+        interactive=interactive,
     )
 
     if reload:
