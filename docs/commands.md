@@ -230,10 +230,10 @@ Display rich diffs between local configsets and their counterparts in ZooKeeper.
 - `<config-regex>` – regular expression selecting which configuration names to compare.
 - `--dir, -d` – optional path to the `configsets` directory to read from; defaults to the configured directory.
 
-### `render <path>`
+### `render [path]`
 Render a local Jinja workspace rooted at `<path>`. The command expects `<path>/jinja/templates` and `<path>/jinja/configs`; for each subdirectory under `configs`, it renders matching templates into `<path>/rendered/<subdir>`. If `<path>/jinja/resources` exists, its contents are copied into every rendered configuration directory before the config-specific templates are written.
 
-- `<path>` – directory containing the `jinja` subdirectory.
+- `<path>` – optional directory containing the `jinja` subdirectory; if omitted, defaults to the configured configsets directory.
 
 ### `upload <paths...> [--znode-path <path>] [--only-used/--all] [--reload] [--exclude <name>] [--skip-confirm]`
 Upload local files or directories into ZooKeeper. By default, any input path containing a `jinja` workspace is rendered first; use `--no-render, -r` to skip that step.
