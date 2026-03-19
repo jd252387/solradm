@@ -236,7 +236,7 @@ Render a local Jinja workspace rooted at `<path>`. The command expects `<path>/j
 - `<path>` – optional directory containing the `jinja` subdirectory; if omitted, defaults to the configured configsets directory.
 
 ### `upload <paths...> [--znode-path <path>] [--only-used/--all] [--reload] [--exclude <name>] [--skip-confirm]`
-Upload local files or directories into ZooKeeper. By default, any input path containing a `jinja` workspace is rendered first; use `--no-render, -r` to skip that step.
+Upload local files or directories into ZooKeeper. By default, any input path containing a `jinja` workspace is rendered first; when uploading to `/configs`, only the requested configsets are rendered from `jinja/configs`. Use `--no-render, -r` to skip that step.
 - `<paths...>` – one or more files or directories to upload. If omitted defaults to the configsets in the configured directory.
 - `--znode-path` – target znode path (default `/configs`).
 - `--only-used/--all` – by default only configurations referenced by collections are uploaded; `--all` forces upload of everything.
