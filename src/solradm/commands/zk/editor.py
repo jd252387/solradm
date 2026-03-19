@@ -259,16 +259,11 @@ def _render_jinja_tree(root_dir: Path, rendered_dir: Path | None = None) -> tupl
 def _prepare_upload_paths(
         paths: list[Path],
         *,
-        znode_path: str,
-        no_render: bool = False,
+        znode_path: str
 ) -> list[Path]:
     prepared_paths: list[Path] = []
 
     for path in paths:
-        if no_render:
-            prepared_paths.append(path)
-            continue
-
         if not (path / "jinja").is_dir():
             rich.print(
                     f"[warning]⚠️  /jinja directory at {path.parent} was not found! Skipping templating for path..."
