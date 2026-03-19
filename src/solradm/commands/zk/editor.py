@@ -209,13 +209,12 @@ def _render_config_directory(config_dir: Path, templates_dir: Path, rendered_dir
     return rendered_files
 
 
-def _render_jinja_tree(root_dir: Path) -> tuple[Path, list[Path]]:
+def _render_jinja_tree(root_dir: Path, rendered_dir: Path) -> tuple[Path, list[Path]]:
     root_dir = root_dir.expanduser().resolve()
     jinja_dir = root_dir / "jinja"
     templates_dir = jinja_dir / "templates"
     configs_dir = jinja_dir / "configs"
     resources_dir = jinja_dir / "resources"
-    rendered_dir = root_dir / "rendered"
 
     if not jinja_dir.is_dir():
         raise AdmException(f"Expected a jinja directory under {root_dir}")
@@ -256,16 +255,18 @@ def _prepare_upload_paths(
         paths: list[Path],
         *,
         znode_path: str,
-        no_render: bool,
 ) -> list[Path]:
     prepared_paths: list[Path] = []
 
     for path in paths:
-        if no_render or not (path / "jinja").is_dir():
+        if not (path / "jinja").is_dir():
+            rich.print(
+                    f"[warning]⚠️  /jinja directory at {path} was not found! Skipping templating for path..."
+                )
             prepared_paths.append(path)
             continue
 
-        rendered_dir, rendered_files = _render_jinja_tree(path)
+        rendered_dir, rendered_files = _render_jinja_tree(path, path)
         rich.print(f"[success]✅ Rendered {len(rendered_files)} files into [bold]{rendered_dir}[/]")
 
         if znode_path == "/configs":
@@ -459,12 +460,12 @@ def upload(
         include: List[str] | None = typer.Option(
             None,
             "--include",
-            help="Regex to include files/directories (matched against relative paths); exclude patterns take precedence",
+            help="Regex to include files/directories within the specified paths (matched against relative paths); exclude patterns take precedence. For example, only update the schema.xml by specifying it.",
         ),
         exclude: List[str] | None = typer.Option(
             None,
             "--exclude",
-            help="Regex to exclude files/directories (matched against relative paths and applied before includes)",
+            help="Regex to exclude files/directories within the specified paths (matched against relative paths and applied before includes). For example, exclude resource files like usersBlacklist.txt.",
         ),
         only_used: bool = typer.Option(
             True,
@@ -518,11 +519,12 @@ def upload(
     resolved_paths = []
     for path in paths:
         resolved_paths.append(resolve_config_name_to_abs_or_default_directory(path))
-    resolved_paths = _prepare_upload_paths(
-        resolved_paths,
-        znode_path=znode_path,
-        no_render=no_render,
-    )
+    if not no_render:
+        resolved_paths = _prepare_upload_paths(
+            resolved_paths,
+            znode_path=znode_path,
+            no_render=no_render,
+        )
 
     if znode_path == "/configs":
         files_by_config = build_files_by_config(
