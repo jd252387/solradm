@@ -195,7 +195,8 @@ def _render_config_directory(config_dir: Path, templates_dir: Path, rendered_dir
 
     for source_path in sorted(config_dir.rglob("*")):
         relative_path = source_path.relative_to(config_dir)
-        destination_path = rendered_dir / relative_path
+        rendered_relative_path = relative_path.with_suffix("") if relative_path.suffix == ".j2" else relative_path
+        destination_path = rendered_dir / rendered_relative_path
 
         if source_path.is_dir():
             destination_path.mkdir(parents=True, exist_ok=True)

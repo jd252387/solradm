@@ -84,6 +84,30 @@ def test_render_jinja_tree_creates_rendered_output(monkeypatch, tmp_path: Path):
     assert (rendered_dir / "env-b" / "app.conf").read_text(encoding="utf-8") == "app=beta"
 
 
+def test_render_jinja_tree_strips_j2_suffix_from_rendered_files(monkeypatch, tmp_path: Path):
+    render_jinja_tree = _load_render_jinja_tree(monkeypatch, tmp_path)
+    workspace = tmp_path / "workspace"
+    templates = workspace / "jinja" / "templates"
+    configs = workspace / "jinja" / "configs" / "dev"
+
+    templates.mkdir(parents=True)
+    configs.mkdir(parents=True)
+    (configs / "solrconfig.xml.j2").write_text("<config/>\n", encoding="utf-8")
+    (configs / "nested").mkdir()
+    (configs / "nested" / "schema.xml.j2").write_text("<schema/>\n", encoding="utf-8")
+
+    rendered_dir, rendered_files = render_jinja_tree(workspace)
+
+    assert {path.relative_to(rendered_dir).as_posix() for path in rendered_files} == {
+        "dev/solrconfig.xml",
+        "dev/nested/schema.xml",
+    }
+    assert (rendered_dir / "dev" / "solrconfig.xml").read_text(encoding="utf-8") == "<config/>\n"
+    assert not (rendered_dir / "dev" / "solrconfig.xml.j2").exists()
+    assert (rendered_dir / "dev" / "nested" / "schema.xml").read_text(encoding="utf-8") == "<schema/>\n"
+    assert not (rendered_dir / "dev" / "nested" / "schema.xml.j2").exists()
+
+
 def test_render_jinja_tree_replaces_previous_output(monkeypatch, tmp_path: Path):
     render_jinja_tree = _load_render_jinja_tree(monkeypatch, tmp_path)
     workspace = tmp_path / "workspace"
