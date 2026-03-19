@@ -252,6 +252,30 @@ def _render_jinja_tree(root_dir: Path) -> tuple[Path, list[Path]]:
     return rendered_dir, sorted(rendered_file_paths)
 
 
+def _prepare_upload_paths(
+        paths: list[Path],
+        *,
+        znode_path: str,
+        no_render: bool,
+) -> list[Path]:
+    prepared_paths: list[Path] = []
+
+    for path in paths:
+        if no_render or not (path / "jinja").is_dir():
+            prepared_paths.append(path)
+            continue
+
+        rendered_dir, rendered_files = _render_jinja_tree(path)
+        rich.print(f"[success]✅ Rendered {len(rendered_files)} files into [bold]{rendered_dir}[/]")
+
+        if znode_path == "/configs":
+            prepared_paths.extend(sorted(subdir for subdir in rendered_dir.iterdir() if subdir.is_dir()))
+        else:
+            prepared_paths.append(rendered_dir)
+
+    return prepared_paths
+
+
 @app.command(help="Render Jinja templates using config subdirectories and write results to a sibling rendered directory.")
 def render(
         dir: Path = typer.Argument(
@@ -466,6 +490,12 @@ def upload(
             "-i",
             help="Show zoo diff output for config uploads and require approval before uploading",
         ),
+        no_render: bool = typer.Option(
+            False,
+            "--no-render",
+            "-r",
+            help="Skip rendering Jinja workspaces before uploading",
+        ),
 ):
     """Upload local files or directories to a ZooKeeper znode.
 
@@ -488,6 +518,11 @@ def upload(
     resolved_paths = []
     for path in paths:
         resolved_paths.append(resolve_config_name_to_abs_or_default_directory(path))
+    resolved_paths = _prepare_upload_paths(
+        resolved_paths,
+        znode_path=znode_path,
+        no_render=no_render,
+    )
 
     if znode_path == "/configs":
         files_by_config = build_files_by_config(
@@ -598,6 +633,12 @@ def sync(
             "-i",
             help="Show zoo diff output and require approval before syncing configs",
         ),
+        no_render: bool = typer.Option(
+            False,
+            "--no-render",
+            "-r",
+            help="Skip rendering Jinja workspaces before syncing configs",
+        ),
 ):
     """Upload configsets used by selected collections and optionally reload them."""
 
@@ -633,6 +674,7 @@ def sync(
         reload_exclude=None,
         skip_checks=False,
         interactive=interactive,
+        no_render=no_render,
     )
 
     if reload:

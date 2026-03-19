@@ -21,6 +21,23 @@ def _load_render_jinja_tree(monkeypatch, tmp_path: Path):
     return editor._render_jinja_tree
 
 
+def _load_editor_module(monkeypatch, tmp_path: Path):
+    cfg_home = tmp_path / "cfg"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(cfg_home))
+    settings_path = cfg_home / "solradm" / "settings.yaml"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text("contexts: {available: [], current: {name: default}}\n", encoding="utf-8")
+
+    for module in [
+        "solradm.config",
+        "solradm.api",
+        "solradm.commands.zk.editor",
+    ]:
+        sys.modules.pop(module, None)
+
+    return importlib.import_module("solradm.commands.zk.editor")
+
+
 def test_render_jinja_tree_creates_rendered_output(monkeypatch, tmp_path: Path):
     render_jinja_tree = _load_render_jinja_tree(monkeypatch, tmp_path)
     templates = tmp_path / "workspace" / "jinja" / "templates"
@@ -85,3 +102,48 @@ def test_render_jinja_tree_replaces_previous_output(monkeypatch, tmp_path: Path)
 
     assert not stale_file.exists()
     assert (rendered_dir / "dev" / "site.txt").read_text(encoding="utf-8") == "second"
+
+
+def test_prepare_upload_paths_renders_workspace_for_configs(monkeypatch, tmp_path: Path):
+    editor = _load_editor_module(monkeypatch, tmp_path)
+    workspace = tmp_path / "workspace"
+    templates = workspace / "jinja" / "templates"
+    configs = workspace / "jinja" / "configs"
+    resources = workspace / "jinja" / "resources"
+
+    templates.mkdir(parents=True)
+    resources.mkdir(parents=True)
+    (resources / "shared.txt").write_text("shared\n", encoding="utf-8")
+
+    dev = configs / "dev"
+    dev.mkdir(parents=True)
+    (dev / "solrconfig.xml").write_text("dev\n", encoding="utf-8")
+
+    prod = configs / "prod"
+    prod.mkdir(parents=True)
+    (prod / "solrconfig.xml").write_text("prod\n", encoding="utf-8")
+
+    prepared_paths = editor._prepare_upload_paths(
+        [workspace],
+        znode_path="/configs",
+        no_render=False,
+    )
+
+    assert [path.name for path in prepared_paths] == ["dev", "prod"]
+    assert (workspace / "rendered" / "dev" / "shared.txt").read_text(encoding="utf-8") == "shared\n"
+
+
+def test_prepare_upload_paths_can_skip_render(monkeypatch, tmp_path: Path):
+    editor = _load_editor_module(monkeypatch, tmp_path)
+    workspace = tmp_path / "workspace"
+    (workspace / "jinja" / "templates").mkdir(parents=True)
+    (workspace / "jinja" / "configs" / "dev").mkdir(parents=True)
+
+    prepared_paths = editor._prepare_upload_paths(
+        [workspace],
+        znode_path="/configs",
+        no_render=True,
+    )
+
+    assert prepared_paths == [workspace]
+    assert not (workspace / "rendered").exists()

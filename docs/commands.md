@@ -236,12 +236,21 @@ Render a local Jinja workspace rooted at `<path>`. The command expects `<path>/j
 - `<path>` – directory containing the `jinja` subdirectory.
 
 ### `upload <paths...> [--znode-path <path>] [--only-used/--all] [--reload] [--exclude <name>] [--skip-confirm]`
-Upload local files or directories into ZooKeeper.
+Upload local files or directories into ZooKeeper. By default, any input path containing a `jinja` workspace is rendered first; use `--no-render, -r` to skip that step.
 - `<paths...>` – one or more files or directories to upload. If omitted defaults to the configsets in the configured directory.
 - `--znode-path` – target znode path (default `/configs`).
 - `--only-used/--all` – by default only configurations referenced by collections are uploaded; `--all` forces upload of everything.
 - `--reload` – reload collections whose configuration was uploaded.
 - `--exclude` – repeatable option listing collections to exclude from reloading.
+- `--no-render, -r` – skip rendering `jinja` workspaces before uploading.
 - `--skip-confirm, -y` – skip the confirmation prompt before uploading.
+
+### `sync [--reload] [--interactive] [--dir <path>] [--no-render]`
+Upload configsets used by the selected collections. By default, matching local Jinja workspaces are rendered first; use `--no-render, -r` to skip that step.
+
+- `--dir, -d` – override the default configsets directory used to locate local configs.
+- `--reload` – reload the selected collections after syncing.
+- `--interactive, -i` – show diff output and require approval before syncing.
+- `--no-render, -r` – skip rendering `jinja` workspaces before syncing.
 
 These commands together form a comprehensive toolkit for administering Solr clusters. Combine them with the context system described earlier to automate everyday tasks and share configurations across your team.
