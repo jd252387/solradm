@@ -211,14 +211,9 @@ def _render_config_directory(config_dir: Path, templates_dir: Path, rendered_dir
 
 def _render_jinja_tree(
         root_dir: Path,
-        rendered_dir: Path | None = None,
         selected_configs: list[str] | None = None,
 ) -> tuple[Path, list[Path]]:
     root_dir = root_dir.expanduser().resolve()
-    if rendered_dir is None:
-        rendered_dir = root_dir / "rendered"
-    else:
-        rendered_dir = rendered_dir.expanduser().resolve()
 
     jinja_dir = root_dir / "jinja"
     templates_dir = jinja_dir / "templates"
@@ -231,10 +226,6 @@ def _render_jinja_tree(
         raise AdmException(f"Expected a templates directory under {templates_dir}")
     if not configs_dir.is_dir():
         raise AdmException(f"Expected a configs directory under {configs_dir}")
-
-    if rendered_dir.exists():
-        shutil.rmtree(rendered_dir)
-    rendered_dir.mkdir(parents=True, exist_ok=True)
 
     rendered_file_paths: set[Path] = set()
     available_config_subdirs = {path.name: path for path in configs_dir.iterdir() if path.is_dir()}
@@ -253,7 +244,7 @@ def _render_jinja_tree(
         config_subdirs = [available_config_subdirs[name] for name in sorted(dict.fromkeys(selected_configs))]
 
     for config_subdir in config_subdirs:
-        config_rendered_dir = rendered_dir / config_subdir.name
+        config_rendered_dir = root_dir / config_subdir.name
         if resources_dir.is_dir():
             shutil.copytree(resources_dir, config_rendered_dir, dirs_exist_ok=True)
             rendered_file_paths.update(
@@ -268,7 +259,7 @@ def _render_jinja_tree(
             )
         )
 
-    return rendered_dir, sorted(rendered_file_paths)
+    return root_dir, sorted(rendered_file_paths)
 
 
 def _prepare_upload_paths(
