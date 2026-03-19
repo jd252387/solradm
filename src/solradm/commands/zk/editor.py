@@ -1,11 +1,14 @@
 import asyncio
 import difflib
 import re
+import shutil
 import subprocess
 import tempfile
 import time
 from pathlib import Path
 from typing import List
+
+from jinja2 import ChoiceLoader, Environment, FileSystemLoader
 
 from typer.models import OptionInfo
 
@@ -179,6 +182,113 @@ def view(
         reload=False,
         read_only=True,
     )
+
+
+def _render_config_directory(config_dir: Path, templates_dir: Path, rendered_dir: Path) -> list[Path]:
+    env = Environment(
+        loader=ChoiceLoader([
+            FileSystemLoader(str(config_dir)),
+            FileSystemLoader(str(templates_dir)),
+        ])
+    )
+    rendered_files: list[Path] = []
+
+    for source_path in sorted(config_dir.rglob("*")):
+        relative_path = source_path.relative_to(config_dir)
+        destination_path = rendered_dir / relative_path
+
+        if source_path.is_dir():
+            destination_path.mkdir(parents=True, exist_ok=True)
+            continue
+
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        template = env.get_template(str(relative_path).replace("\\", "/"))
+        destination_path.write_text(template.render(), encoding="utf-8")
+        rendered_files.append(destination_path)
+
+    return rendered_files
+
+
+def _render_jinja_tree(root_dir: Path) -> tuple[Path, list[Path]]:
+    root_dir = root_dir.expanduser().resolve()
+    jinja_dir = root_dir / "jinja"
+    templates_dir = jinja_dir / "templates"
+    configs_dir = jinja_dir / "configs"
+    resources_dir = jinja_dir / "resources"
+    rendered_dir = root_dir / "rendered"
+
+    if not jinja_dir.is_dir():
+        raise AdmException(f"Expected a jinja directory under {root_dir}")
+    if not templates_dir.is_dir():
+        raise AdmException(f"Expected a templates directory under {templates_dir}")
+    if not configs_dir.is_dir():
+        raise AdmException(f"Expected a configs directory under {configs_dir}")
+
+    if rendered_dir.exists():
+        shutil.rmtree(rendered_dir)
+    rendered_dir.mkdir(parents=True, exist_ok=True)
+
+    rendered_file_paths: set[Path] = set()
+    config_subdirs = sorted(path for path in configs_dir.iterdir() if path.is_dir())
+    if not config_subdirs:
+        raise AdmException(f"No configuration subdirectories were found under {configs_dir}")
+
+    for config_subdir in config_subdirs:
+        config_rendered_dir = rendered_dir / config_subdir.name
+        if resources_dir.is_dir():
+            shutil.copytree(resources_dir, config_rendered_dir, dirs_exist_ok=True)
+            rendered_file_paths.update(
+                path for path in config_rendered_dir.rglob("*") if path.is_file()
+            )
+
+        rendered_file_paths.update(
+            _render_config_directory(
+                config_dir=config_subdir,
+                templates_dir=templates_dir,
+                rendered_dir=config_rendered_dir,
+            )
+        )
+
+    return rendered_dir, sorted(rendered_file_paths)
+
+
+def _prepare_upload_paths(
+        paths: list[Path],
+        *,
+        znode_path: str,
+        no_render: bool,
+) -> list[Path]:
+    prepared_paths: list[Path] = []
+
+    for path in paths:
+        if no_render or not (path / "jinja").is_dir():
+            prepared_paths.append(path)
+            continue
+
+        rendered_dir, rendered_files = _render_jinja_tree(path)
+        rich.print(f"[success]✅ Rendered {len(rendered_files)} files into [bold]{rendered_dir}[/]")
+
+        if znode_path == "/configs":
+            prepared_paths.extend(sorted(subdir for subdir in rendered_dir.iterdir() if subdir.is_dir()))
+        else:
+            prepared_paths.append(rendered_dir)
+
+    return prepared_paths
+
+
+@app.command(help="Render Jinja templates using config subdirectories and write results to a sibling rendered directory.")
+def render(
+        dir: Path = typer.Argument(
+            ...,
+            exists=True,
+            file_okay=False,
+            resolve_path=True,
+            help="Directory containing a jinja/templates and jinja/configs tree",
+        ),
+):
+    rendered_dir, rendered_files = _render_jinja_tree(dir)
+    rich.print(f"[success]✅ Rendered {len(rendered_files)} files into [bold]{rendered_dir}[/]")
+
 
 
 def _load_local_config_files(config_dir: Path) -> dict[str, str]:
@@ -380,6 +490,12 @@ def upload(
             "-i",
             help="Show zoo diff output for config uploads and require approval before uploading",
         ),
+        no_render: bool = typer.Option(
+            False,
+            "--no-render",
+            "-r",
+            help="Skip rendering Jinja workspaces before uploading",
+        ),
 ):
     """Upload local files or directories to a ZooKeeper znode.
 
@@ -402,6 +518,11 @@ def upload(
     resolved_paths = []
     for path in paths:
         resolved_paths.append(resolve_config_name_to_abs_or_default_directory(path))
+    resolved_paths = _prepare_upload_paths(
+        resolved_paths,
+        znode_path=znode_path,
+        no_render=no_render,
+    )
 
     if znode_path == "/configs":
         files_by_config = build_files_by_config(
@@ -512,6 +633,12 @@ def sync(
             "-i",
             help="Show zoo diff output and require approval before syncing configs",
         ),
+        no_render: bool = typer.Option(
+            False,
+            "--no-render",
+            "-r",
+            help="Skip rendering Jinja workspaces before syncing configs",
+        ),
 ):
     """Upload configsets used by selected collections and optionally reload them."""
 
@@ -547,6 +674,7 @@ def sync(
         reload_exclude=None,
         skip_checks=False,
         interactive=interactive,
+        no_render=no_render,
     )
 
     if reload:

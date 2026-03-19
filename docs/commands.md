@@ -230,13 +230,27 @@ Display rich diffs between local configsets and their counterparts in ZooKeeper.
 - `<config-regex>` – regular expression selecting which configuration names to compare.
 - `--dir, -d` – optional path to the `configsets` directory to read from; defaults to the configured directory.
 
+### `render <path>`
+Render a local Jinja workspace rooted at `<path>`. The command expects `<path>/jinja/templates` and `<path>/jinja/configs`; for each subdirectory under `configs`, it renders matching templates into `<path>/rendered/<subdir>`. If `<path>/jinja/resources` exists, its contents are copied into every rendered configuration directory before the config-specific templates are written.
+
+- `<path>` – directory containing the `jinja` subdirectory.
+
 ### `upload <paths...> [--znode-path <path>] [--only-used/--all] [--reload] [--exclude <name>] [--skip-confirm]`
-Upload local files or directories into ZooKeeper.
+Upload local files or directories into ZooKeeper. By default, any input path containing a `jinja` workspace is rendered first; use `--no-render, -r` to skip that step.
 - `<paths...>` – one or more files or directories to upload. If omitted defaults to the configsets in the configured directory.
 - `--znode-path` – target znode path (default `/configs`).
 - `--only-used/--all` – by default only configurations referenced by collections are uploaded; `--all` forces upload of everything.
 - `--reload` – reload collections whose configuration was uploaded.
 - `--exclude` – repeatable option listing collections to exclude from reloading.
+- `--no-render, -r` – skip rendering `jinja` workspaces before uploading.
 - `--skip-confirm, -y` – skip the confirmation prompt before uploading.
+
+### `sync [--reload] [--interactive] [--dir <path>] [--no-render]`
+Upload configsets used by the selected collections. By default, matching local Jinja workspaces are rendered first; use `--no-render, -r` to skip that step.
+
+- `--dir, -d` – override the default configsets directory used to locate local configs.
+- `--reload` – reload the selected collections after syncing.
+- `--interactive, -i` – show diff output and require approval before syncing.
+- `--no-render, -r` – skip rendering `jinja` workspaces before syncing.
 
 These commands together form a comprehensive toolkit for administering Solr clusters. Combine them with the context system described earlier to automate everyday tasks and share configurations across your team.
