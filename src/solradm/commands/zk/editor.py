@@ -293,7 +293,7 @@ def _prepare_upload_paths(
 
         if workspace_root is None:
             rich.print(
-                f"[warning]⚠️  /jinja directory at {path.parent} was not found! Skipping templating for path..."
+                f"[warning]⚠️  /jinja/configs directory at {path.parent} was not found! Skipping templating for path..."
             )
             prepared_paths[index] = path
             continue
