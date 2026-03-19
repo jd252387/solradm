@@ -271,7 +271,7 @@ def _prepare_upload_paths(
 
         if not (path / "jinja").is_dir():
             rich.print(
-                    f"[warning]⚠️  /jinja directory at {path} was not found! Skipping templating for path..."
+                    f"[warning]⚠️  /jinja directory at {path.parent} was not found! Skipping templating for path..."
                 )
             prepared_paths.append(path)
             continue
@@ -554,8 +554,7 @@ def upload(
     if not no_render:
         resolved_paths = _prepare_upload_paths(
             resolved_paths,
-            znode_path=znode_path,
-            no_render=no_render,
+            znode_path=znode_path
         )
 
     if znode_path == "/configs":
