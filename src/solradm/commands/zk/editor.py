@@ -209,7 +209,11 @@ def _render_config_directory(config_dir: Path, templates_dir: Path, rendered_dir
     return rendered_files
 
 
-def _render_jinja_tree(root_dir: Path, rendered_dir: Path | None = None) -> tuple[Path, list[Path]]:
+def _render_jinja_tree(
+        root_dir: Path,
+        rendered_dir: Path | None = None,
+        selected_configs: list[str] | None = None,
+) -> tuple[Path, list[Path]]:
     root_dir = root_dir.expanduser().resolve()
     if rendered_dir is None:
         rendered_dir = root_dir / "rendered"
@@ -233,9 +237,20 @@ def _render_jinja_tree(root_dir: Path, rendered_dir: Path | None = None) -> tupl
     rendered_dir.mkdir(parents=True, exist_ok=True)
 
     rendered_file_paths: set[Path] = set()
-    config_subdirs = sorted(path for path in configs_dir.iterdir() if path.is_dir())
-    if not config_subdirs:
+    available_config_subdirs = {path.name: path for path in configs_dir.iterdir() if path.is_dir()}
+    if not available_config_subdirs:
         raise AdmException(f"No configuration subdirectories were found under {configs_dir}")
+
+    if selected_configs is None:
+        config_subdirs = sorted(available_config_subdirs.values())
+    else:
+        missing_configs = sorted(name for name in selected_configs if name not in available_config_subdirs)
+        if missing_configs:
+            raise AdmException(
+                "Could not find the following configuration subdirectories under "
+                f"{configs_dir}: {', '.join(missing_configs)}"
+            )
+        config_subdirs = [available_config_subdirs[name] for name in sorted(dict.fromkeys(selected_configs))]
 
     for config_subdir in config_subdirs:
         config_rendered_dir = rendered_dir / config_subdir.name
@@ -261,25 +276,73 @@ def _prepare_upload_paths(
         *,
         znode_path: str
 ) -> list[Path]:
-    prepared_paths: list[Path] = []
+    prepared_paths: list[Path | None] = [None] * len(paths)
+    workspace_requests: dict[Path, dict[str, bool | set[str]]] = {}
 
-    for path in paths:
-        if not (path / "jinja").is_dir():
+    for index, path in enumerate(paths):
+        workspace_root: Path | None = None
+        selected_config: str | None = None
+
+        if (path / "jinja").is_dir():
+            workspace_root = path
+        elif znode_path == "/configs" and (path.parent / "jinja").is_dir():
+            candidate = path.parent / "jinja" / "configs" / path.name
+            if candidate.is_dir():
+                workspace_root = path.parent
+                selected_config = path.name
+
+        if workspace_root is None:
             rich.print(
-                    f"[warning]⚠️  /jinja directory at {path.parent} was not found! Skipping templating for path..."
-                )
-            prepared_paths.append(path)
+                f"[warning]⚠️  /jinja directory at {path.parent} was not found! Skipping templating for path..."
+            )
+            prepared_paths[index] = path
             continue
 
-        rendered_dir, rendered_files = _render_jinja_tree(path)
-        rich.print(f"[success]✅ Rendered {len(rendered_files)} files into [bold]{rendered_dir}[/]")
-
-        if znode_path == "/configs":
-            prepared_paths.extend(sorted(subdir for subdir in rendered_dir.iterdir() if subdir.is_dir()))
+        request = workspace_requests.setdefault(workspace_root, {"render_all": False, "configs": set()})
+        if selected_config is None:
+            request["render_all"] = True
         else:
-            prepared_paths.append(rendered_dir)
+            request["configs"].add(selected_config)
 
-    return prepared_paths
+    rendered_results: dict[Path, tuple[Path, set[str] | None]] = {}
+    for workspace_root, request in workspace_requests.items():
+        selected_configs = None if request["render_all"] else sorted(request["configs"])
+        rendered_dir, rendered_files = _render_jinja_tree(workspace_root, selected_configs=selected_configs)
+        rendered_config_count = len(
+            {rendered_path.relative_to(rendered_dir).parts[0] for rendered_path in rendered_files}
+        )
+        rich.print(
+            f"[success]✅ Rendered {len(rendered_files)} files across "
+            f"{rendered_config_count} configs into [bold]{rendered_dir}[/]"
+        )
+        rendered_results[workspace_root] = (
+            rendered_dir,
+            None if selected_configs is None else set(selected_configs),
+        )
+
+    expanded_paths: list[Path] = []
+    for index, path in enumerate(paths):
+        if prepared_paths[index] is not None:
+            expanded_paths.append(prepared_paths[index])
+            continue
+
+        if (path / "jinja").is_dir():
+            workspace_root = path
+            selected_config = None
+        else:
+            workspace_root = path.parent
+            selected_config = path.name
+
+        rendered_dir, selected_configs = rendered_results[workspace_root]
+        if znode_path == "/configs":
+            if selected_config is not None and selected_configs is not None:
+                expanded_paths.append(rendered_dir / selected_config)
+            else:
+                expanded_paths.extend(sorted(subdir for subdir in rendered_dir.iterdir() if subdir.is_dir()))
+        else:
+            expanded_paths.append(rendered_dir)
+
+    return expanded_paths
 
 
 @app.command(help="Render Jinja templates using config subdirectories and write results to a sibling rendered directory.")

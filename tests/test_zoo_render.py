@@ -126,27 +126,84 @@ def test_prepare_upload_paths_renders_workspace_for_configs(monkeypatch, tmp_pat
     prepared_paths = editor._prepare_upload_paths(
         [workspace],
         znode_path="/configs",
-        no_render=False,
     )
 
     assert [path.name for path in prepared_paths] == ["dev", "prod"]
     assert (workspace / "rendered" / "dev" / "shared.txt").read_text(encoding="utf-8") == "shared\n"
 
 
-def test_prepare_upload_paths_can_skip_render(monkeypatch, tmp_path: Path):
+def test_prepare_upload_paths_leaves_non_jinja_paths_unchanged(monkeypatch, tmp_path: Path):
     editor = _load_editor_module(monkeypatch, tmp_path)
     workspace = tmp_path / "workspace"
     (workspace / "jinja" / "templates").mkdir(parents=True)
     (workspace / "jinja" / "configs" / "dev").mkdir(parents=True)
+    plain_config = tmp_path / "plain-dev"
+    plain_config.mkdir()
 
     prepared_paths = editor._prepare_upload_paths(
-        [workspace],
+        [plain_config],
         znode_path="/configs",
-        no_render=True,
     )
 
-    assert prepared_paths == [workspace]
+    assert prepared_paths == [plain_config]
     assert not (workspace / "rendered").exists()
+
+
+def test_prepare_upload_paths_renders_only_requested_configs(monkeypatch, tmp_path: Path):
+    editor = _load_editor_module(monkeypatch, tmp_path)
+    workspace = tmp_path / "workspace"
+    templates = workspace / "jinja" / "templates"
+    configs = workspace / "jinja" / "configs"
+    resources = workspace / "jinja" / "resources"
+
+    templates.mkdir(parents=True)
+    resources.mkdir(parents=True)
+    (resources / "shared.txt").write_text("shared\n", encoding="utf-8")
+
+    dev = configs / "dev"
+    dev.mkdir(parents=True)
+    (dev / "solrconfig.xml").write_text("dev\n", encoding="utf-8")
+
+    prod = configs / "prod"
+    prod.mkdir(parents=True)
+    (prod / "solrconfig.xml").write_text("prod\n", encoding="utf-8")
+
+    prepared_paths = editor._prepare_upload_paths(
+        [workspace / "dev"],
+        znode_path="/configs",
+    )
+
+    assert prepared_paths == [workspace / "rendered" / "dev"]
+    assert (workspace / "rendered" / "dev" / "shared.txt").read_text(encoding="utf-8") == "shared\n"
+    assert not (workspace / "rendered" / "prod").exists()
+
+
+def test_prepare_upload_paths_renders_workspace_once_for_multiple_configs(monkeypatch, tmp_path: Path):
+    editor = _load_editor_module(monkeypatch, tmp_path)
+    workspace = tmp_path / "workspace"
+    (workspace / "jinja" / "templates").mkdir(parents=True)
+    (workspace / "jinja" / "configs" / "dev").mkdir(parents=True)
+    (workspace / "jinja" / "configs" / "prod").mkdir(parents=True)
+
+    calls: list[tuple[Path, list[str] | None]] = []
+
+    def fake_render(path: Path, rendered_dir: Path | None = None, selected_configs: list[str] | None = None):
+        calls.append((path, selected_configs))
+        output_dir = path / "rendered"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        for config_name in selected_configs or ["dev", "prod"]:
+            (output_dir / config_name).mkdir(parents=True, exist_ok=True)
+        return output_dir, sorted(output_dir.rglob("*"))
+
+    monkeypatch.setattr(editor, "_render_jinja_tree", fake_render)
+
+    prepared_paths = editor._prepare_upload_paths(
+        [workspace / "dev", workspace / "prod"],
+        znode_path="/configs",
+    )
+
+    assert calls == [(workspace, ["dev", "prod"])]
+    assert prepared_paths == [workspace / "rendered" / "dev", workspace / "rendered" / "prod"]
 
 
 def test_render_uses_default_configsets_directory_when_path_is_omitted(monkeypatch, tmp_path: Path):
