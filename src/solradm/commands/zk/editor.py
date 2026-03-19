@@ -209,8 +209,13 @@ def _render_config_directory(config_dir: Path, templates_dir: Path, rendered_dir
     return rendered_files
 
 
-def _render_jinja_tree(root_dir: Path, rendered_dir: Path) -> tuple[Path, list[Path]]:
+def _render_jinja_tree(root_dir: Path, rendered_dir: Path | None = None) -> tuple[Path, list[Path]]:
     root_dir = root_dir.expanduser().resolve()
+    if rendered_dir is None:
+        rendered_dir = root_dir / "rendered"
+    else:
+        rendered_dir = rendered_dir.expanduser().resolve()
+
     jinja_dir = root_dir / "jinja"
     templates_dir = jinja_dir / "templates"
     configs_dir = jinja_dir / "configs"
@@ -255,10 +260,15 @@ def _prepare_upload_paths(
         paths: list[Path],
         *,
         znode_path: str,
+        no_render: bool = False,
 ) -> list[Path]:
     prepared_paths: list[Path] = []
 
     for path in paths:
+        if no_render:
+            prepared_paths.append(path)
+            continue
+
         if not (path / "jinja").is_dir():
             rich.print(
                     f"[warning]⚠️  /jinja directory at {path} was not found! Skipping templating for path..."
@@ -266,7 +276,7 @@ def _prepare_upload_paths(
             prepared_paths.append(path)
             continue
 
-        rendered_dir, rendered_files = _render_jinja_tree(path, path)
+        rendered_dir, rendered_files = _render_jinja_tree(path)
         rich.print(f"[success]✅ Rendered {len(rendered_files)} files into [bold]{rendered_dir}[/]")
 
         if znode_path == "/configs":
@@ -279,14 +289,36 @@ def _prepare_upload_paths(
 
 @app.command(help="Render Jinja templates using config subdirectories and write results to a sibling rendered directory.")
 def render(
-        dir: Path = typer.Argument(
-            ...,
-            exists=True,
+        dir: Path | None = typer.Argument(
+            None,
+            exists=False,
             file_okay=False,
-            resolve_path=True,
-            help="Directory containing a jinja/templates and jinja/configs tree",
+            resolve_path=False,
+            help="Directory containing a jinja/templates and jinja/configs tree; defaults to the configured configsets directory",
         ),
 ):
+    if not isinstance(dir, Path):
+        dir = None
+
+    if dir is not None:
+        dir = dir.expanduser().resolve()
+    else:
+        try:
+            dir = get_default_configsets_config_dir()
+        except TypeError:
+            dir = None
+
+    if dir is None:
+        rich.print(
+            "[error]❌ Default configsets directory is not configured. "
+            "Use sa context config-dir to set it or provide a directory."
+        )
+        raise typer.Exit(1)
+
+    if not dir.is_dir():
+        rich.print(f"[error]❌ Provided directory {dir} does not exist or is not a directory")
+        raise typer.Exit(1)
+
     rendered_dir, rendered_files = _render_jinja_tree(dir)
     rich.print(f"[success]✅ Rendered {len(rendered_files)} files into [bold]{rendered_dir}[/]")
 

@@ -147,3 +147,35 @@ def test_prepare_upload_paths_can_skip_render(monkeypatch, tmp_path: Path):
 
     assert prepared_paths == [workspace]
     assert not (workspace / "rendered").exists()
+
+
+def test_render_uses_default_configsets_directory_when_path_is_omitted(monkeypatch, tmp_path: Path):
+    editor = _load_editor_module(monkeypatch, tmp_path)
+    default_dir = tmp_path / "configsets"
+    default_dir.mkdir()
+
+    calls: list[Path] = []
+
+    monkeypatch.setattr(editor, "get_default_configsets_config_dir", lambda: default_dir)
+    monkeypatch.setattr(
+        editor,
+        "_render_jinja_tree",
+        lambda path: (calls.append(path) or (path / "rendered", [])),
+    )
+
+    editor.render()
+
+    assert calls == [default_dir]
+
+
+def test_render_fails_when_default_configsets_directory_is_not_configured(monkeypatch, tmp_path: Path):
+    import pytest
+    import typer
+
+    editor = _load_editor_module(monkeypatch, tmp_path)
+    monkeypatch.setattr(editor, "get_default_configsets_config_dir", lambda: None)
+
+    with pytest.raises(typer.Exit) as exc:
+        editor.render()
+
+    assert exc.value.exit_code == 1
