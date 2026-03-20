@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import List
 
-from jinja2 import ChoiceLoader, Environment, FileSystemLoader
+from jinja2 import ChoiceLoader, Environment, FileSystemLoader, StrictUndefined
 
 from typer.models import OptionInfo
 
@@ -189,7 +189,8 @@ def _render_config_directory(config_dir: Path, templates_dir: Path, rendered_dir
         loader=ChoiceLoader([
             FileSystemLoader(str(config_dir)),
             FileSystemLoader(str(templates_dir)),
-        ])
+        ]), 
+        undefined=StrictUndefined
     )
     rendered_files: list[Path] = []
 
