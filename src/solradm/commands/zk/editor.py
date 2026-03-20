@@ -568,7 +568,7 @@ def upload(
         ),
         skip_checks: bool = typer.Option(False, "--skip-confirm", "-y", help="Skip confirmation prompt"),
         interactive: bool = typer.Option(
-            False,
+            True,
             "--interactive",
             "-i",
             help="Show zoo diff output for config uploads and require approval before uploading",
@@ -711,7 +711,7 @@ def sync(
             help="Reload the selected collections after syncing their configs",
         ),
         interactive: bool = typer.Option(
-            False,
+            True,
             "--interactive",
             "-i",
             help="Show zoo diff output and require approval before syncing configs",
