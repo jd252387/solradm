@@ -37,7 +37,12 @@ def _friendly_filter_name(filter_instance) -> str:
     return pretty or filter_instance.__class__.__name__
 
 
-def with_cluster_state(*filter_classes, allow_empty: bool = False, show_filter_explanations: bool = False):
+def with_cluster_state(
+    *filter_classes,
+    allow_empty: bool = False,
+    show_filter_explanations: bool = False,
+    skip_fetch_when=None,
+):
     """
     Decorator that automatically fetches ClusterState and optionally applies filters.
 
@@ -45,6 +50,7 @@ def with_cluster_state(*filter_classes, allow_empty: bool = False, show_filter_e
         *filter_classes: Optional filter classes to apply to the cluster state
         allow_empty: Allow decorated command to run even if no collections match
         show_filter_explanations: When True, print a summary of the active filters before executing
+        skip_fetch_when: Optional predicate receiving bound kwargs; when truthy, skip fetching cluster state
     """
 
     def decorator(func):
@@ -72,42 +78,43 @@ def with_cluster_state(*filter_classes, allow_empty: bool = False, show_filter_e
                     ))
 
         new_sig = orig_sig.replace(parameters=new_params)
-
         func.__signature__ = new_sig
-
         signature = inspect.Signature(parameters=new_params)
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            filter_instances = []
+            skipped_fetch = False
+
             # caller may provide explicit cluster_state and skip fetching
             # in this case filter arguments are ignored
             if not (cluster_state := kwargs.pop("cluster_state", None)):
-                # if caller didn't provide explicit cluster_state, then fetch it and filter using the provided filters
-                try:
-                    cluster_state = get_collections()
-                except Exception as e:
-                    raise typer.BadParameter(f"Failed to fetch cluster state: {e}")
-                
                 bound_arguments = signature.bind_partial(*args, **kwargs)
                 kwargs = dict(bound_arguments.arguments)
 
-                filter_instances = []
+                if skip_fetch_when and skip_fetch_when(kwargs):
+                    cluster_state = []
+                    skipped_fetch = True
+                else:
+                    try:
+                        cluster_state = get_collections()
+                    except Exception as e:
+                        raise typer.BadParameter(f"Failed to fetch cluster state: {e}")
 
-                for filter_class in filter_classes:
-                    filter_params = {}
-                    for field_name in filter_class.__dataclass_fields__:
-                        if field_name in kwargs:
-                            filter_params[field_name] = kwargs.pop(field_name)
+                    for filter_class in filter_classes:
+                        filter_params = {}
+                        for field_name in filter_class.__dataclass_fields__:
+                            if field_name in kwargs:
+                                filter_params[field_name] = kwargs.pop(field_name)
 
-                    filter_instance = filter_class(**filter_params)
-                    filter_instance.init()
+                        filter_instance = filter_class(**filter_params)
+                        filter_instance.init()
 
-                    if any(value is not None for value in filter_params.values()):
-                        filter_instances.append(filter_instance)
-                
+                        if any(value is not None for value in filter_params.values()):
+                            filter_instances.append(filter_instance)
 
-                for filter_instance in filter_instances:
-                    cluster_state = filter_instance.apply(cluster_state)
+                    for filter_instance in filter_instances:
+                        cluster_state = filter_instance.apply(cluster_state)
 
                 if show_filter_explanations and filter_instances:
                     explanation_rows = []
@@ -134,11 +141,12 @@ def with_cluster_state(*filter_classes, allow_empty: bool = False, show_filter_e
                         rich.print(table)
 
             if len(cluster_state) == 0:
-                if allow_empty and not filter_instances:
+                if (allow_empty and not filter_instances) or skipped_fetch:
                     return func(cluster_state=cluster_state, *args, **kwargs)
                 if solradm.api.utils.is_dry_run:
                     rich.print(
-                        f"[warning][green bold]💡 EXITING DRY RUN - [/] CLI command \"{func.__qualname__}\" has been called, but the filters didn't match any collections. This may be OK as you are running with dry run, as the previous command did not actually edit the cluster. This command was called with parameters \"{args if args else ""}{kwargs if kwargs else ""}")
+                        f"[warning][green bold]💡 EXITING DRY RUN - [/] CLI command \"{func.__qualname__}\" has been called, but the filters didn't match any collections. This may be OK as you are running with dry run, as the previous command did not actually edit the cluster. This command was called with parameters \"{args if args else ''}{kwargs if kwargs else ''}\""
+                    )
                 else:
                     rich.print("[error] ❌ No collections in the cluster have matched the specified filters!")
                 raise typer.Exit(1)

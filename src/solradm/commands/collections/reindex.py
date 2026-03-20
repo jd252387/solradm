@@ -131,7 +131,7 @@ def _prompt_launch_when_idle() -> None:
 @app.async_command(
     help="Reindex documents from a source collection into a target collection using the dataimport handler"
 )
-@with_cluster_state()
+@with_cluster_state(skip_fetch_when=lambda kwargs: kwargs.get("source_context") and kwargs.get("target_context"))
 async def reindex(
     cluster_state: List[Collection],
     source_collection: str = typer.Option(
