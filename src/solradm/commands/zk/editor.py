@@ -464,13 +464,6 @@ def _show_config_diff(local_config_dirs: dict[str, Path]) -> None:
             rich.print()
 
 
-def _prompt_for_interactive_upload(local_config_dirs: dict[str, Path]) -> None:
-    _show_config_diff(local_config_dirs)
-    if not Confirm.ask("Approve these ZooKeeper config changes?"):
-        rich.print("[warning]⚠️ Upload cancelled")
-        raise typer.Exit()
-
-
 @app.command(help="Show diffs between local configsets and ZooKeeper.")
 def diff(
         config_pattern: str = typer.Argument(
@@ -567,12 +560,6 @@ def upload(
             autocompletion=collection_names,
         ),
         skip_checks: bool = typer.Option(False, "--skip-confirm", "-y", help="Skip confirmation prompt"),
-        interactive: bool = typer.Option(
-            True,
-            "--interactive",
-            "-i",
-            help="Show zoo diff output for config uploads and require approval before uploading",
-        ),
         no_render: bool = typer.Option(
             False,
             "--no-render",
@@ -586,14 +573,9 @@ def upload(
     """
 
     skip_checks = _coerce_optional_option(skip_checks)
-    interactive = _coerce_optional_option(interactive)
 
     if only_used and znode_path != "/configs":
         rich.print("[error] ❌ You cannot use only_used when the znode_path is not /configs!")
-        raise typer.Exit(1)
-
-    if interactive and znode_path != "/configs":
-        rich.print("[error] ❌ --interactive is only supported when uploading to /configs")
         raise typer.Exit(1)
 
     include_regexes = compile_regex_patterns(include, "--include")
@@ -621,36 +603,35 @@ def upload(
             raise typer.Exit(1)
 
         cluster_state = get_collections()
+        config_usage = {
+            cfg: get_collections_using_config(cluster_state, cfg)
+            for cfg in files_by_config
+        }
 
-        if only_used or not skip_checks or reload:
-            config_usage = {
-                cfg: get_collections_using_config(cluster_state, cfg)
-                for cfg in files_by_config
+        if only_used:
+            files_by_config = {
+                cfg: files
+                for cfg, files in files_by_config.items()
+                if config_usage[cfg]
             }
+            config_usage = {cfg: config_usage[cfg] for cfg in files_by_config}
+            if not files_by_config:
+                rich.print("[warning]⚠️ No configurations used by any collection")
+                raise typer.Exit()
 
-            if only_used:
-                files_by_config = {
-                    cfg: files
-                    for cfg, files in files_by_config.items()
-                    if config_usage[cfg]
-                }
-                config_usage = {cfg: config_usage[cfg] for cfg in files_by_config}
-                if not files_by_config:
-                    rich.print("[warning]⚠️ No configurations used by any collection")
-                    raise typer.Exit()
+        files_to_upload = [file for files in files_by_config.values() for file in files]
 
-            if not skip_checks:
-                table = Table(title="Configurations to upload")
-                table.add_column("Config")
-                table.add_column("Collections using config")
-                for cfg, cols in config_usage.items():
-                    table.add_row(cfg, ", ".join(c.name for c in cols) if cols else "-")
-                rich.print(table)
+        _show_config_diff(
+            {path.name: path for path in resolved_paths if path.name in files_by_config}
+        )
 
-        if interactive:
-            _prompt_for_interactive_upload(
-                {path.name: path for path in resolved_paths if path.name in files_by_config}
-            )
+        if not skip_checks:
+            table = Table(title="Configurations to upload")
+            table.add_column("Config")
+            table.add_column("Collections using config")
+            for cfg, cols in config_usage.items():
+                table.add_row(cfg, ", ".join(c.name for c in cols) if cols else "-")
+            rich.print(table)
     else:
         files_to_upload = []
         for path in resolved_paths:
@@ -668,7 +649,7 @@ def upload(
 
             rich.print(table)
 
-    if not interactive and not skip_checks and not Confirm.ask("Proceed with upload?"):
+    if not skip_checks and not Confirm.ask("Proceed with upload?"):
         raise typer.Exit()
 
     for local_path, zk_path in files_to_upload:
@@ -710,12 +691,6 @@ def sync(
             "--reload",
             help="Reload the selected collections after syncing their configs",
         ),
-        interactive: bool = typer.Option(
-            True,
-            "--interactive",
-            "-i",
-            help="Show zoo diff output and require approval before syncing configs",
-        ),
         no_render: bool = typer.Option(
             False,
             "--no-render",
@@ -724,8 +699,6 @@ def sync(
         ),
 ):
     """Upload configsets used by selected collections and optionally reload them."""
-
-    interactive = _coerce_optional_option(interactive)
 
     config_names = sorted({collection.configName for collection in cluster_state})
 
@@ -756,7 +729,6 @@ def sync(
         reload=False,
         reload_exclude=None,
         skip_checks=False,
-        interactive=interactive,
         no_render=no_render,
     )
 
