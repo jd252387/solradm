@@ -109,7 +109,7 @@ def _build_stream_expr_params(
     fq: List[str] | None,
     fields: List[str],
     sort_field: str,
-    qt: str = "/select",
+    qt: str = "/vanilla",
 ) -> dict[str, str]:
     """Build parameters for the /stream handler using streaming expressions."""
     fl_value = ",".join(fields)
@@ -135,13 +135,13 @@ async def _stream_export_docs(
     fields: List[str],
     requested_fields: List[str],
     sort_field: str,
-    use_export_handler: bool,
+    qt: str,
 ) -> int:
     """
     Export documents using HTTP streaming via the /stream endpoint.
 
     Uses qt=/export when use_export_handler is True (requires docValues, no multiValued),
-    otherwise uses qt=/select.
+    otherwise uses qt=/vanilla.
     """
     from solradm.api.streaming import (
         StreamingError,
@@ -149,7 +149,6 @@ async def _stream_export_docs(
     )
 
     endpoint = f"/{collection}/stream"
-    qt = "/export" if use_export_handler else "/select"
     params = _build_stream_expr_params(collection, query, fq, fields, sort_field, qt)
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -298,11 +297,11 @@ async def export_documents(
             rich.print(
                 "[warning]⚠️  Requested fields are incompatible with /export ("
                 + "; ".join(reasons)
-                + "). Falling back to /stream."
+                + "). Falling back to /vanilla."
             )
 
     sort_field = sort if sort else f"{requested_fields[0]} asc"
-    handler = "/export" if export_supported else "/stream"
+    qt = "/export" if export_supported else "/vanilla"
 
     count = await _stream_export_docs(
         base,
@@ -313,10 +312,10 @@ async def export_documents(
         export_fields,
         requested_fields,
         sort_field,
-        use_export_handler=export_supported,
+        export_supported,
     )
 
-    rich.print(f"[success]✅  Exported {count} documents to {output} using {handler}")
+    rich.print(f"[success]✅  Exported {count} documents to {output} using {qt}")
 
 
 @app.async_command(name="import", help="Import documents from a file into a collection")
