@@ -262,9 +262,16 @@ async def export_documents(
         "--rows",
         help="Number of rows to request per stream page when using a non-/export handler.",
     ),
+    qt: str | None = typer.Option(
+        None,
+        "--qt",
+        help="Override the request handler used in the streaming expression (for example /export or /select).",
+    ),
 ) -> None:
     if rows <= 0:
         raise typer.BadParameter("--rows must be a positive integer")
+    if qt is not None and not qt.strip():
+        raise typer.BadParameter("--qt must not be empty")
 
     requested_fields = _dedupe_preserve_order(field)
     if not requested_fields:
@@ -298,25 +305,31 @@ async def export_documents(
 
     export_supported = not missing_docvalues and not multi_valued
 
-    if not export_supported:
-        reasons: list[str] = []
-        if missing_docvalues:
-            reasons.append(
-                f"docValues disabled on: {', '.join(sorted(missing_docvalues))}"
-            )
-        if multi_valued:
-            reasons.append(f"multiValued fields: {', '.join(sorted(multi_valued))}")
-        if reasons:
-            rich.print(
-                "[warning]⚠️  Requested fields are incompatible with /export ("
-                + "; ".join(reasons)
-                + "). Falling back to /vanilla."
-            )
+    reasons: list[str] = []
+    if missing_docvalues:
+        reasons.append(
+            f"docValues disabled on: {', '.join(sorted(missing_docvalues))}"
+        )
+    if multi_valued:
+        reasons.append(f"multiValued fields: {', '.join(sorted(multi_valued))}")
 
     sort_field = sort if sort else f"{requested_fields[0]} asc"
-    qt = "/export" if export_supported else "/vanilla"
+    selected_qt = qt if qt is not None else ("/export" if export_supported else "/vanilla")
 
-    if qt == "/export":
+    if qt is None and not export_supported and reasons:
+        rich.print(
+            "[warning]⚠️  Requested fields are incompatible with /export ("
+            + "; ".join(reasons)
+            + "). Falling back to /vanilla."
+        )
+    elif selected_qt == "/export" and not export_supported and reasons:
+        rich.print(
+            "[warning]⚠️  Requested fields are incompatible with /export ("
+            + "; ".join(reasons)
+            + "). The export may fail because /export was requested explicitly."
+        )
+
+    if selected_qt == "/export":
         rich.print(
             "[warning]⚠️  Using /export always exports all documents matching the provided filter queries; --rows is ignored."
         )
@@ -333,11 +346,11 @@ async def export_documents(
         export_fields,
         requested_fields,
         sort_field,
-        qt,
+        selected_qt,
         rows,
     )
 
-    rich.print(f"[success]✅  Exported {count} documents to {output} using {qt}")
+    rich.print(f"[success]✅  Exported {count} documents to {output} using {selected_qt}")
 
 
 @app.async_command(name="import", help="Import documents from a file into a collection")
