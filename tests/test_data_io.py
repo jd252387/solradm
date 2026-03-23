@@ -4,8 +4,10 @@ import pytest
 import typer
 
 from solradm.commands.collections.data_io import (
+    _build_stream_expr_params,
     _get_field_definition,
     _parse_luke_schema_flags,
+    export_documents,
 )
 
 
@@ -78,3 +80,181 @@ def test_get_field_definition_raises_when_field_missing(monkeypatch):
 
     with pytest.raises(typer.BadParameter):
         asyncio.run(_get_field_definition("http://solr", "books", "missing"))
+
+
+def test_build_stream_expr_params_includes_rows_for_non_export_handler():
+    params = _build_stream_expr_params(
+        "books",
+        "*:*",
+        ["type:book"],
+        ["id", "title"],
+        "id asc",
+        qt="/vanilla",
+        rows=500,
+    )
+
+    assert 'rows="500"' in params["expr"]
+    assert 'qt="/vanilla"' in params["expr"]
+
+
+def test_build_stream_expr_params_omits_rows_for_export_handler():
+    params = _build_stream_expr_params(
+        "books",
+        "*:*",
+        ["type:book"],
+        ["id", "title"],
+        "id asc",
+        qt="/export",
+        rows=500,
+    )
+
+    assert 'qt="/export"' in params["expr"]
+    assert 'rows="500"' not in params["expr"]
+
+
+def test_export_documents_prompts_before_using_export(monkeypatch, tmp_path):
+    prompts: list[str] = []
+
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io.get_nodes_by_role",
+        lambda _role: {"on": ["http://coordinator"]},
+    )
+
+    async def fake_get_field_definition(base, collection, field):
+        return {"docValues": True, "stored": True, "multiValued": False}
+
+    async def fake_stream_export_docs(*args, **kwargs):
+        raise AssertionError("stream export should not be called when prompt is declined")
+
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io._get_field_definition",
+        fake_get_field_definition,
+    )
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io._stream_export_docs",
+        fake_stream_export_docs,
+    )
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io.Confirm.ask",
+        lambda prompt: prompts.append(prompt) or False,
+    )
+
+    with pytest.raises(typer.Exit) as exc_info:
+        asyncio.run(
+            export_documents(
+                collection="books",
+                output=tmp_path / "out.jsonl",
+                field=["id"],
+                fq=["type:book"],
+                query="*:*",
+                sort=None,
+                rows=1000,
+                qt=None,
+            )
+        )
+
+    assert exc_info.value.exit_code == 1
+    assert prompts == ["Proceed with /export and export every matching document?"]
+
+
+def test_export_documents_passes_rows_for_vanilla_handler(monkeypatch, tmp_path):
+    captured = {}
+
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io.get_nodes_by_role",
+        lambda _role: {"on": ["http://coordinator"]},
+    )
+
+    async def fake_get_field_definition(base, collection, field):
+        return {"docValues": False, "stored": True, "multiValued": False}
+
+    async def fake_stream_export_docs(base, collection, output, query, fq, fields, requested_fields, sort_field, qt, rows):
+        captured.update({
+            "base": base,
+            "collection": collection,
+            "output": output,
+            "query": query,
+            "fq": fq,
+            "fields": fields,
+            "requested_fields": requested_fields,
+            "sort_field": sort_field,
+            "qt": qt,
+            "rows": rows,
+        })
+        return 3
+
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io._get_field_definition",
+        fake_get_field_definition,
+    )
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io._stream_export_docs",
+        fake_stream_export_docs,
+    )
+
+    asyncio.run(
+        export_documents(
+            collection="books",
+            output=tmp_path / "out.jsonl",
+            field=["id"],
+            fq=["type:book"],
+            query="*:*",
+            sort=None,
+            rows=250,
+            qt=None,
+        )
+    )
+
+    assert captured["qt"] == "/vanilla"
+    assert captured["rows"] == 250
+
+
+def test_export_documents_uses_qt_override(monkeypatch, tmp_path):
+    captured = {}
+
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io.get_nodes_by_role",
+        lambda _role: {"on": ["http://coordinator"]},
+    )
+
+    async def fake_get_field_definition(base, collection, field):
+        return {"docValues": True, "stored": True, "multiValued": False}
+
+    async def fake_stream_export_docs(
+        base,
+        collection,
+        output,
+        query,
+        fq,
+        fields,
+        requested_fields,
+        sort_field,
+        qt,
+        rows,
+    ):
+        captured.update({"qt": qt, "rows": rows})
+        return 1
+
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io._get_field_definition",
+        fake_get_field_definition,
+    )
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io._stream_export_docs",
+        fake_stream_export_docs,
+    )
+
+    asyncio.run(
+        export_documents(
+            collection="books",
+            output=tmp_path / "out.jsonl",
+            field=["id"],
+            fq=["type:book"],
+            query="*:*",
+            sort=None,
+            rows=75,
+            qt="/select",
+        )
+    )
+
+    assert captured == {"qt": "/select", "rows": 75}
