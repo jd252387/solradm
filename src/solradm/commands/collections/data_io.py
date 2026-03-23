@@ -33,10 +33,44 @@ def _escape_stream_value(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
+_SCHEMA_FLAG_MAP = {
+    "I": "indexed",
+    "T": "tokenized",
+    "S": "stored",
+    "D": "docValues",
+    "U": "uninvertible",
+    "M": "multiValued",
+    "V": "termVectors",
+    "o": "termVectorOffsets",
+    "p": "termVectorPositions",
+    "y": "termVectorPayloads",
+    "O": "omitNorms",
+    "F": "omitTermFreqAndPositions",
+    "P": "omitPositions",
+    "H": "storeOffsetsWithPositions",
+    "L": "lazy",
+    "B": "binary",
+    "f": "sortMissingFirst",
+    "l": "sortMissingLast",
+}
+
+
+def _parse_luke_schema_flags(flags: str | None) -> dict[str, bool]:
+    parsed = {setting: False for setting in _SCHEMA_FLAG_MAP.values()}
+    if not flags:
+        return parsed
+
+    for flag in flags:
+        setting = _SCHEMA_FLAG_MAP.get(flag)
+        if setting:
+            parsed[setting] = True
+    return parsed
+
+
 async def _get_field_definition(base: str, collection: str, field: str) -> dict:
     resp = await send_request(
         base,
-        f"/{collection}/schema/fields/{field}",
+        f"/{collection}/admin/luke",
         params={"wt": "json"},
         return_raw=True,
     )
@@ -56,9 +90,14 @@ async def _get_field_definition(base: str, collection: str, field: str) -> dict:
         )
         raise typer.Exit(1)
     data = resp["data"]
-    field = data.get("field")
-    if field:
-        return field
+    schema = data.get("schema", {})
+    fields = schema.get("fields", {})
+    field_info = fields.get(field)
+    if field_info:
+        return {
+            **field_info,
+            **_parse_luke_schema_flags(field_info.get("flags")),
+        }
     raise typer.BadParameter(
         f"Field {field!r} was not found in the schema for collection {collection!r}"
     )
