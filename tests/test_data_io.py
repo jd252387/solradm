@@ -3,12 +3,53 @@ import asyncio
 import pytest
 import typer
 
+from solradm.api.models import Collection, Replica, Router, Shard
 from solradm.commands.collections.data_io import (
     _build_stream_expr_params,
     _get_field_definition,
     _parse_luke_schema_flags,
+    _select_collection_luke_base,
     export_documents,
 )
+
+
+def _replica(
+    name: str,
+    node_name: str,
+    base_url: str,
+    state: str = "active",
+    core: str | None = None,
+) -> Replica:
+    return Replica(
+        name=name,
+        core=core or f"{name}_core",
+        node_name=node_name,
+        type="NRT",
+        state=state,
+        leader=False,
+        force_set_state=False,
+        base_url=base_url,
+    )
+
+
+def _collection(name: str = "books", replicas: list[Replica] | None = None) -> Collection:
+    return Collection(
+        name=name,
+        pullReplicas=0,
+        configName=f"{name}_config",
+        replicationFactor=1,
+        router=Router(name="compositeId"),
+        nrtReplicas=1,
+        tlogReplicas=0,
+        shards=[
+            Shard(
+                name="shard1",
+                range="80000000-ffffffff",
+                replicas=replicas
+                or [_replica("replica1", "data-node-1", "http://data-node-1:8983/solr")],
+            )
+        ],
+    )
 
 
 def test_parse_luke_schema_flags_extracts_docvalues_and_multivalued():
@@ -82,6 +123,57 @@ def test_get_field_definition_raises_when_field_missing(monkeypatch):
         asyncio.run(_get_field_definition("http://solr", "books", "missing"))
 
 
+def test_select_collection_luke_base_prefers_active_collection_data_node(monkeypatch):
+    collection = _collection(
+        replicas=[
+            _replica(
+                "replica1",
+                "data-node-1",
+                "http://data-node-1:8983/solr",
+                state="down",
+            ),
+            _replica(
+                "replica2",
+                "data-node-2",
+                "http://data-node-2:8983/solr",
+                state="active",
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io.get_nodes_by_role",
+        lambda _role: {"on": ["data-node-2"]},
+    )
+
+    assert (
+        _select_collection_luke_base([collection], "books")
+        == "http://data-node-2:8983/solr"
+    )
+
+
+def test_select_collection_luke_base_ignores_coordinator_without_replica(monkeypatch):
+    collection = _collection(
+        replicas=[
+            _replica(
+                "replica1",
+                "data-node-1",
+                "http://data-node-1:8983/solr",
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io.get_nodes_by_role",
+        lambda _role: {"on": ["http://coordinator:8983/solr"]},
+    )
+
+    assert (
+        _select_collection_luke_base([collection], "books")
+        == "http://data-node-1:8983/solr"
+    )
+
+
 def test_build_stream_expr_params_includes_rows_for_non_export_handler():
     params = _build_stream_expr_params(
         "books",
@@ -118,6 +210,10 @@ def test_export_documents_prompts_before_using_export(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "solradm.commands.collections.data_io.get_nodes_by_role",
         lambda _role: {"on": ["http://coordinator"]},
+    )
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io.get_collections",
+        lambda: [_collection()],
     )
 
     async def fake_get_field_definition(base, collection, field):
@@ -164,8 +260,13 @@ def test_export_documents_passes_rows_for_vanilla_handler(monkeypatch, tmp_path)
         "solradm.commands.collections.data_io.get_nodes_by_role",
         lambda _role: {"on": ["http://coordinator"]},
     )
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io.get_collections",
+        lambda: [_collection()],
+    )
 
     async def fake_get_field_definition(base, collection, field):
+        assert base == "http://data-node-1:8983/solr"
         return {"docValues": False, "stored": True, "multiValued": False}
 
     async def fake_stream_export_docs(base, collection, output, query, fq, fields, requested_fields, sort_field, qt, rows):
@@ -215,6 +316,10 @@ def test_export_documents_uses_qt_override(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "solradm.commands.collections.data_io.get_nodes_by_role",
         lambda _role: {"on": ["http://coordinator"]},
+    )
+    monkeypatch.setattr(
+        "solradm.commands.collections.data_io.get_collections",
+        lambda: [_collection()],
     )
 
     async def fake_get_field_definition(base, collection, field):

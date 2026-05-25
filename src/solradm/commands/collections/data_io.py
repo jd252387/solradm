@@ -10,7 +10,7 @@ from rich.prompt import Confirm
 
 import solradm.api.utils as api_utils
 from solradm.api.models import Collection
-from solradm.api.state import get_nodes_by_role
+from solradm.api.state import get_collections, get_nodes_by_role
 from solradm.api.utils import send_request
 from solradm.commands.collections.subapp import app
 from solradm.commands.filters.collection_name_filter import CollectionNameFilter
@@ -102,6 +102,43 @@ async def _get_field_definition(base: str, collection: str, field: str) -> dict:
     raise typer.BadParameter(
         f"Field {field!r} was not found in the schema for collection {collection!r}"
     )
+
+
+def _select_collection_luke_base(collections: List[Collection], collection_name: str) -> str:
+    collection = next(
+        (candidate for candidate in collections if candidate.name == collection_name),
+        None,
+    )
+    if collection is None:
+        raise typer.BadParameter(f"Collection {collection_name!r} was not found")
+
+    try:
+        data_nodes = set(get_nodes_by_role("data").get("on", []))
+    except Exception:
+        data_nodes = set()
+
+    replicas = [
+        replica
+        for shard in collection.shards
+        for replica in shard.replicas
+        if replica.base_url and replica.core
+    ]
+    if not replicas:
+        raise typer.BadParameter(
+            f"Collection {collection_name!r} has no replica with a usable Solr base URL"
+        )
+
+    def replica_priority(replica) -> tuple[bool, bool, bool]:
+        is_active = replica.state.lower() == "active"
+        is_data_node = (
+            not data_nodes
+            or replica.node_name in data_nodes
+            or replica.base_url in data_nodes
+        )
+        return is_active and is_data_node, is_active, is_data_node
+
+    selected = max(replicas, key=replica_priority)
+    return selected.base_url
 
 
 def _build_stream_expr_params(
@@ -282,6 +319,7 @@ async def export_documents(
     except Exception:
         coordinators = []
     base = coordinators[0] if coordinators else get_overseer_leader()
+    luke_base = _select_collection_luke_base(get_collections(), collection)
 
     export_fields = requested_fields
     missing_docvalues: set[str] = set()
@@ -289,7 +327,7 @@ async def export_documents(
     non_retrievable: set[str] = set()
 
     for name in export_fields:
-        info = await _get_field_definition(base, collection, name)
+        info = await _get_field_definition(luke_base, collection, name)
         if not info.get("docValues", False):
             missing_docvalues.add(name)
         if info.get("multiValued", False):
