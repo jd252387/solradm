@@ -4,7 +4,7 @@ from typing import Collection, List
 
 import rich
 import typer
-from async_typer import AsyncTyper
+from solradm.async_typer import AsyncTyper
 
 from solradm.api.utils import validate_num_replicas, get_replicas, send_request
 from solradm.commands.callbacks import add_verbosity_option
@@ -33,7 +33,7 @@ app = AsyncTyper()
 add_verbosity_option(app)
 
 
-@app.async_command(help="Create backups for filtered replicas")
+@app.command(help="Create backups for filtered replicas")
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def take(
@@ -78,7 +78,7 @@ async def take(
     await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
 
 
-@app.async_command(help="Restore backups. This command requires only one collection to be filtered!")
+@app.command(help="Restore backups. This command requires only one collection to be filtered!")
 @with_dry_run
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def restore(
@@ -109,7 +109,7 @@ async def restore(
     await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(metatasks, refresh_every=0.25))
 
 
-@app.async_command(name="restore-status", help="Show restore progress for the filtered replicas")
+@app.command(name="restore-status", help="Show restore progress for the filtered replicas")
 @with_cluster_state(CollectionNameFilter, ShardFilter, ReplicaTypeFilter, ReplicaStateFilter, ReplicaPositionFilter)
 async def restore_status(cluster_state: List[Collection]):
     """Display restore status and on-disk usage for replicas currently restoring."""

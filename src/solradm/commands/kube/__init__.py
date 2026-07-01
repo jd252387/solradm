@@ -10,7 +10,7 @@ from rich.prompt import Confirm
 import rich
 import typer
 import urllib3
-from async_typer import AsyncTyper
+from solradm.async_typer import AsyncTyper
 from kubernetes import client
 from kubernetes.client import ApiException
 from kubernetes.client import AppsV1Api
@@ -103,7 +103,7 @@ def _print_workloads(deployments: list, statefulsets: list) -> None:
     rich.print(table)
 
 
-@app.async_command(help="Stream logs for matching pods")
+@app.command(help="Stream logs for matching pods")
 async def logs(
         pattern: str = typer.Argument(..., help="Regex of pod or node name", autocompletion=pod_names),
         node: bool = typer.Option(False, "--node", help="Treat pattern as node name", autocompletion=node_names),
@@ -143,7 +143,7 @@ async def logs(
     )
 
 
-@app.async_command(help="Show /var/solr/data disk usage for pods matching the solr-cloud label")
+@app.command(help="Show /var/solr/data disk usage for pods matching the solr-cloud label")
 async def disk(
         solr_cloud: str = typer.Argument(..., help='Exact value of the "solr-cloud" pod label'),
         sort_by: Literal["used", "pct-used"] = typer.Option(

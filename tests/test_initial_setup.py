@@ -57,7 +57,7 @@ def test_initial_setup_repo_only(monkeypatch, tmp_path):
     cfg, repo = _run_setup(
         monkeypatch,
         tmp_path,
-        confirm_answers=[False, True],
+        confirm_answers=[False, True, False],  # initial context?, add repo?, set up Artifactory?
         prompt_answers=[str(tmp_path / "repo.yaml"), "team"],
         repo_content=repo_content,
     )
@@ -75,7 +75,7 @@ def test_initial_setup_with_local_and_repo(monkeypatch, tmp_path):
     cfg, repo = _run_setup(
         monkeypatch,
         tmp_path,
-        confirm_answers=[True, True],
+        confirm_answers=[True, True, False],  # initial context?, add repo?, set up Artifactory?
         prompt_answers=["local", str(tmp_path / "repo.yaml"), "team"],
         repo_content=repo_content,
     )

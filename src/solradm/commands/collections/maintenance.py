@@ -25,7 +25,7 @@ from solradm.tasks.metatask import MetaTask
 from solradm.tasks.multimetatask import MultiMetaTask
 
 
-@app.async_command(
+@app.command(
     help=(
         "Reload cores for filtered replicas.\n\n"
         "Examples:\n"

@@ -5,7 +5,7 @@ from typing import List
 import rich
 import typer
 import yaml
-from async_typer import AsyncTyper
+from solradm.async_typer import AsyncTyper
 
 from solradm.api.models import Collection
 from solradm.api.state import get_collections
@@ -29,7 +29,7 @@ def export(file: Path = typer.Argument(..., help="Destination file")) -> None:
     rich.print(f"[success]✅  Exported state to {file}")
 
 
-@app.async_command(name="import", help="Restore cluster state from a snapshot")
+@app.command(name="import", help="Restore cluster state from a snapshot")
 async def import_state(file: Path = typer.Argument(..., help="Snapshot file")) -> None:
     """Read a snapshot and create missing collections/replicas."""
     if not file.exists():

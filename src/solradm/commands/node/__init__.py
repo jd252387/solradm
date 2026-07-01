@@ -5,7 +5,7 @@ from typing import List
 
 import rich
 import typer
-from async_typer import AsyncTyper
+from solradm.async_typer import AsyncTyper
 
 import solradm.api.utils as api_utils
 from solradm.api.models import Collection
@@ -31,7 +31,7 @@ app = AsyncTyper()
 add_verbosity_option(app)
 
 
-@app.async_command(help="Remove cores not belonging to selected collections from nodes")
+@app.command(help="Remove cores not belonging to selected collections from nodes")
 @with_dry_run
 @with_cluster_state(CollectionNameFilter)
 async def drain(

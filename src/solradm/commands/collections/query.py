@@ -16,7 +16,7 @@ from solradm.completion.collections import collection_names
 from solradm.zk.utils import get_overseer_leader
 
 
-@app.async_command(help="Execute a query against a collection")
+@app.command(help="Execute a query against a collection")
 async def query(
     collection: str = typer.Argument(
         ..., help="Collection to query", autocompletion=collection_names

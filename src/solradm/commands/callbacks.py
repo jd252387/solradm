@@ -1,7 +1,7 @@
 from typing import Union
 
 import typer
-from async_typer import AsyncTyper
+from solradm.async_typer import AsyncTyper
 
 import solradm.api.utils as api_utils
 

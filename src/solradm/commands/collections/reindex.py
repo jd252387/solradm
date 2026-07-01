@@ -128,7 +128,7 @@ def _prompt_launch_when_idle() -> None:
         raise typer.Exit(0)
 
 
-@app.async_command(
+@app.command(
     help="Reindex documents from a source collection into a target collection using the dataimport handler"
 )
 @with_cluster_state(skip_fetch_when=lambda kwargs: kwargs.get("source_context") and kwargs.get("target_context"))

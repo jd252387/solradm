@@ -1,11 +1,11 @@
 import logging
 
 import rich
-from async_typer import AsyncTyper
+from solradm.async_typer import AsyncTyper
 from rich.logging import RichHandler
 
 from solradm.api import get_initialized_session
-from solradm.commands import config, collections, backups, auth, node, state
+from solradm.commands import config, collections, backups, auth, node, state, rt
 from solradm.commands import kube
 from solradm.commands.callbacks import add_verbosity_option
 from solradm.commands.status import status as status_cmd
@@ -33,6 +33,7 @@ app.add_typer(auth.app, name="auth", help="Manage Solr authentication")
 app.add_typer(kube.app, name="kube", help="Manage Kubernetes workloads")
 app.add_typer(node.app, name="node", help="Manage Solr nodes")
 app.add_typer(state.app, name="state", help="Export or restore cluster state")
+app.add_typer(rt.app, name="rt", help="Build and ship offline Artifactory dependency bundles")
 app.command()(status_cmd)
 app.command(help="Show the currently active context.")(current)
 app.command()(version)
@@ -41,7 +42,7 @@ def run():
     try:
         import sys
 
-        top_commands = {"current", "coll", "backup", "context", "zoo", "auth", "kube", "node", "state", "status", "version"}
+        top_commands = {"current", "coll", "backup", "context", "zoo", "auth", "kube", "node", "state", "rt", "status", "version"}
         if len(sys.argv) >= 2 and not sys.argv[1].startswith("-") and sys.argv[1] not in top_commands:
             try:
                 config.switch(sys.argv[1])

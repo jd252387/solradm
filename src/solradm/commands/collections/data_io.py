@@ -274,7 +274,7 @@ async def _send_commit_request(base: str, collection: str, soft_commit: bool) ->
         raise SolrException(status or 1, message)
 
 
-@app.async_command(help="Export documents from a collection to a file")
+@app.command(help="Export documents from a collection to a file")
 async def export_documents(
     collection: str = typer.Argument(
         ..., help="Collection to export", autocompletion=collection_names
@@ -391,7 +391,7 @@ async def export_documents(
     rich.print(f"[success]✅  Exported {count} documents to {output} using {selected_qt}")
 
 
-@app.async_command(name="import", help="Import documents from a file into a collection")
+@app.command(name="import", help="Import documents from a file into a collection")
 @with_dry_run
 @with_cluster_state(CollectionNameFilter)
 async def import_documents(

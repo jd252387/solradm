@@ -86,7 +86,7 @@ def _sort_nodes(selected_nodes: Sequence[str], node_order: str) -> list[str]:
     raise typer.BadParameter("--node-order must be either 'alphabetical' or 'numerical'")
 
 
-@app.async_command(
+@app.command(
     help=(
         "Remove replicas for filtered collections.\n\n"
         "Examples:\n"
@@ -192,7 +192,7 @@ async def depopulate(
     )
 
 
-@app.async_command(
+@app.command(
     help=(
         "Add replicas to a collection across selected nodes.\n\n"
         "Examples:\n"
@@ -328,7 +328,7 @@ async def populate(
     )
 
 
-@app.async_command(
+@app.command(
     help=(
         "Create a new collection.\n\n"
         "Examples:\n"
@@ -412,7 +412,7 @@ async def create(
         )
 
 
-@app.async_command(help="Delete collections matching a pattern")
+@app.command(help="Delete collections matching a pattern")
 @with_cluster_state(CollectionNameFilter, NodeNameFilter)
 @with_dry_run
 async def delete(

@@ -82,6 +82,9 @@ def persist(repos_override=None):
     if settings.get("auth"):
         auth = settings.auth
         data["auth"] = auth.to_dict() if hasattr(auth, "to_dict") else auth
+    if settings.get("artifactory"):
+        art = settings.artifactory
+        data["artifactory"] = art.to_dict() if hasattr(art, "to_dict") else art
     if settings.get("config_dir"):
         data["config_dir"] = str(settings.config_dir)
 
@@ -223,6 +226,14 @@ Please use your personal Solr administration token."""
 
     config_dir = setup_config_dir.setup()
     settings.set("config_dir", str(config_dir))
+
+    if Confirm.ask(
+        "[question]Would you like to set up Artifactory access for the [italic]rt[/] commands? (optional)",
+        default=False,
+    ):
+        from solradm.config.interactive import setup_artifactory
+
+        settings.set("artifactory", setup_artifactory.setup())
 
     persist()
 

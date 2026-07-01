@@ -1,7 +1,7 @@
 # Copilot Instructions for solradm
 
 ## Project Overview
-**solradm** is a CLI tool for administering Apache Solr clusters and ZooKeeper ensembles. It uses a **context system** (similar to kubectl) to manage multiple cluster connections. Built with Python 3.13+, Typer/async-typer for CLI, Pydantic for models, and Kazoo for ZooKeeper.
+**solradm** is a CLI tool for administering Apache Solr clusters and ZooKeeper ensembles. It uses a **context system** (similar to kubectl) to manage multiple cluster connections. Built with Python 3.13+, Typer for CLI (with a vendored `AsyncTyper` for async commands), Pydantic for models, and Kazoo for ZooKeeper.
 
 ## Architecture
 
@@ -26,7 +26,7 @@ async def my_command(cluster_state: List[Collection], ...):
 Each filter must implement `Filter` ABC with `init()`, `apply()`, and optional `describe()` methods. See `collection_name_filter.py` for the canonical example.
 
 #### Async Commands
-Use `AsyncTyper` from `async_typer` package. Commands are decorated with `@app.async_command()`. The session must be closed in `main.py`'s finally block.
+Use the vendored `AsyncTyper` from `solradm.async_typer`. Commands are decorated with `@app.command()`, which auto-detects coroutine functions. The session must be closed in `main.py`'s finally block.
 
 #### Task Rendering (`renderers/task_table.py`)
 Bulk async operations use `MetaTask` + `MultiMetaTask` with live Rich tables showing progress. Pattern: create tasks, wrap in `MultiMetaTask`, call `await metatasks.gather_ignoring_errors(renderer=MultiTaskTable(...))`.

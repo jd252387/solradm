@@ -24,7 +24,7 @@ def _leaders_by_shard(shards: List[Shard]) -> dict[str, Replica | None]:
     return {shard.name: next((r for r in shard.replicas if r.leader), None) for shard in shards}
 
 
-@app.async_command(
+@app.command(
     help="Abort a running reindex operation on a collection using the dataimport handler"
 )
 @with_cluster_state()
