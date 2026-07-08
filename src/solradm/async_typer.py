@@ -54,6 +54,17 @@ EventHandler: TypeAlias = Callable[[], Awaitable[None] | None]
 _AnyCallable: TypeAlias = Callable[..., Any]
 
 
+def _is_async(func: _AnyCallable) -> bool:
+    """True if ``func`` is (or wraps, via ``functools.wraps``) a coroutine function.
+
+    Decorators like ``with_dry_run``/``with_cluster_state`` return sync wrappers
+    that pass the inner coroutine straight through. ``iscoroutinefunction`` only
+    inspects the outermost function, so we unwrap the ``__wrapped__`` chain to
+    find the real command body.
+    """
+    return inspect.iscoroutinefunction(inspect.unwrap(func))
+
+
 class AsyncTyper(typer.Typer):
     """A :class:`typer.Typer` subclass that accepts both sync and async callables.
 
@@ -94,7 +105,7 @@ class AsyncTyper(typer.Typer):
         parent_command = super().command(*args, **kwargs)
 
         def decorator(func: _AnyCallable) -> _AnyCallable:
-            if inspect.iscoroutinefunction(func):
+            if _is_async(func):
                 parent_command(self._wrap_async(func))
             else:
                 parent_command(self._wrap_sync(func))
@@ -111,7 +122,7 @@ class AsyncTyper(typer.Typer):
         parent_callback = super().callback(*args, **kwargs)
 
         def decorator(func: _AnyCallable) -> _AnyCallable:
-            if inspect.iscoroutinefunction(func):
+            if _is_async(func):
                 parent_callback(self._wrap_async_bare(func))
             else:
                 parent_callback(func)

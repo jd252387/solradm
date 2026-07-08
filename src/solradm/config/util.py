@@ -59,6 +59,8 @@ def resolve_config_name_to_abs_or_default_directory(path: str) -> Path | None:
     if not any(c in path for c in [".", "/", "\\"]):
         config_dir = get_default_configsets_config_dir()
         path = config_dir / path
+    else:
+        path = Path(path)
 
     if not path.exists():
         rich.print(f"[error]❌ Path {path} does not exist!")
