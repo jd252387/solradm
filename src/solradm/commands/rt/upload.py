@@ -98,9 +98,11 @@ def upload(
         _ART.get("token", ""), "--token",
         help="Artifactory access token (preferred)."),
     user: str = typer.Option(
-        "", "--user", help="Artifactory username (used with --password when no token)."),
+        _ART.get("user", ""), "--user",
+        help="Artifactory username (used with --password when no token)."),
     password: str = typer.Option(
-        "", "--password", help="Artifactory password (used with --user)."),
+        _ART.get("password", ""), "--password",
+        help="Artifactory password (used with --user)."),
     server_id: str = typer.Option(
         "", "--server-id",
         help="Use a preconfigured 'jf' server-id instead of URL/credentials."),
