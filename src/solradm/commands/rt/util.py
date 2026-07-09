@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import urllib.request
 import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 
 import rich
@@ -89,6 +90,16 @@ def read_distribution_url(props_path: Path) -> str:
 
 
 # ── Bundling ─────────────────────────────────────────────────────────────────
+@contextmanager
+def bundle_stage(cfg: RtConfig):
+    """Remove the bundle staging dir on exit — whether the command finished or
+    was aborted — so leftovers from a previous run never leak into the next zip."""
+    try:
+        yield
+    finally:
+        shutil.rmtree(cfg.stage_dir, ignore_errors=True)
+
+
 def make_bundle_zip(cfg: RtConfig) -> None:
     """Zip the staged bundle, with paths relative to stage_dir."""
     items = ["offline-repo", "gradle-dist", "offline.init.gradle.kts", "README-airgap.md"]

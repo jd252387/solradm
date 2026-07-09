@@ -21,6 +21,7 @@ from solradm.commands.rt.config import (
 )
 from solradm.commands.rt.subapp import app
 from solradm.commands.rt.util import (
+    bundle_stage,
     die,
     download,
     human_size,
@@ -134,20 +135,21 @@ machine. Ensure a JDK 25 is present (and discoverable, e.g. via JAVA_HOME or
 
 
 def cmd_download(cfg: RtConfig, skip_tests: bool) -> None:
-    cfg.stage_dir.mkdir(parents=True, exist_ok=True)
-    run_gradle_resolution(cfg, skip_tests)
-    harvest_cache(cfg)
-    fetch_gradle_dist(cfg)
-    shutil.copyfile(
-        RESOURCES_DIR / "offline.init.gradle.kts",
-        cfg.stage_dir / "offline.init.gradle.kts",
-    )
-    write_readme(cfg)
+    with bundle_stage(cfg):
+        cfg.stage_dir.mkdir(parents=True, exist_ok=True)
+        run_gradle_resolution(cfg, skip_tests)
+        harvest_cache(cfg)
+        fetch_gradle_dist(cfg)
+        shutil.copyfile(
+            RESOURCES_DIR / "offline.init.gradle.kts",
+            cfg.stage_dir / "offline.init.gradle.kts",
+        )
+        write_readme(cfg)
 
-    log(f"Zipping bundle -> {cfg.output_zip}")
-    cfg.output_zip.unlink(missing_ok=True)
-    make_bundle_zip(cfg)
-    log(f"Done. Bundle: {cfg.output_zip} ({human_size(cfg.output_zip.stat().st_size)})")
+        log(f"Zipping bundle -> {cfg.output_zip}")
+        cfg.output_zip.unlink(missing_ok=True)
+        make_bundle_zip(cfg)
+        log(f"Done. Bundle: {cfg.output_zip} ({human_size(cfg.output_zip.stat().st_size)})")
 
 
 @app.command(help="Resolve all dependencies of a Gradle project and produce the offline bundle zip.")

@@ -40,45 +40,49 @@ def build_auth(cfg: RtConfig) -> list:
 def cmd_upload(cfg: RtConfig, bundle: str | None) -> None:
     cleanup: Path | None = None
 
-    if bundle and Path(bundle).is_file():
-        workdir = Path(tempfile.mkdtemp())
-        cleanup = workdir
-        log(f"Expanding {bundle} -> {workdir}")
-        with zipfile.ZipFile(bundle) as zf:
-            zf.extractall(workdir)
-    elif bundle and Path(bundle).is_dir():
-        workdir = Path(bundle)
-    elif cfg.stage_dir.is_dir():
-        workdir = cfg.stage_dir
-    else:
-        die(f"Provide a bundle zip or directory (or run from a machine that has {cfg.stage_dir}).")
+    try:
+        if bundle and Path(bundle).is_file():
+            workdir = Path(tempfile.mkdtemp())
+            cleanup = workdir
+            log(f"Expanding {bundle} -> {workdir}")
+            with zipfile.ZipFile(bundle) as zf:
+                zf.extractall(workdir)
+        elif bundle and Path(bundle).is_dir():
+            workdir = Path(bundle)
+        elif cfg.stage_dir.is_dir():
+            workdir = cfg.stage_dir
+        else:
+            die(f"Provide a bundle zip or directory (or run from a machine that has {cfg.stage_dir}).")
 
-    if shutil.which("jf") is None:
-        die("jf (JFrog CLI) not found on PATH.")
-    if not (workdir / "offline-repo").is_dir():
-        die(f"offline-repo/ not found in {workdir}")
+        if shutil.which("jf") is None:
+            die("jf (JFrog CLI) not found on PATH.")
+        if not (workdir / "offline-repo").is_dir():
+            die(f"offline-repo/ not found in {workdir}")
 
-    auth = build_auth(cfg)
+        auth = build_auth(cfg)
 
-    log(f"Uploading Maven artifacts -> {cfg.artifactory_maven_repo}")
-    run(
-        ["jf", "rt", "upload", *auth, "offline-repo/(**)", f"{cfg.artifactory_maven_repo}/{{1}}"],
-        cwd=workdir,
-    )
-
-    dist = workdir / "gradle-dist" / cfg.gradle_dist_file
-    if dist.is_file():
-        log(f"Uploading Gradle distribution -> {cfg.artifactory_generic_repo}")
+        log(f"Uploading Maven artifacts -> {cfg.artifactory_maven_repo}")
         run(
-            ["jf", "rt", "upload", *auth,
-             f"gradle-dist/{cfg.gradle_dist_file}",
-             f"{cfg.artifactory_generic_repo}/gradle/distributions/"],
+            ["jf", "rt", "upload", *auth, "offline-repo/(**)", f"{cfg.artifactory_maven_repo}/{{1}}"],
             cwd=workdir,
         )
 
-    if cleanup is not None:
-        shutil.rmtree(cleanup)
-    log("Upload complete.")
+        dist = workdir / "gradle-dist" / cfg.gradle_dist_file
+        if dist.is_file():
+            log(f"Uploading Gradle distribution -> {cfg.artifactory_generic_repo}")
+            run(
+                ["jf", "rt", "upload", *auth,
+                 f"gradle-dist/{cfg.gradle_dist_file}",
+                 f"{cfg.artifactory_generic_repo}/gradle/distributions/"],
+                cwd=workdir,
+            )
+
+        log("Upload complete.")
+    finally:
+        # Only the temp dir we extracted the zip into is removed — a user-supplied
+        # directory bundle or stage_dir is left untouched.
+        if cleanup is not None:
+            shutil.rmtree(cleanup, ignore_errors=True)
 
 
 @app.command(help="Upload a previously built bundle into Artifactory via the JFrog CLI (jf).")

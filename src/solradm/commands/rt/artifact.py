@@ -13,7 +13,7 @@ from solradm.commands.rt.resolver import (
     prompt_coordinates,
 )
 from solradm.commands.rt.subapp import app
-from solradm.commands.rt.util import die, human_size, log, make_bundle_zip, warn
+from solradm.commands.rt.util import bundle_stage, die, human_size, log, make_bundle_zip, warn
 
 
 def cmd_artifact(cfg: RtConfig, coords: list[str], repo_url: str,
@@ -22,27 +22,28 @@ def cmd_artifact(cfg: RtConfig, coords: list[str], repo_url: str,
     if not coords:
         die("No coordinates provided.")
 
-    cfg.offline_repo_dir.mkdir(parents=True, exist_ok=True)
-    resolver = TransitiveResolver(cfg, repo_url, with_sources)
-    roots = [parse_coordinate(spec) for spec in coords]
-    if transitive:
-        log("Resolving transitive dependencies (compile + runtime scopes)…")
-    resolver.resolve_and_fetch(roots, transitive)
-    log(f"Staged {resolver.file_count} files into {cfg.offline_repo_dir}")
+    with bundle_stage(cfg):
+        cfg.offline_repo_dir.mkdir(parents=True, exist_ok=True)
+        resolver = TransitiveResolver(cfg, repo_url, with_sources)
+        roots = [parse_coordinate(spec) for spec in coords]
+        if transitive:
+            log("Resolving transitive dependencies (compile + runtime scopes)…")
+        resolver.resolve_and_fetch(roots, transitive)
+        log(f"Staged {resolver.file_count} files into {cfg.offline_repo_dir}")
 
-    if resolver.warnings:
-        warn(f"{len(resolver.warnings)} resolution warning(s):")
-        for w in resolver.warnings:
-            warn(f"  {w}")
-    if resolver.fetch_failures:
-        warn(f"{len(resolver.fetch_failures)} artifact(s) could not be downloaded:")
-        for f in resolver.fetch_failures:
-            warn(f"  {f}")
+        if resolver.warnings:
+            warn(f"{len(resolver.warnings)} resolution warning(s):")
+            for w in resolver.warnings:
+                warn(f"  {w}")
+        if resolver.fetch_failures:
+            warn(f"{len(resolver.fetch_failures)} artifact(s) could not be downloaded:")
+            for f in resolver.fetch_failures:
+                warn(f"  {f}")
 
-    log(f"Zipping bundle -> {cfg.output_zip}")
-    cfg.output_zip.unlink(missing_ok=True)
-    make_bundle_zip(cfg)
-    log(f"Done. Bundle: {cfg.output_zip} ({human_size(cfg.output_zip.stat().st_size)})")
+        log(f"Zipping bundle -> {cfg.output_zip}")
+        cfg.output_zip.unlink(missing_ok=True)
+        make_bundle_zip(cfg)
+        log(f"Done. Bundle: {cfg.output_zip} ({human_size(cfg.output_zip.stat().st_size)})")
 
 
 @app.command(help="Download Maven artifacts by Gradle coordinate (no Gradle project needed), "
