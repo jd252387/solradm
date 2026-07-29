@@ -37,6 +37,23 @@ def get_collections() -> List[Collection]:
     return collections
 
 
+def get_aliases() -> Dict[str, List[str]]:
+    """Map each collection name to the aliases pointing at it.
+
+    Solr stores /aliases.json as alias -> comma-separated collections; invert it.
+    """
+    try:
+        data, stat = get_client().get("/aliases.json")
+    except NoNodeError:
+        return {}
+
+    aliases: Dict[str, List[str]] = {}
+    for alias, targets in json.loads(data.decode("utf-8")).get("collection", {}).items():
+        for target in targets.split(","):
+            aliases.setdefault(target.strip(), []).append(alias)
+    return aliases
+
+
 def get_nodes_by_role(role: Literal["coordinator", "data", "overseer"]) -> Dict[str, str]:
     states = get_client().get_children(f"/node_roles/{role}")
     state_to_node = {}

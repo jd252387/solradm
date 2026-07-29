@@ -114,6 +114,10 @@ Create an empty collection.
 Delete all collections matching a regular expression. Automatically removes replicas by calling `depopulate` first.
 - `<pattern>` – regex against collection names.
 
+### `list [--collection <regex>]`
+Print a table of the collections in the current context: collection name, the aliases pointing at it and the name of its configuration in ZooKeeper. Read‑only; unlike most `coll` commands it does not prompt when no filter is given.
+- `--collection, -c` – regular expression limiting the table to matching collection names.
+
 ### `reload [--coordinators/--no-coordinators]`
 Reload cores for filtered replicas and optionally coordinator nodes.
 - `--coordinators` – reload only coordinator nodes.

@@ -74,9 +74,11 @@ def persist(repos_override=None):
         with open(config_path) as f:
             data = yaml.safe_load(f) or {}
 
+    # switch()/connect() assign a plain dict, which has no to_dict().
+    current = settings.contexts.current
     data["contexts"] = {
         "available": local_contexts,
-        "current": settings.contexts.current.to_dict(),
+        "current": current.to_dict() if hasattr(current, "to_dict") else dict(current),
     }
 
     if settings.get("auth"):

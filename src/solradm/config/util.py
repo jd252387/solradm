@@ -5,6 +5,7 @@ import typer
 import yaml
 
 from solradm.config.context import Context
+from solradm.exceptions.adm_exception import AdmException
 
 
 def get_current_context() -> Context:
@@ -13,7 +14,13 @@ def get_current_context() -> Context:
     current = settings.contexts.current
 
     if "name" in current:
-        return get_context(current["name"])
+        context = get_context(current["name"])
+        if context is None:
+            raise AdmException(
+                f'Current context "{current["name"]}" does not exist. '
+                f"Run 'sa context list' and 'sa <name>' to switch to a valid one."
+            )
+        return context
     else:
         return Context(
             None,

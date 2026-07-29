@@ -1,4 +1,5 @@
 import asyncio
+import re
 from pathlib import PurePosixPath
 from typing import Collection, List
 
@@ -18,6 +19,7 @@ from solradm.completion.backups import backup_paths
 from solradm.config import settings
 from solradm.config.util import get_current_context
 from solradm.kube.utils import (
+    find_pods,
     find_pods_by_node_name,
     get_kube_context_info,
     run_command_in_pod,
@@ -116,10 +118,14 @@ async def restore_status(cluster_state: List[Collection]):
 
     replicas = validate_num_replicas(get_replicas(cluster_state))
 
+    # Resolve the overseer once; every status request still goes through it, but
+    # looking it up per replica costs two blocking ZooKeeper round-trips each.
+    overseer = get_overseer_leader()
+
     status_tasks = [
         asyncio.create_task(
             send_request(
-                get_overseer_leader(),
+                overseer,
                 f"/{replica.core}/replication",
                 params={"command": "restorestatus"},
             )
@@ -153,60 +159,78 @@ async def restore_status(cluster_state: List[Collection]):
     except Exception as exc:  # pragma: no cover - defensive logging
         rich.print(f"[warning]⚠️  Failed to load configured kubecontext: {exc}")
 
-    restore_rows = []
-    for replica, payload in restoring_replicas:
-        pod_name = None
-        latest_dir = None
-        latest_size: int | None = None
-        if kube_for_inspection:
-            try:
-                pods = find_pods_by_node_name(kube_for_inspection, replica.node_name)
-            except Exception as exc:  # pragma: no cover - defensive logging
-                rich.print(
-                    f"[warning]⚠️  Failed to resolve pod for node {replica.node_name}: {exc}"
-                )
-                pods = []
+    # List the namespace's pods once and resolve every node locally; asking the
+    # Kubernetes API per replica meant a full unfiltered pod listing per core.
+    node_to_pod: dict[str, str | None] = {}
+    if kube_for_inspection:
+        try:
+            all_pods = find_pods(kube_for_inspection, re.compile(""))
+        except Exception as exc:  # pragma: no cover - defensive logging
+            rich.print(f"[warning]⚠️  Failed to list pods: {exc}")
+            all_pods = []
 
-            if not pods:
+        for replica, _ in restoring_replicas:
+            if replica.node_name in node_to_pod:
+                continue
+
+            # Mirrors find_pods_by_node_name's node-name -> pod-name derivation
+            # (kube/utils.py). The fragment holds no regex metacharacters, so a
+            # substring test matches what its re.search would have matched.
+            fragment = (
+                replica.node_name.partition(".")[0]
+                .partition(kube_for_inspection.namespace)[2][1:]
+            )
+            pod = next((p for p in all_pods if fragment in p.metadata.name), None)
+            if pod is None:
                 rich.print(
                     f"[warning]⚠️  No pod found for node {replica.node_name}; unable to inspect restore directory"
                 )
-            else:
-                pod_name = pods[0].metadata.name
-                command = (
-                    f"latest=$(ls -1dt /var/solr/data/{replica.core}/data/restore* 2>/dev/null | head -n 1); "
-                    "if [ -z \"$latest\" ]; then echo 'MISSING'; "
-                    "else size=$(du -sb \"$latest\" 2>/dev/null | awk '{print $1}'); "
-                    "if [ -z \"$size\" ]; then size=0; fi; echo \"$size $latest\"; fi"
-                )
-                try:
-                    output = await asyncio.to_thread(
-                        run_command_in_pod, kube_for_inspection, pod_name, command
-                    )
-                except Exception as exc:  # pragma: no cover - defensive logging
-                    rich.print(
-                        f"[warning]⚠️  Failed to inspect restore directory for core {replica.core} on {pod_name}: {exc}"
-                    )
-                else:
-                    parsed = output.strip()
-                    if parsed and parsed != "MISSING":
-                        parts = parsed.split(maxsplit=1)
-                        size_str = parts[0]
-                        if size_str.isdigit():
-                            latest_size = int(size_str)
-                            latest_dir = parts[1] if len(parts) > 1 else None
-                        else:
-                            latest_dir = parts[-1]
+            node_to_pod[replica.node_name] = pod.metadata.name if pod else None
 
-        restore_rows.append(
-            {
-                "replica": replica,
-                "payload": payload,
-                "pod_name": pod_name,
-                "latest_dir": latest_dir,
-                "latest_size": latest_size,
-            }
+    async def _inspect(replica, payload) -> dict:
+        """Measure one core's newest restore directory. Single attempt, no retry."""
+        pod_name = node_to_pod.get(replica.node_name)
+        row = {
+            "replica": replica,
+            "payload": payload,
+            "pod_name": pod_name,
+            "latest_dir": None,
+            "latest_size": None,
+        }
+        if not pod_name:
+            return row
+
+        command = (
+            f"latest=$(ls -1dt /var/solr/data/{replica.core}/data/restore* 2>/dev/null | head -n 1); "
+            "if [ -z \"$latest\" ]; then echo 'MISSING'; "
+            "else size=$(du -sb \"$latest\" 2>/dev/null | awk '{print $1}'); "
+            "if [ -z \"$size\" ]; then size=0; fi; echo \"$size $latest\"; fi"
         )
+        try:
+            output = await asyncio.to_thread(
+                run_command_in_pod, kube_for_inspection, pod_name, command
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging
+            rich.print(
+                f"[warning]⚠️  Failed to inspect restore directory for core {replica.core} on {pod_name}: {exc}"
+            )
+            return row
+
+        parsed = output.strip()
+        if parsed and parsed != "MISSING":
+            parts = parsed.split(maxsplit=1)
+            size_str = parts[0]
+            if size_str.isdigit():
+                row["latest_size"] = int(size_str)
+                row["latest_dir"] = parts[1] if len(parts) > 1 else None
+            else:
+                row["latest_dir"] = parts[-1]
+
+        return row
+
+    restore_rows = list(
+        await asyncio.gather(*(_inspect(replica, payload) for replica, payload in restoring_replicas))
+    )
 
     restore_rows.sort(
         key=lambda entry: entry["latest_size"] if entry["latest_size"] is not None else -1,
