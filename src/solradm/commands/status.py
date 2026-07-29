@@ -1,3 +1,4 @@
+import re
 from typing import List
 
 import rich
@@ -7,6 +8,7 @@ from rich.table import Table
 from solradm.api.models import Collection
 from solradm.api.utils import get_replicas
 from solradm.commands.filters.utils import with_cluster_state
+from solradm.completion.collections import collection_names
 
 # Mapping of replica states to severity for sorting
 SEVERITY_ORDER = {
@@ -38,6 +40,13 @@ def status(
             "-s",
             help="Only show replicas with these severities",
         ),
+        collection: str | None = typer.Option(
+            None,
+            "--collection",
+            "-c",
+            help="Regex pattern to only show collections whose name matches",
+            autocompletion=collection_names,
+        ),
         show_max: int = typer.Option(20, "--show", help="Show this amount of top rows")
 ):
     """Display status table for all replicas across collections."""
@@ -45,6 +54,17 @@ def status(
     if not cluster_state:
         rich.print("[warning]ℹ️  No collections found in the cluster.")
         return
+
+    if collection:
+        try:
+            pattern = re.compile(collection)
+        except re.error as e:
+            raise typer.BadParameter(f"Invalid regex pattern '{collection}': {e}")
+        cluster_state = [c for c in cluster_state if pattern.search(c.name)]
+
+        if not cluster_state:
+            rich.print(f"[warning]ℹ️  No collections matched the pattern '{collection}'.")
+            return
 
     replicas = get_replicas(cluster_state)
 

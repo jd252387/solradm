@@ -1,6 +1,7 @@
 import logging
 
 import rich
+import typer
 from solradm.async_typer import AsyncTyper
 from rich.logging import RichHandler
 
@@ -46,7 +47,7 @@ def run():
         if len(sys.argv) >= 2 and not sys.argv[1].startswith("-") and sys.argv[1] not in top_commands:
             try:
                 config.switch(sys.argv[1])
-            except Exception as e:
+            except typer.BadParameter:
                 rich.print(f"Context [magenta]{sys.argv[1]}[/] doesn't exist!")
             return
         app()
