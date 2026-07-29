@@ -57,6 +57,7 @@ sa
 ├── coll                    commands/collections/
 │   ├── create              lifecycle.py
 │   ├── delete              lifecycle.py
+│   ├── list                list_collections.py — name, aliases and configset per collection
 │   ├── populate            lifecycle.py
 │   ├── depopulate          lifecycle.py
 │   ├── reload              maintenance.py
