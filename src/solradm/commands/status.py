@@ -7,14 +7,15 @@ from rich.table import Table
 
 from solradm.api.models import Collection
 from solradm.api.utils import get_replicas
+from solradm.commands.filters.replica_state_filter import ReplicaStateFilter
 from solradm.commands.filters.utils import with_cluster_state
 from solradm.completion.collections import collection_names
 
-# Mapping of replica states to severity for sorting
-SEVERITY_ORDER = {
+# Worst-first ordering of replica states for the table
+STATE_ORDER = {
     "gone": 0,
     "down": 1,
-    "recovery": 2,
+    "recovering": 2,
     "recovery_failed": 3,
     "inactive": 4,
     "active": 5,
@@ -23,7 +24,7 @@ SEVERITY_ORDER = {
 # Colors for states
 STATE_COLORS = {
     "active": "green",
-    "recovery": "yellow",
+    "recovering": "yellow",
     "down": "red",
     "gone": "red",
     "recovery_failed": "magenta",
@@ -31,15 +32,9 @@ STATE_COLORS = {
 }
 
 
-@with_cluster_state(allow_empty=True)
+@with_cluster_state(ReplicaStateFilter, allow_empty=True)
 def status(
         cluster_state: List[Collection],
-        severity: List[str] | None = typer.Option(
-            None,
-            "--severity",
-            "-s",
-            help="Only show replicas with these severities",
-        ),
         collection: str | None = typer.Option(
             None,
             "--collection",
@@ -49,7 +44,16 @@ def status(
         ),
         show_max: int = typer.Option(20, "--show", help="Show this amount of top rows")
 ):
-    """Display status table for all replicas across collections."""
+    """Display status table for all replicas across collections.
+
+    Examples:
+
+      solradm status --replica-state down --replica-state recovering
+
+      solradm status --exclude-replica-state active --show 50
+
+      solradm status --collection '^logs-' --replica-state recovery_failed
+    """
 
     if not cluster_state:
         rich.print("[warning]ℹ️  No collections found in the cluster.")
@@ -67,12 +71,7 @@ def status(
             return
 
     replicas = get_replicas(cluster_state)
-
-    if severity:
-        allowed = {s.lower() for s in severity}
-        replicas = [r for r in replicas if r.state.lower() in allowed]
-
-    replicas.sort(key=lambda r: SEVERITY_ORDER.get(r.state.lower(), len(SEVERITY_ORDER)))
+    replicas.sort(key=lambda r: STATE_ORDER.get(r.state.lower(), len(STATE_ORDER)))
 
     table = Table(title="Replica Status", header_style="bold magenta")
     table.add_column("Collection", style="cyan")

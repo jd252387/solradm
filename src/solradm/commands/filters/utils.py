@@ -110,7 +110,8 @@ def with_cluster_state(
                         filter_instance = filter_class(**filter_params)
                         filter_instance.init()
 
-                        if any(value is not None for value in filter_params.values()):
+                        # click hands back () for a repeatable option that wasn't passed
+                        if any(value not in (None, (), []) for value in filter_params.values()):
                             filter_instances.append(filter_instance)
 
                     for filter_instance in filter_instances:

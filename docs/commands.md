@@ -94,6 +94,12 @@ Interact with the Solr Collections API.
 
 Most collection commands accept a rich set of filtering options provided by the CLI's filter system: `--collection`, `--shard`, `--replica-type`, `--replica-state` and `--replica-position` can be used to narrow down the affected replicas. The examples below focus on the specific options for each sub‑command.
 
+`--replica-state` and `--exclude-replica-state` take one of `active`, `down`, `recovering`, `recovery_failed`, and may be repeated to match several states:
+
+```bash
+solradm coll depopulate --collection '^logs-' --replica-state down --replica-state recovery_failed --dry
+```
+
 ### `depopulate`
 Remove replicas from the selected collections.
 
@@ -215,8 +221,17 @@ Read a snapshot and create any missing collections or replicas.
 Summarize replica health across the cluster.
 
 `status` accepts optional filters and output controls.
-- `--severity, -s <state>` – only display replicas whose state matches any of the provided severities.
+- `--collection, -c <regex>` – only display collections whose name matches.
+- `--replica-state <state>` / `--exclude-replica-state <state>` – only display (or hide) replicas in the given state: `active`, `down`, `recovering`, `recovery_failed`. Repeat the option to match several states.
 - `--show <n>` – maximum number of rows to display (default 20).
+
+```bash
+# every replica that is not healthy
+solradm status --replica-state down --replica-state recovering --replica-state recovery_failed
+
+# same thing, said the other way round
+solradm status --exclude-replica-state active --show 50
+```
 
 ## `zoo`
 Work directly with ZooKeeper.

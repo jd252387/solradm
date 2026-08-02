@@ -27,7 +27,7 @@ def _load_status(monkeypatch, tmp_path, collections):
     return importlib.import_module("solradm.commands.status")
 
 
-def _collection(name: str):
+def _collection(name: str, state: str = "active"):
     from solradm.api.models import Collection, Replica, Router, Shard
 
     return Collection(
@@ -48,7 +48,7 @@ def _collection(name: str):
                         core=f"{name}_shard1_replica_n1",
                         node_name="solr01:8983_solr",
                         type="NRT",
-                        state="active",
+                        state=state,
                         leader=False,
                         force_set_state=False,
                         base_url="http://solr01:8983/solr",
@@ -66,14 +66,12 @@ def _invoke(status_module, args):
     return CliRunner().invoke(app, args)
 
 
-def test_status_handles_empty_cluster(monkeypatch, capsys, tmp_path):
+def test_status_handles_empty_cluster(monkeypatch, tmp_path):
     status_module = _load_status(monkeypatch, tmp_path, [])
 
-    status_module.status(severity=None, show_max=20)
+    result = _invoke(status_module, [])
 
-    out = capsys.readouterr().out
-
-    assert "No collections found in the cluster." in out
+    assert "No collections found in the cluster." in result.output
 
 
 def test_status_without_collection_filter_shows_every_collection(monkeypatch, tmp_path):
@@ -107,6 +105,44 @@ def test_status_collection_filter_reports_no_match(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     assert "No collections matched the pattern" in result.output
+
+
+def test_status_replica_state_filter_narrows_by_state(monkeypatch, tmp_path):
+    status_module = _load_status(
+        monkeypatch, tmp_path, [_collection("logs", "down"), _collection("metrics")]
+    )
+
+    result = _invoke(status_module, ["--replica-state", "down"])
+
+    assert result.exit_code == 0
+    assert "logs" in result.output
+    assert "metrics" not in result.output
+
+
+def test_status_replica_state_filter_accepts_several_states(monkeypatch, tmp_path):
+    status_module = _load_status(
+        monkeypatch,
+        tmp_path,
+        [_collection("logs", "down"), _collection("metrics", "recovering"), _collection("events")],
+    )
+
+    result = _invoke(
+        status_module, ["--replica-state", "down", "--replica-state", "recovering"]
+    )
+
+    assert result.exit_code == 0
+    assert "logs" in result.output
+    assert "metrics" in result.output
+    assert "events" not in result.output
+
+
+def test_status_replica_state_filter_rejects_unknown_state(monkeypatch, tmp_path):
+    status_module = _load_status(monkeypatch, tmp_path, [_collection("logs")])
+
+    result = _invoke(status_module, ["--replica-state", "severe"])
+
+    assert result.exit_code != 0
+    assert "Replica state must be one of" in result.output
 
 
 def test_status_collection_filter_rejects_invalid_regex(monkeypatch, tmp_path):

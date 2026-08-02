@@ -5,57 +5,60 @@ import typer
 
 from solradm.api.models import Collection
 from solradm.commands.filters.filter import Filter
-from solradm.completion.static import replica_states
+from solradm.completion.static import REPLICA_STATES, replica_states
+
+def _quote(states: List[str]) -> str:
+    return ", ".join(f"'{state}'" for state in states)
+
+
+_STATES_HELP = _quote(REPLICA_STATES)
 
 
 @dataclass
 class ReplicaStateFilter(Filter):
     """Filter replicas by their state."""
-    replica_state: Optional[str] = field(
+    replica_state: Optional[List[str]] = field(
         default=None,
         metadata={
             "typer_option": typer.Option(
                 None,
                 "--replica-state",
-                help="Replica state to include: 'active', 'down', 'recovering', 'recovery_failed'",
+                help=f"Replica state to include, repeat for several: {_STATES_HELP}",
                 autocompletion=replica_states,
             )
         },
     )
-    exclude_replica_state: Optional[str] = field(
+    exclude_replica_state: Optional[List[str]] = field(
         default=None,
         metadata={
             "typer_option": typer.Option(
                 None,
                 "--exclude-replica-state",
-                help="Replica state to exclude: 'active', 'down', 'recovering', 'recovery_failed'",
+                help=f"Replica state to exclude, repeat for several: {_STATES_HELP}",
                 autocompletion=replica_states,
             )
         },
     )
 
     def init(self):
-        valid = {"active", "down", "recovering", "recovery_failed", None}
-        if self.replica_state not in valid or self.exclude_replica_state not in valid:
+        given = set(self.replica_state or []) | set(self.exclude_replica_state or [])
+        invalid = sorted(given - set(REPLICA_STATES))
+        if invalid:
             raise typer.BadParameter(
-                "Replica state must be one of 'active', 'down', 'recovering', 'recovery_failed'"
+                f"Replica state must be one of {_STATES_HELP}, got {', '.join(invalid)}"
             )
 
     def apply(self, cluster_state: List[Collection]) -> List[Collection]:
+        include = set(self.replica_state or [])
+        exclude = set(self.exclude_replica_state or [])
         filtered_collections = []
         for collection in cluster_state:
             new_shards = []
             for shard in collection.shards:
                 new_replicas = []
                 for replica in shard.replicas:
-                    match_include = (
-                        replica.state == self.replica_state if self.replica_state else True
-                    )
-                    match_exclude = (
-                        replica.state == self.exclude_replica_state
-                        if self.exclude_replica_state
-                        else False
-                    )
+                    match_include = replica.state in include if include else True
+                    match_exclude = replica.state in exclude
                     if match_include and not match_exclude:
                         new_replicas.append(replica)
                 if new_replicas:
@@ -70,10 +73,10 @@ class ReplicaStateFilter(Filter):
         descriptions: List[str] = []
         if self.replica_state:
             descriptions.append(
-                f"Include replicas whose state is '{self.replica_state}'"
+                f"Include replicas whose state is one of {_quote(self.replica_state)}"
             )
         if self.exclude_replica_state:
             descriptions.append(
-                f"Exclude replicas whose state is '{self.exclude_replica_state}'"
+                f"Exclude replicas whose state is one of {_quote(self.exclude_replica_state)}"
             )
         return descriptions
