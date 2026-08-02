@@ -67,3 +67,10 @@ def test_get_aliases_inverts_zk_payload(monkeypatch):
     monkeypatch.setattr(state, "get_client", lambda: type("_ZK", (), {"get": lambda self, p: (payload, None)})())
 
     assert state.get_aliases() == {"a": ["read", "write"], "b": ["read"]}
+
+
+def test_get_aliases_handles_empty_znode(monkeypatch):
+    # A cluster that has never had an alias: the znode exists, but with no data.
+    monkeypatch.setattr(state, "get_client", lambda: type("_ZK", (), {"get": lambda self, p: (None, None)})())
+
+    assert state.get_aliases() == {}

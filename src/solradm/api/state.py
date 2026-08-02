@@ -47,6 +47,11 @@ def get_aliases() -> Dict[str, List[str]]:
     except NoNodeError:
         return {}
 
+    # Solr creates /aliases.json empty and only writes to it once an alias exists,
+    # so on a cluster with no aliases the znode is present but kazoo returns None.
+    if not data:
+        return {}
+
     aliases: Dict[str, List[str]] = {}
     for alias, targets in json.loads(data.decode("utf-8")).get("collection", {}).items():
         for target in targets.split(","):
