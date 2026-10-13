@@ -1,0 +1,20 @@
+# Apply after kind-fixtures.yaml — these need the Route CRD it installs.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: solr-ui
+  namespace: solr
+  labels: {app: solr}
+spec:
+  host: solr.apps.example.com
+  to: {name: solr-external}
+  alternateBackends: [{name: solr-canary}]
+  port: {targetPort: 8983}
+  tls: {termination: edge}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: minimal
+  namespace: solr
+spec: {}
