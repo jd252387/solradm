@@ -1,4 +1,5 @@
-# Apply after kind-fixtures.yaml — these need the Route CRD it installs.
+# Custom resources. Apply after kind-fixtures.yaml: a CR cannot be created in
+# the same pass that registers its CRD, so these need a second apply.
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
@@ -18,3 +19,11 @@ metadata:
   name: minimal
   namespace: solr
 spec: {}
+---
+apiVersion: solr.apache.org/v1beta1
+kind: SolrCloud
+metadata:
+  name: solr-cloud
+  namespace: solr
+spec:
+  replicas: 2

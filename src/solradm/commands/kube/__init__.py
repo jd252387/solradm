@@ -393,9 +393,28 @@ def _container_cells(containers: list) -> tuple[str, str, str, str]:
     return "\n".join(names), "\n".join(images), "\n".join(cpu), "\n".join(memory)
 
 
+def _owner_cell(owner_references) -> str:
+    """Render ownerReferences as Kind/name, one line each, controller first.
+
+    This is what names the operator CR behind a resource -- a Solr statefulset
+    managed by the Solr operator is owned by SolrCloud/<name>. Accepts both
+    client models and the plain dicts CustomObjectsApi returns.
+    """
+    refs = []
+    for r in owner_references or []:
+        if isinstance(r, dict):
+            kind, name, controller = r.get("kind"), r.get("name"), r.get("controller")
+        else:
+            kind, name, controller = r.kind, r.name, r.controller
+        refs.append((not controller, f"{kind}/{name}"))
+
+    return "\n".join(text for _, text in sorted(refs)) or "-"
+
+
 def _table_workloads(kube: KubeContextInfo, kind: str, list_fn, pattern, labels: list[str]) -> Table:
     table = Table(title=f"{kind} ({kube.namespace})", header_style="bold magenta")
     table.add_column("Name", style="cyan")
+    table.add_column("Owner")
     table.add_column("Pods", justify="right")
     table.add_column("Container")
     table.add_column("Image")
@@ -405,7 +424,8 @@ def _table_workloads(kube: KubeContextInfo, kind: str, list_fn, pattern, labels:
     for w in _fetch(list_fn, kube.namespace, pattern, labels):
         containers, images, cpu, memory = _container_cells(w.spec.template.spec.containers)
         ready = (w.status.ready_replicas or 0) if w.status else 0
-        table.add_row(w.metadata.name, f"{ready}/{w.spec.replicas}", containers, images, cpu, memory)
+        table.add_row(w.metadata.name, _owner_cell(w.metadata.owner_references),
+                      f"{ready}/{w.spec.replicas}", containers, images, cpu, memory)
 
     return table
 
@@ -413,6 +433,7 @@ def _table_workloads(kube: KubeContextInfo, kind: str, list_fn, pattern, labels:
 def _table_pods(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
     table = Table(title=f"Pods ({kube.namespace})", header_style="bold magenta")
     table.add_column("Name", style="cyan")
+    table.add_column("Owner")
     table.add_column("Node")
     table.add_column("Status")
     table.add_column("Ready", justify="right")
@@ -428,6 +449,7 @@ def _table_pods(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
         containers, images, cpu, memory = _container_cells(p.spec.containers)
         table.add_row(
             p.metadata.name,
+            _owner_cell(p.metadata.owner_references),
             p.spec.node_name or "-",
             (p.status.phase if p.status else None) or "-",
             f"{sum(1 for s in statuses if s.ready)}/{len(p.spec.containers or [])}",
@@ -444,6 +466,7 @@ def _table_pods(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
 def _table_services(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
     table = Table(title=f"Services ({kube.namespace})", header_style="bold magenta")
     table.add_column("Name", style="cyan")
+    table.add_column("Owner")
     table.add_column("Type")
     table.add_column("Cluster IP")
     table.add_column("Ports")
@@ -453,7 +476,8 @@ def _table_services(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
     for s in _fetch(list_fn, kube.namespace, pattern, labels):
         ports = ", ".join(f"{p.port}:{p.target_port}/{p.protocol}" for p in s.spec.ports or [])
         selector = ", ".join(f"{k}={v}" for k, v in (s.spec.selector or {}).items())
-        table.add_row(s.metadata.name, s.spec.type or "-", s.spec.cluster_ip or "-", ports or "-", selector or "-")
+        table.add_row(s.metadata.name, _owner_cell(s.metadata.owner_references), s.spec.type or "-",
+                      s.spec.cluster_ip or "-", ports or "-", selector or "-")
 
     return table
 
@@ -461,6 +485,7 @@ def _table_services(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
 def _table_pvc(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
     table = Table(title=f"PersistentVolumeClaims ({kube.namespace})", header_style="bold magenta")
     table.add_column("Name", style="cyan")
+    table.add_column("Owner")
     table.add_column("Status")
     table.add_column("Capacity", justify="right")
     table.add_column("Storage Class")
@@ -471,6 +496,7 @@ def _table_pvc(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
     for c in _fetch(list_fn, kube.namespace, pattern, labels):
         table.add_row(
             c.metadata.name,
+            _owner_cell(c.metadata.owner_references),
             (c.status.phase if c.status else None) or "-",
             ((c.status.capacity if c.status else None) or {}).get("storage", "-"),
             c.spec.storage_class_name or "-",
@@ -509,6 +535,7 @@ def _table_routes(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
 
     table = Table(title=f"Routes ({kube.namespace})", header_style="bold magenta")
     table.add_column("Name", style="cyan")
+    table.add_column("Owner")
     table.add_column("Host")
     table.add_column("Service")
     table.add_column("Target Port")
@@ -521,6 +548,7 @@ def _table_routes(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
         ]
         table.add_row(
             r["metadata"]["name"],
+            _owner_cell(r["metadata"].get("ownerReferences")),
             spec.get("host") or "-",
             ", ".join(b for b in backends if b) or "-",
             str((spec.get("port") or {}).get("targetPort", "-")),

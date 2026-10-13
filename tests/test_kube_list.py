@@ -25,9 +25,13 @@ def _container(name, image, requests=None, limits=None, resources=True):
     return SimpleNamespace(name=name, image=image, resources=resources)
 
 
-def _statefulset(name, containers, ready=3, replicas=3):
+def _owner_ref(kind, name, controller=True):
+    return SimpleNamespace(kind=kind, name=name, controller=controller)
+
+
+def _statefulset(name, containers, ready=3, replicas=3, owners=None):
     return SimpleNamespace(
-        metadata=SimpleNamespace(name=name),
+        metadata=SimpleNamespace(name=name, owner_references=owners),
         spec=SimpleNamespace(replicas=replicas, template=SimpleNamespace(spec=SimpleNamespace(containers=containers))),
         status=SimpleNamespace(ready_replicas=ready),
     )
@@ -76,8 +80,8 @@ def test_multi_container_cells_are_newline_joined(monkeypatch, tmp_path):
     result = CliRunner().invoke(kube_module.app, ["list", "statefulsets"])
     assert result.exit_code == 0, result.output
 
-    name, pods, containers, images, cpu, memory = tables[0].rows[0]
-    assert (name, pods) == ("solr-cloud", "3/3")
+    name, owner, pods, containers, images, cpu, memory = tables[0].rows[0]
+    assert (name, owner, pods) == ("solr-cloud", "-", "3/3")
     assert containers == "solrcloud\nexporter"
     assert images == "solr:9.9\nexporter:1.4"
     assert cpu == "1/2\n-/-"
@@ -130,3 +134,30 @@ def test_empty_result_prints_notice_and_no_table(monkeypatch, tmp_path):
     assert result.exit_code == 0, result.output
     assert tables[0].rows == []
     assert "No statefulsets found" in result.output
+
+
+def test_owner_column_shows_controller_first(monkeypatch, tmp_path):
+    """An operator-managed statefulset should name the CR that owns it.
+
+    Mirrors the OpenShift case: a SolrCloud CR manages the Solr statefulset.
+    A non-controller owner is still listed, but after the controller.
+    """
+    kube_module = _reload_kube(monkeypatch, tmp_path)
+
+    items = [
+        _statefulset("solr-cloud", [_container("solrcloud", "solr:9.9")],
+                     owners=[_owner_ref("SolrCloud", "solr-cloud")]),
+        _statefulset("shared", [_container("c", "i")],
+                     owners=[_owner_ref("SolrCloud", "cr", controller=False),
+                             _owner_ref("StatefulSet", "owner")]),
+        _statefulset("orphan", [_container("c", "i")]),
+    ]
+    tables = _patch(monkeypatch, kube_module, lambda _ns, **_kw: SimpleNamespace(items=items))
+
+    result = CliRunner().invoke(kube_module.app, ["list", "statefulsets"])
+    assert result.exit_code == 0, result.output
+
+    owners = {row[0]: row[1] for row in tables[0].rows}
+    assert owners["solr-cloud"] == "SolrCloud/solr-cloud"
+    assert owners["shared"] == "StatefulSet/owner\nSolrCloud/cr"
+    assert owners["orphan"] == "-"

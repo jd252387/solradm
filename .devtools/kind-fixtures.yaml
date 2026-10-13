@@ -147,3 +147,29 @@ spec:
                   type: object
                   properties:
                     termination: {type: string}
+---
+# Minimal SolrCloud CRD, so a statefulset can carry a realistic ownerReference
+# the way the Solr operator sets one on OpenShift. The CR instance lives in
+# kind-custom-resources.yaml (a CR cannot be applied in the same pass that
+# registers its CRD), and wiring the reference needs the CR's real uid -- see
+# .devtools/README.md.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: solrclouds.solr.apache.org
+spec:
+  group: solr.apache.org
+  scope: Namespaced
+  names: {plural: solrclouds, singular: solrcloud, kind: SolrCloud}
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                replicas: {type: integer}

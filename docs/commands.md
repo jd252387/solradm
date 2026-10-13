@@ -190,10 +190,15 @@ List resources of the given type in the namespace of the current context.
 - `--label, -l <selector>` – Kubernetes label selector. Can be specified multiple times; matches are unioned.
 - Both filters are optional and may be combined.
 
-Columns depend on the type. Workloads (`deployments`, `statefulsets`) show name, ready/desired pods, and
-per-container name, image and CPU/memory requests/limits; `pods` adds node, phase, ready containers and restarts;
-`services` shows type, cluster IP, ports and selector; `pvc` shows status, capacity, storage class, volume and
-access modes; `routes` shows host, backing service and TLS termination (OpenShift clusters only). Workloads and
+Every type shows an `Owner` column, rendered as `Kind/name` from the resource's `ownerReferences`. This names
+the operator custom resource behind a resource — a Solr statefulset managed by the Solr operator shows
+`SolrCloud/<name>`, and its pods show `StatefulSet/<name>`. A resource nothing owns shows `-`. When there are
+several owners the controller one is listed first.
+
+The remaining columns depend on the type. Workloads (`deployments`, `statefulsets`) show ready/desired pods and
+per-container name, image and CPU/memory requests/limits; `pods` add node, phase, ready containers and restarts;
+`services` show type, cluster IP, ports and selector; `pvc` shows status, capacity, storage class, volume and
+access modes; `routes` show host, backing service and TLS termination (OpenShift clusters only). Workloads and
 pods with several containers render one line per container inside a single row.
 
 ```bash

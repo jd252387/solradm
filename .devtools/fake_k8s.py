@@ -34,15 +34,22 @@ ZK_CONTAINERS = [
 ]
 
 
-def _workload(name, labels, containers, replicas, ready):
-    return {"metadata": {"name": name, "namespace": NS, "labels": labels},
+def _owner(kind, name, controller=True):
+    return [{"apiVersion": "v1", "kind": kind, "name": name,
+             "uid": f"uid-{name}", "controller": controller}]
+
+
+def _workload(name, labels, containers, replicas, ready, owner=None):
+    return {"metadata": {"name": name, "namespace": NS, "labels": labels,
+                         "ownerReferences": owner},
             "spec": {"replicas": replicas, "selector": {"matchLabels": labels},
                      "template": {"metadata": {"labels": labels}, "spec": {"containers": containers}}},
             "status": {"replicas": replicas, "readyReplicas": ready}}
 
 
-def _pod(name, labels, containers, node, phase, statuses):
-    return {"metadata": {"name": name, "namespace": NS, "labels": labels},
+def _pod(name, labels, containers, node, phase, statuses, owner=None):
+    return {"metadata": {"name": name, "namespace": NS, "labels": labels,
+                         "ownerReferences": owner},
             "spec": {"nodeName": node, "containers": containers},
             "status": {"phase": phase, "containerStatuses": statuses}}
 
@@ -54,8 +61,10 @@ def _cs(name, ready, restarts):
 
 DATA = {
     "statefulsets": [
-        _workload("solr-cloud", {"app": "solr", "tier": "data"}, SOLR_CONTAINERS, 3, 2),
-        _workload("zookeeper", {"app": "zookeeper", "tier": "data"}, ZK_CONTAINERS, 3, 3),
+        _workload("solr-cloud", {"app": "solr", "tier": "data"}, SOLR_CONTAINERS, 3, 2,
+                  _owner("SolrCloud", "solr-cloud")),
+        _workload("zookeeper", {"app": "zookeeper", "tier": "data"}, ZK_CONTAINERS, 3, 3,
+                  _owner("ZookeeperCluster", "zookeeper")),
     ],
     "deployments": [
         _workload("solr-operator", {"app": "solr-operator"},
@@ -64,10 +73,13 @@ DATA = {
     ],
     "pods": [
         _pod("solr-cloud-0", {"app": "solr"}, SOLR_CONTAINERS, "worker-1", "Running",
-             [_cs("solrcloud", True, 0), _cs("exporter", True, 2)]),
+             [_cs("solrcloud", True, 0), _cs("exporter", True, 2)],
+             _owner("StatefulSet", "solr-cloud")),
         _pod("solr-cloud-1", {"app": "solr"}, SOLR_CONTAINERS, "worker-2", "Running",
-             [_cs("solrcloud", True, 0), _cs("exporter", False, 7)]),
-        _pod("zookeeper-0", {"app": "zookeeper"}, ZK_CONTAINERS, None, "Pending", None),
+             [_cs("solrcloud", True, 0), _cs("exporter", False, 7)],
+             _owner("StatefulSet", "solr-cloud")),
+        _pod("zookeeper-0", {"app": "zookeeper"}, ZK_CONTAINERS, None, "Pending", None,
+             _owner("StatefulSet", "zookeeper")),
     ],
     "services": [
         {"metadata": {"name": "solr-headless", "namespace": NS, "labels": {"app": "solr"}},
@@ -79,7 +91,9 @@ DATA = {
                             {"port": 443, "targetPort": 8983, "protocol": "TCP"}]}},  # no selector
     ],
     "persistentvolumeclaims": [
-        {"metadata": {"name": "data-solr-cloud-0", "namespace": NS, "labels": {"app": "solr"}},
+        {"metadata": {"name": "data-solr-cloud-0", "namespace": NS, "labels": {"app": "solr"},
+                      "ownerReferences": _owner("StatefulSet", "solr-cloud")
+                                         + _owner("SolrCloud", "solr-cloud", controller=False)},
          "spec": {"storageClassName": "gp3", "volumeName": "pv-aaa", "accessModes": ["ReadWriteOnce"]},
          "status": {"phase": "Bound", "capacity": {"storage": "100Gi"}}},
         {"metadata": {"name": "data-solr-cloud-1", "namespace": NS, "labels": {"app": "solr"}},
@@ -87,7 +101,8 @@ DATA = {
          "status": {"phase": "Pending"}},  # unbound: no capacity, no volume
     ],
     "routes": [
-        {"metadata": {"name": "solr-ui", "namespace": NS, "labels": {"app": "solr"}},
+        {"metadata": {"name": "solr-ui", "namespace": NS, "labels": {"app": "solr"},
+                      "ownerReferences": _owner("SolrCloud", "solr-cloud")},
          "spec": {"host": "solr.apps.example.com", "to": {"name": "solr-external"},
                   "alternateBackends": [{"name": "solr-canary"}],
                   "port": {"targetPort": 8983}, "tls": {"termination": "edge"}}},
