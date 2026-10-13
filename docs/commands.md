@@ -196,10 +196,15 @@ the operator custom resource behind a resource — a Solr statefulset managed by
 several owners the controller one is listed first.
 
 The remaining columns depend on the type. Workloads (`deployments`, `statefulsets`) show ready/desired pods and
-per-container name, image and CPU/memory requests/limits; `pods` add node, phase, ready containers and restarts;
+per-container name, image and CPU/memory/ephemeral-storage requests/limits; `pods` add node, phase, ready
+containers and restarts;
 `services` show type, cluster IP, ports and selector; `pvc` shows status, capacity, storage class, volume and
 access modes; `routes` show host, backing service and TLS termination (OpenShift clusters only). Workloads and
 pods with several containers render one line per container inside a single row.
+
+The three resource columns are what the spec *asks for*, not what is in use: an unset request or limit shows `-`,
+so a container with no `resources` block at all reads `-/-` across all three. For actual disk consumption on Solr
+pods see `kube disk`.
 
 ```bash
 # every statefulset with its images and resource asks

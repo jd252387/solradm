@@ -24,13 +24,14 @@ NS = "solr"
 
 SOLR_CONTAINERS = [
     {"name": "solrcloud", "image": "solr:9.9",
-     "resources": {"requests": {"cpu": "1", "memory": "4Gi"},
-                   "limits": {"cpu": "2", "memory": "8Gi"}}},
+     "resources": {"requests": {"cpu": "1", "memory": "4Gi", "ephemeral-storage": "2Gi"},
+                   "limits": {"cpu": "2", "memory": "8Gi", "ephemeral-storage": "10Gi"}}},
     {"name": "exporter", "image": "solr-exporter:1.4"},  # no resources at all
 ]
 ZK_CONTAINERS = [
     {"name": "zookeeper", "image": "zookeeper:3.9",
-     "resources": {"requests": {"cpu": "500m", "memory": "1Gi"}}},  # requests only
+     "resources": {"requests": {"cpu": "500m", "memory": "1Gi",
+                                "ephemeral-storage": "1Gi"}}},  # requests only
 ]
 
 
@@ -69,7 +70,8 @@ DATA = {
     "deployments": [
         _workload("solr-operator", {"app": "solr-operator"},
                   [{"name": "manager", "image": "solr-operator:0.8",
-                    "resources": {"limits": {"cpu": "200m", "memory": "256Mi"}}}], 1, 1),
+                    "resources": {"limits": {"cpu": "200m", "memory": "256Mi",
+                                             "ephemeral-storage": "512Mi"}}}], 1, 1),
     ],
     "pods": [
         _pod("solr-cloud-0", {"app": "solr"}, SOLR_CONTAINERS, "worker-1", "Running",

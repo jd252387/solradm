@@ -70,7 +70,9 @@ def test_multi_container_cells_are_newline_joined(monkeypatch, tmp_path):
         _statefulset(
             "solr-cloud",
             [
-                _container("solrcloud", "solr:9.9", {"cpu": "1", "memory": "4Gi"}, {"cpu": "2", "memory": "8Gi"}),
+                _container("solrcloud", "solr:9.9",
+                           {"cpu": "1", "memory": "4Gi", "ephemeral-storage": "2Gi"},
+                           {"cpu": "2", "memory": "8Gi", "ephemeral-storage": "10Gi"}),
                 _container("exporter", "exporter:1.4", resources=False),
             ],
         )
@@ -80,12 +82,13 @@ def test_multi_container_cells_are_newline_joined(monkeypatch, tmp_path):
     result = CliRunner().invoke(kube_module.app, ["list", "statefulsets"])
     assert result.exit_code == 0, result.output
 
-    name, owner, pods, containers, images, cpu, memory = tables[0].rows[0]
+    name, owner, pods, containers, images, cpu, memory, ephemeral = tables[0].rows[0]
     assert (name, owner, pods) == ("solr-cloud", "-", "3/3")
     assert containers == "solrcloud\nexporter"
     assert images == "solr:9.9\nexporter:1.4"
     assert cpu == "1/2\n-/-"
     assert memory == "4Gi/8Gi\n-/-"
+    assert ephemeral == "2Gi/10Gi\n-/-"
 
 
 def test_label_selectors_are_unioned_and_deduped(monkeypatch, tmp_path):

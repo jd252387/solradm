@@ -380,17 +380,26 @@ def _fetch(list_fn, namespace: str, pattern: re.Pattern[str] | None, label_selec
     return sorted(items, key=lambda i: i.metadata.name)
 
 
-def _container_cells(containers: list) -> tuple[str, str, str, str]:
-    """Return (names, images, cpu req/lim, memory req/lim) with one line per container."""
-    names, images, cpu, memory = [], [], [], []
+# Compute resources shown per container, in column order. These are the keys
+# Kubernetes puts in resources.requests/limits; any of them may be absent.
+RESOURCE_KEYS = ("cpu", "memory", "ephemeral-storage")
+RESOURCE_HEADERS = ("CPU (req/lim)", "Memory (req/lim)", "Ephemeral (req/lim)")
+
+
+def _container_cells(containers: list) -> tuple[str, ...]:
+    """Return (names, images, then req/lim per RESOURCE_KEYS), one line per container."""
+    names, images = [], []
+    resources: dict[str, list[str]] = {key: [] for key in RESOURCE_KEYS}
     for c in containers or []:
         requests = (c.resources.requests if c.resources else None) or {}
         limits = (c.resources.limits if c.resources else None) or {}
         names.append(c.name)
         images.append(c.image or "-")
-        cpu.append(f"{requests.get('cpu', '-')}/{limits.get('cpu', '-')}")
-        memory.append(f"{requests.get('memory', '-')}/{limits.get('memory', '-')}")
-    return "\n".join(names), "\n".join(images), "\n".join(cpu), "\n".join(memory)
+        for key in RESOURCE_KEYS:
+            resources[key].append(f"{requests.get(key, '-')}/{limits.get(key, '-')}")
+
+    return ("\n".join(names), "\n".join(images),
+            *("\n".join(resources[key]) for key in RESOURCE_KEYS))
 
 
 def _owner_cell(owner_references) -> str:
@@ -418,14 +427,14 @@ def _table_workloads(kube: KubeContextInfo, kind: str, list_fn, pattern, labels:
     table.add_column("Pods", justify="right")
     table.add_column("Container")
     table.add_column("Image")
-    table.add_column("CPU (req/lim)", justify="right")
-    table.add_column("Memory (req/lim)", justify="right")
+    for header in RESOURCE_HEADERS:
+        table.add_column(header, justify="right")
 
     for w in _fetch(list_fn, kube.namespace, pattern, labels):
-        containers, images, cpu, memory = _container_cells(w.spec.template.spec.containers)
+        containers, images, *resources = _container_cells(w.spec.template.spec.containers)
         ready = (w.status.ready_replicas or 0) if w.status else 0
         table.add_row(w.metadata.name, _owner_cell(w.metadata.owner_references),
-                      f"{ready}/{w.spec.replicas}", containers, images, cpu, memory)
+                      f"{ready}/{w.spec.replicas}", containers, images, *resources)
 
     return table
 
@@ -440,13 +449,13 @@ def _table_pods(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
     table.add_column("Restarts", justify="right")
     table.add_column("Container")
     table.add_column("Image")
-    table.add_column("CPU (req/lim)", justify="right")
-    table.add_column("Memory (req/lim)", justify="right")
+    for header in RESOURCE_HEADERS:
+        table.add_column(header, justify="right")
 
     list_fn = CoreV1Api(kube.api_client).list_namespaced_pod
     for p in _fetch(list_fn, kube.namespace, pattern, labels):
         statuses = (p.status.container_statuses if p.status else None) or []
-        containers, images, cpu, memory = _container_cells(p.spec.containers)
+        containers, images, *resources = _container_cells(p.spec.containers)
         table.add_row(
             p.metadata.name,
             _owner_cell(p.metadata.owner_references),
@@ -456,8 +465,7 @@ def _table_pods(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
             str(sum(s.restart_count or 0 for s in statuses)),
             containers,
             images,
-            cpu,
-            memory,
+            *resources,
         )
 
     return table
