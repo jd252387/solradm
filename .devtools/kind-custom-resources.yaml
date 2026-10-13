@@ -1,0 +1,29 @@
+# Custom resources. Apply after kind-fixtures.yaml: a CR cannot be created in
+# the same pass that registers its CRD, so these need a second apply.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: solr-ui
+  namespace: solr
+  labels: {app: solr}
+spec:
+  host: solr.apps.example.com
+  to: {name: solr-external}
+  alternateBackends: [{name: solr-canary}]
+  port: {targetPort: 8983}
+  tls: {termination: edge}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: minimal
+  namespace: solr
+spec: {}
+---
+apiVersion: solr.apache.org/v1beta1
+kind: SolrCloud
+metadata:
+  name: solr-cloud
+  namespace: solr
+spec:
+  replicas: 2

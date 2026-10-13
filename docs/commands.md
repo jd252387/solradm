@@ -183,6 +183,49 @@ Remove replicas and stray index directories from nodes that are not part of the 
 ## `kube`
 Interact with the Kubernetes cluster that hosts Solr pods.
 
+### `list <type> [--pattern <regex>] [--label <selector>...]`
+List resources of the given type in the namespace of the current context.
+- `<type>` – one of `deployments`, `statefulsets`, `pods`, `services`, `pvc`, `routes`.
+- `--pattern, -p <regex>` – only show resources whose name matches the regex.
+- `--label, -l <selector>` – Kubernetes label selector. Can be specified multiple times; matches are unioned.
+- Both filters are optional and may be combined.
+
+Every type shows an `Owner` column, rendered as `Kind/name` from the resource's `ownerReferences`. This names
+the operator custom resource behind a resource — a Solr statefulset managed by the Solr operator shows
+`SolrCloud/<name>`, and its pods show `StatefulSet/<name>`. A resource nothing owns shows `-`. When there are
+several owners the controller one is listed first.
+
+The remaining columns depend on the type. Workloads (`deployments`, `statefulsets`) show ready/desired pods and
+per-container name, image and CPU/memory/ephemeral-storage requests/limits; `pods` add node, phase, ready
+containers and restarts;
+`services` show type, cluster IP, ports and selector; `pvc` shows status, capacity, storage class, volume and
+access modes; `routes` show host, backing service and TLS termination (OpenShift clusters only). Workloads and
+pods with several containers render one line per container inside a single row.
+
+The three resource columns are what the spec *asks for*, not what is in use: an unset request or limit shows `-`,
+so a container with no `resources` block at all reads `-/-` across all three. For actual disk consumption on Solr
+pods see `kube disk`.
+
+Workloads and pods also show a `PVCs` column, as `claim (size)` and one line per claim. The source differs by
+type, because a PVC reaches each one differently:
+
+- `statefulsets` list their `volumeClaimTemplates` with the size the template *requests*. The real claims are
+  per-replica (`<template>-<set>-<ordinal>`), so listing them on the statefulset row would mean one line per
+  replica; the template is stable regardless of replica count. A claim expanded after creation therefore still
+  reads at its original request here — see `list pods` or `list pvc` for actual sizes.
+- `deployments` and `pods` list the claims their volumes reference, with the bound capacity, falling back to the
+  request when the claim is not bound yet. A claim that is referenced but does not exist shows `(?)`.
+
+Volumes that are not PVCs (config maps, secrets, the projected `kube-api-access-*` volume) are skipped.
+
+```bash
+# every statefulset with its images and resource asks
+solradm kube list statefulsets
+
+# only Solr pods
+solradm kube list pods -p '^solr'
+```
+
 ### `logs <pattern> [--node] [--container <name>]`
 Stream logs from matching pods.
 - `<pattern>` – regex to match pod names; with `--node` it matches node names instead.
