@@ -33,7 +33,7 @@ def container_names(ctx, args: List[str], incomplete: str) -> List[str]:
 
 def workload_names(ctx, args: List[str], incomplete: str) -> List[str]:
     try:
-        from solradm.commands.kube import _get_workloads_by_pattern
+        from solradm.commands.kube.common import _get_workloads_by_pattern
         from solradm.config.util import get_current_context
         from solradm.kube.utils import get_kube_context_info
 

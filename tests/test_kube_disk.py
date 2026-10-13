@@ -1,22 +1,5 @@
 import asyncio
-import importlib
-from pathlib import Path
 from types import SimpleNamespace
-
-
-def _reload_kube(monkeypatch, tmp_path):
-    from platformdirs import user_config_dir
-
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    config_path = Path(user_config_dir("solradm", "eclipse")) / "settings.yaml"
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    if not config_path.exists():
-        config_path.write_text("contexts:\n  available: []\n  current: {}\n")
-
-    from solradm.commands import kube as kube_module
-
-    importlib.reload(kube_module)
-    return kube_module
 
 
 class FakeTable:
@@ -30,8 +13,8 @@ class FakeTable:
         self.rows.append(cells)
 
 
-def test_disk_sorts_ascending_by_used(monkeypatch, tmp_path):
-    kube_module = _reload_kube(monkeypatch, tmp_path)
+def test_disk_sorts_ascending_by_used(monkeypatch, kube_modules):
+    kube_module = kube_modules.disk
 
     monkeypatch.setattr(kube_module, "get_kube_context_info", lambda *_: SimpleNamespace())
     monkeypatch.setattr(kube_module, "get_current_context", lambda: SimpleNamespace())
@@ -59,8 +42,8 @@ def test_disk_sorts_ascending_by_used(monkeypatch, tmp_path):
     assert [row[0] for row in tables[0].rows] == ["pod-b", "pod-a"]
 
 
-def test_disk_sorts_ascending_by_percentage_used(monkeypatch, tmp_path):
-    kube_module = _reload_kube(monkeypatch, tmp_path)
+def test_disk_sorts_ascending_by_percentage_used(monkeypatch, kube_modules):
+    kube_module = kube_modules.disk
 
     monkeypatch.setattr(kube_module, "get_kube_context_info", lambda *_: SimpleNamespace())
     monkeypatch.setattr(kube_module, "get_current_context", lambda: SimpleNamespace())
