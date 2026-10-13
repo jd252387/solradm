@@ -206,6 +206,18 @@ The three resource columns are what the spec *asks for*, not what is in use: an 
 so a container with no `resources` block at all reads `-/-` across all three. For actual disk consumption on Solr
 pods see `kube disk`.
 
+Workloads and pods also show a `PVCs` column, as `claim (size)` and one line per claim. The source differs by
+type, because a PVC reaches each one differently:
+
+- `statefulsets` list their `volumeClaimTemplates` with the size the template *requests*. The real claims are
+  per-replica (`<template>-<set>-<ordinal>`), so listing them on the statefulset row would mean one line per
+  replica; the template is stable regardless of replica count. A claim expanded after creation therefore still
+  reads at its original request here — see `list pods` or `list pvc` for actual sizes.
+- `deployments` and `pods` list the claims their volumes reference, with the bound capacity, falling back to the
+  request when the claim is not bound yet. A claim that is referenced but does not exist shows `(?)`.
+
+Volumes that are not PVCs (config maps, secrets, the projected `kube-api-access-*` volume) are skipped.
+
 ```bash
 # every statefulset with its images and resource asks
 solradm kube list statefulsets

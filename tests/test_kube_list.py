@@ -12,10 +12,29 @@ def _owner_ref(kind, name, controller=True):
     return SimpleNamespace(kind=kind, name=name, controller=controller)
 
 
-def _statefulset(name, containers, ready=3, replicas=3, owners=None):
+def _claim_template(name, size):
+    return SimpleNamespace(
+        metadata=SimpleNamespace(name=name),
+        spec=SimpleNamespace(resources=SimpleNamespace(requests={"storage": size})),
+    )
+
+
+def _pvc(name, capacity=None, requested=None):
+    return SimpleNamespace(
+        metadata=SimpleNamespace(name=name),
+        spec=SimpleNamespace(resources=SimpleNamespace(requests={"storage": requested} if requested else None)),
+        status=SimpleNamespace(capacity={"storage": capacity} if capacity else None),
+    )
+
+
+def _statefulset(name, containers, ready=3, replicas=3, owners=None, claim_templates=None, volumes=None):
     return SimpleNamespace(
         metadata=SimpleNamespace(name=name, owner_references=owners),
-        spec=SimpleNamespace(replicas=replicas, template=SimpleNamespace(spec=SimpleNamespace(containers=containers))),
+        spec=SimpleNamespace(
+            replicas=replicas,
+            volume_claim_templates=claim_templates,
+            template=SimpleNamespace(spec=SimpleNamespace(containers=containers, volumes=volumes)),
+        ),
         status=SimpleNamespace(ready_replicas=ready),
     )
 
@@ -35,11 +54,13 @@ class FakeTable:
         return len(self.rows)
 
 
-def _patch(monkeypatch, kube_module, list_fn):
+def _patch(monkeypatch, kube_module, list_fn, pvcs=()):
     kube = SimpleNamespace(api_client=object(), namespace="solr")
     monkeypatch.setattr(kube_module, "get_kube_context_info", lambda *_: kube)
     monkeypatch.setattr(kube_module, "get_current_context", lambda: SimpleNamespace())
     monkeypatch.setattr(kube_module, "AppsV1Api", lambda _c: SimpleNamespace(list_namespaced_stateful_set=list_fn))
+    monkeypatch.setattr(kube_module, "CoreV1Api", lambda _c: SimpleNamespace(
+        list_namespaced_persistent_volume_claim=lambda _ns: SimpleNamespace(items=list(pvcs))))
 
     tables = []
     monkeypatch.setattr(kube_module, "Table", lambda *a, **k: tables.append(FakeTable()) or tables[-1])
@@ -65,13 +86,14 @@ def test_multi_container_cells_are_newline_joined(monkeypatch, kube_modules):
     result = CliRunner().invoke(kube_modules.app, ["list", "statefulsets"])
     assert result.exit_code == 0, result.output
 
-    name, owner, pods, containers, images, cpu, memory, ephemeral = tables[0].rows[0]
+    name, owner, pods, containers, images, cpu, memory, ephemeral, pvcs = tables[0].rows[0]
     assert (name, owner, pods) == ("solr-cloud", "-", "3/3")
     assert containers == "solrcloud\nexporter"
     assert images == "solr:9.9\nexporter:1.4"
     assert cpu == "1/2\n-/-"
     assert memory == "4Gi/8Gi\n-/-"
     assert ephemeral == "2Gi/10Gi\n-/-"
+    assert pvcs == "-"
 
 
 def test_label_selectors_are_unioned_and_deduped(monkeypatch, kube_modules):
@@ -147,3 +169,39 @@ def test_owner_column_shows_controller_first(monkeypatch, kube_modules):
     assert owners["solr-cloud"] == "SolrCloud/solr-cloud"
     assert owners["shared"] == "StatefulSet/owner\nSolrCloud/cr"
     assert owners["orphan"] == "-"
+
+
+def test_pvc_column_shows_templates_and_resolved_claims(monkeypatch, kube_modules):
+    """StatefulSets show the volumeClaimTemplate; direct claims resolve to a real size.
+
+    Template sizes come from the template's own request, since no PVC object
+    exists for it. Directly-referenced claims are looked up in the PVC list,
+    preferring bound capacity and falling back to the request. A claim that is
+    not there at all renders `?`.
+    """
+    kube_module = kube_modules.list_resources
+
+    items = [
+        _statefulset("templated", [_container("c", "i")],
+                     claim_templates=[_claim_template("data", "100Gi")]),
+        _statefulset("bound", [_container("c", "i")],
+                     volumes=[SimpleNamespace(persistent_volume_claim=SimpleNamespace(claim_name="claim-bound"))]),
+        _statefulset("unbound", [_container("c", "i")],
+                     volumes=[SimpleNamespace(persistent_volume_claim=SimpleNamespace(claim_name="claim-unbound"))]),
+        _statefulset("dangling", [_container("c", "i")],
+                     volumes=[SimpleNamespace(persistent_volume_claim=SimpleNamespace(claim_name="nope"))]),
+        _statefulset("nonclaim", [_container("c", "i")],
+                     volumes=[SimpleNamespace(persistent_volume_claim=None)]),
+    ]
+    pvcs = [_pvc("claim-bound", capacity="5Gi"), _pvc("claim-unbound", requested="7Gi")]
+    tables = _patch(monkeypatch, kube_module, lambda _ns, **_kw: SimpleNamespace(items=items), pvcs)
+
+    result = CliRunner().invoke(kube_modules.app, ["list", "statefulsets"])
+    assert result.exit_code == 0, result.output
+
+    claims = {row[0]: row[-1] for row in tables[0].rows}
+    assert claims["templated"] == "data (100Gi)"
+    assert claims["bound"] == "claim-bound (5Gi)"
+    assert claims["unbound"] == "claim-unbound (7Gi)"   # falls back to the request
+    assert claims["dangling"] == "nope (?)"
+    assert claims["nonclaim"] == "-"                     # non-PVC volumes are skipped

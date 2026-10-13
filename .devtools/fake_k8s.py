@@ -40,18 +40,33 @@ def _owner(kind, name, controller=True):
              "uid": f"uid-{name}", "controller": controller}]
 
 
-def _workload(name, labels, containers, replicas, ready, owner=None):
+def _claim_volume(name, claim):
+    return {"name": name, "persistentVolumeClaim": {"claimName": claim}}
+
+
+def _claim_template(name, size):
+    return {"metadata": {"name": name},
+            "spec": {"accessModes": ["ReadWriteOnce"],
+                     "resources": {"requests": {"storage": size}}}}
+
+
+def _workload(name, labels, containers, replicas, ready, owner=None,
+              claim_templates=None, volumes=None):
+    spec = {"replicas": replicas, "selector": {"matchLabels": labels},
+            "template": {"metadata": {"labels": labels},
+                         "spec": {"containers": containers, "volumes": volumes}}}
+    if claim_templates:
+        spec["volumeClaimTemplates"] = claim_templates
     return {"metadata": {"name": name, "namespace": NS, "labels": labels,
                          "ownerReferences": owner},
-            "spec": {"replicas": replicas, "selector": {"matchLabels": labels},
-                     "template": {"metadata": {"labels": labels}, "spec": {"containers": containers}}},
+            "spec": spec,
             "status": {"replicas": replicas, "readyReplicas": ready}}
 
 
-def _pod(name, labels, containers, node, phase, statuses, owner=None):
+def _pod(name, labels, containers, node, phase, statuses, owner=None, volumes=None):
     return {"metadata": {"name": name, "namespace": NS, "labels": labels,
                          "ownerReferences": owner},
-            "spec": {"nodeName": node, "containers": containers},
+            "spec": {"nodeName": node, "containers": containers, "volumes": volumes},
             "status": {"phase": phase, "containerStatuses": statuses}}
 
 
@@ -63,7 +78,8 @@ def _cs(name, ready, restarts):
 DATA = {
     "statefulsets": [
         _workload("solr-cloud", {"app": "solr", "tier": "data"}, SOLR_CONTAINERS, 3, 2,
-                  _owner("SolrCloud", "solr-cloud")),
+                  _owner("SolrCloud", "solr-cloud"),
+                  claim_templates=[_claim_template("data", "100Gi")]),
         _workload("zookeeper", {"app": "zookeeper", "tier": "data"}, ZK_CONTAINERS, 3, 3,
                   _owner("ZookeeperCluster", "zookeeper")),
     ],
@@ -71,17 +87,23 @@ DATA = {
         _workload("solr-operator", {"app": "solr-operator"},
                   [{"name": "manager", "image": "solr-operator:0.8",
                     "resources": {"limits": {"cpu": "200m", "memory": "256Mi",
-                                             "ephemeral-storage": "512Mi"}}}], 1, 1),
+                                             "ephemeral-storage": "512Mi"}}}], 1, 1,
+                  volumes=[_claim_volume("cache", "operator-cache")]),
     ],
     "pods": [
         _pod("solr-cloud-0", {"app": "solr"}, SOLR_CONTAINERS, "worker-1", "Running",
              [_cs("solrcloud", True, 0), _cs("exporter", True, 2)],
-             _owner("StatefulSet", "solr-cloud")),
+             _owner("StatefulSet", "solr-cloud"),
+             volumes=[_claim_volume("data", "data-solr-cloud-0")]),
         _pod("solr-cloud-1", {"app": "solr"}, SOLR_CONTAINERS, "worker-2", "Running",
              [_cs("solrcloud", True, 0), _cs("exporter", False, 7)],
-             _owner("StatefulSet", "solr-cloud")),
+             _owner("StatefulSet", "solr-cloud"),
+             volumes=[_claim_volume("data", "data-solr-cloud-1")]),
         _pod("zookeeper-0", {"app": "zookeeper"}, ZK_CONTAINERS, None, "Pending", None,
-             _owner("StatefulSet", "zookeeper")),
+             _owner("StatefulSet", "zookeeper"),
+             # references a claim that does not exist -> size renders as ?
+             volumes=[_claim_volume("data", "data-zookeeper-0"),
+                      {"name": "config", "configMap": {"name": "zk-config"}}]),
     ],
     "services": [
         {"metadata": {"name": "solr-headless", "namespace": NS, "labels": {"app": "solr"}},
@@ -99,8 +121,12 @@ DATA = {
          "spec": {"storageClassName": "gp3", "volumeName": "pv-aaa", "accessModes": ["ReadWriteOnce"]},
          "status": {"phase": "Bound", "capacity": {"storage": "100Gi"}}},
         {"metadata": {"name": "data-solr-cloud-1", "namespace": NS, "labels": {"app": "solr"}},
-         "spec": {"storageClassName": "gp3", "accessModes": ["ReadWriteOnce"]},
-         "status": {"phase": "Pending"}},  # unbound: no capacity, no volume
+         "spec": {"storageClassName": "gp3", "accessModes": ["ReadWriteOnce"],
+                  "resources": {"requests": {"storage": "100Gi"}}},
+         "status": {"phase": "Pending"}},  # unbound: no capacity, falls back to the request
+        {"metadata": {"name": "operator-cache", "namespace": NS, "labels": {"app": "solr-operator"}},
+         "spec": {"storageClassName": "gp3", "volumeName": "pv-bbb", "accessModes": ["ReadWriteOnce"]},
+         "status": {"phase": "Bound", "capacity": {"storage": "5Gi"}}},
     ],
     "routes": [
         {"metadata": {"name": "solr-ui", "namespace": NS, "labels": {"app": "solr"},

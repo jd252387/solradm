@@ -68,6 +68,44 @@ def _owner_cell(owner_references) -> str:
     return "\n".join(text for _, text in sorted(refs)) or "-"
 
 
+def _pvc_sizes(kube: KubeContextInfo) -> dict[str, str]:
+    """Claim name -> bound capacity, falling back to the request when unbound.
+
+    Sizes live on the PVC, not on whatever references it, so pods and
+    deployments need this to put a size next to a claim name.
+    """
+    sizes = {}
+    for c in CoreV1Api(kube.api_client).list_namespaced_persistent_volume_claim(kube.namespace).items:
+        capacity = ((c.status.capacity if c.status else None) or {}).get("storage")
+        requested = ((c.spec.resources.requests if c.spec.resources else None) or {}).get("storage")
+        sizes[c.metadata.name] = capacity or requested or "-"
+    return sizes
+
+
+def _claim_cells(volumes: list, sizes: dict[str, str]) -> list[str]:
+    """Render each persistentVolumeClaim volume as `claim (size)`."""
+    cells = []
+    for v in volumes or []:
+        claim = getattr(v, "persistent_volume_claim", None)
+        if claim is not None:
+            cells.append(f"{claim.claim_name} ({sizes.get(claim.claim_name, '?')})")
+    return cells
+
+
+def _claim_template_cells(templates: list) -> list[str]:
+    """Render each volumeClaimTemplate as `name (requested size)`.
+
+    StatefulSet templates have no PVC object of their own -- the real claims
+    are per-replica (`<template>-<set>-<ordinal>`) and visible via `list pvc`
+    or `list pods`. The declared request is the stable thing to show here.
+    """
+    cells = []
+    for tpl in templates or []:
+        requested = ((tpl.spec.resources.requests if tpl.spec.resources else None) or {}).get("storage", "-")
+        cells.append(f"{tpl.metadata.name} ({requested})")
+    return cells
+
+
 def _table_workloads(kube: KubeContextInfo, kind: str, list_fn, pattern, labels: list[str]) -> Table:
     table = Table(title=f"{kind} ({kube.namespace})", header_style="bold magenta")
     table.add_column("Name", style="cyan")
@@ -77,12 +115,20 @@ def _table_workloads(kube: KubeContextInfo, kind: str, list_fn, pattern, labels:
     table.add_column("Image")
     for header in RESOURCE_HEADERS:
         table.add_column(header, justify="right")
+    table.add_column("PVCs")
 
-    for w in _fetch(list_fn, kube.namespace, pattern, labels):
+    workloads = _fetch(list_fn, kube.namespace, pattern, labels)
+    sizes = _pvc_sizes(kube) if workloads else {}
+
+    for w in workloads:
         containers, images, *resources = _container_cells(w.spec.template.spec.containers)
         ready = (w.status.ready_replicas or 0) if w.status else 0
+        # volume_claim_templates is statefulset-only; deployments reference claims directly
+        claims = (_claim_template_cells(getattr(w.spec, "volume_claim_templates", None))
+                  + _claim_cells(w.spec.template.spec.volumes, sizes))
         table.add_row(w.metadata.name, _owner_cell(w.metadata.owner_references),
-                      f"{ready}/{w.spec.replicas}", containers, images, *resources)
+                      f"{ready}/{w.spec.replicas}", containers, images, *resources,
+                      "\n".join(claims) or "-")
 
     return table
 
@@ -99,9 +145,13 @@ def _table_pods(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
     table.add_column("Image")
     for header in RESOURCE_HEADERS:
         table.add_column(header, justify="right")
+    table.add_column("PVCs")
 
     list_fn = CoreV1Api(kube.api_client).list_namespaced_pod
-    for p in _fetch(list_fn, kube.namespace, pattern, labels):
+    pods = _fetch(list_fn, kube.namespace, pattern, labels)
+    sizes = _pvc_sizes(kube) if pods else {}
+
+    for p in pods:
         statuses = (p.status.container_statuses if p.status else None) or []
         containers, images, *resources = _container_cells(p.spec.containers)
         table.add_row(
@@ -114,6 +164,7 @@ def _table_pods(kube: KubeContextInfo, pattern, labels: list[str]) -> Table:
             containers,
             images,
             *resources,
+            "\n".join(_claim_cells(p.spec.volumes, sizes)) or "-",
         )
 
     return table
