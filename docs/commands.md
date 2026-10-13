@@ -183,6 +183,27 @@ Remove replicas and stray index directories from nodes that are not part of the 
 ## `kube`
 Interact with the Kubernetes cluster that hosts Solr pods.
 
+### `list <type> [--pattern <regex>] [--label <selector>...]`
+List resources of the given type in the namespace of the current context.
+- `<type>` – one of `deployments`, `statefulsets`, `pods`, `services`, `pvc`, `routes`.
+- `--pattern, -p <regex>` – only show resources whose name matches the regex.
+- `--label, -l <selector>` – Kubernetes label selector. Can be specified multiple times; matches are unioned.
+- Both filters are optional and may be combined.
+
+Columns depend on the type. Workloads (`deployments`, `statefulsets`) show name, ready/desired pods, and
+per-container name, image and CPU/memory requests/limits; `pods` adds node, phase, ready containers and restarts;
+`services` shows type, cluster IP, ports and selector; `pvc` shows status, capacity, storage class, volume and
+access modes; `routes` shows host, backing service and TLS termination (OpenShift clusters only). Workloads and
+pods with several containers render one line per container inside a single row.
+
+```bash
+# every statefulset with its images and resource asks
+solradm kube list statefulsets
+
+# only Solr pods
+solradm kube list pods -p '^solr'
+```
+
 ### `logs <pattern> [--node] [--container <name>]`
 Stream logs from matching pods.
 - `<pattern>` – regex to match pod names; with `--node` it matches node names instead.

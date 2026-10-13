@@ -33,12 +33,12 @@ def container_names(ctx, args: List[str], incomplete: str) -> List[str]:
 
 def workload_names(ctx, args: List[str], incomplete: str) -> List[str]:
     try:
-        from solradm.commands.kube import _get_workloads
+        from solradm.commands.kube import _get_workloads_by_pattern
         from solradm.config.util import get_current_context
         from solradm.kube.utils import get_kube_context_info
 
         kube = get_kube_context_info(get_current_context())
-        deployments, statefulsets = _get_workloads(kube, re.compile(""))
+        deployments, statefulsets = _get_workloads_by_pattern(kube, re.compile(""))
         names = [d.metadata.name for d in deployments] + [s.metadata.name for s in statefulsets]
     except Exception:
         names = []

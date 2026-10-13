@@ -104,6 +104,7 @@ sa
 │   └── view                view Solr authentication/authorization znodes
 │
 ├── kube                    commands/kube/ (Kubernetes workload management)
+│   ├── list                list namespace resources by type (deployments/statefulsets/pods/services/pvc/routes)
 │   ├── logs                stream logs for matching pods
 │   ├── disk                show /var/solr/data disk usage for solr-cloud pods
 │   ├── suspend             scale matching workloads to zero, saving replica counts
