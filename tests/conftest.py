@@ -34,3 +34,37 @@ def isolate_user_config(monkeypatch, tmp_path):
     import solradm.config as cfg
 
     monkeypatch.setattr(cfg, "config_path", default_config)
+
+
+# Command modules in solradm.commands.kube, in registration order.
+KUBE_COMMAND_MODULES = ("logs", "disk", "suspend", "resume", "state_dir", "ui", "list_resources")
+
+
+@pytest.fixture
+def kube_modules(monkeypatch, tmp_path):
+    """Fresh kube subapp plus every command module, state dir pointed at tmp_path.
+
+    The kube package is one module per command sharing `subapp.app`, so
+    reloading a single command module would register a *second* copy of that
+    command on the existing app. Rebuild the app first, then re-register the
+    commands onto it.
+
+    Returns a namespace of the reloaded modules (`.suspend`, `.list_resources`,
+    ...) plus `.app` for CliRunner.
+    """
+    import importlib
+    from types import SimpleNamespace
+
+    from solradm.commands.kube import subapp
+
+    importlib.reload(subapp)
+
+    modules = {}
+    for name in ("common",) + KUBE_COMMAND_MODULES:
+        modules[name] = importlib.reload(importlib.import_module(f"solradm.commands.kube.{name}"))
+    importlib.reload(importlib.import_module("solradm.commands.kube"))
+
+    for name in ("suspend", "resume", "state_dir"):
+        monkeypatch.setattr(modules[name], "_ensure_state_dir", lambda: tmp_path)
+
+    return SimpleNamespace(app=subapp.app, **modules)

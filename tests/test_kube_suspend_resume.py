@@ -1,4 +1,3 @@
-import importlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,26 +15,8 @@ class FakeKubeContextInfo:
     namespace: str
 
 
-def _reload_kube(monkeypatch, tmp_path):
-    from platformdirs import user_config_dir
-
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    config_path = Path(user_config_dir("solradm", "eclipse")) / "settings.yaml"
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    if not config_path.exists():
-        config_path.write_text("contexts:\n  available: []\n  current: {}\n")
-
-    from solradm.commands import kube as kube_module
-
-    importlib.reload(kube_module)
-
-    monkeypatch.setattr(kube_module, "_ensure_state_dir", lambda: tmp_path)
-
-    return kube_module
-
-
-def test_suspend_requires_existing_kubecontext(monkeypatch, tmp_path):
-    kube_module = _reload_kube(monkeypatch, tmp_path)
+def test_suspend_requires_existing_kubecontext(monkeypatch, tmp_path, kube_modules):
+    kube_module = kube_modules.suspend
 
     from solradm.exceptions.adm_exception import AdmException
     def raise_missing(ctx):
@@ -50,8 +31,8 @@ def test_suspend_requires_existing_kubecontext(monkeypatch, tmp_path):
 
 
 
-def test_suspend_sets_namespace_from_context(monkeypatch, tmp_path):
-    kube_module = _reload_kube(monkeypatch, tmp_path)
+def test_suspend_sets_namespace_from_context(monkeypatch, tmp_path, kube_modules):
+    kube_module = kube_modules.suspend
 
     fake_kube_info = FakeKubeContextInfo(api_client=None, name="demo/one", namespace="nondefault")
     monkeypatch.setattr(kube_module, "get_kube_context_info", lambda ctx: fake_kube_info)
@@ -112,7 +93,11 @@ def test_suspend_sets_namespace_from_context(monkeypatch, tmp_path):
     dummy_apps = DummyApps(None)
     monkeypatch.setattr(kube_module, "AppsV1Api", lambda api_client: dummy_apps)
 
-    kube_module.resume(kubecontext="demo", state_file=None)
+    monkeypatch.setattr(kube_modules.resume, "get_kube_context_info", lambda ctx: fake_kube_info)
+    monkeypatch.setattr(kube_modules.resume.Confirm, "ask", lambda *args, **kwargs: True)
+    monkeypatch.setattr(kube_modules.resume, "AppsV1Api", lambda api_client: dummy_apps)
+
+    kube_modules.resume.resume(kubecontext="demo", state_file=None)
 
     assert dummy_apps.patch_calls == [
         ("dep", "dep", "nondefault", {"spec": {"replicas": 2}}),
@@ -120,8 +105,8 @@ def test_suspend_sets_namespace_from_context(monkeypatch, tmp_path):
     ]
 
 
-def test_resume_uses_current_context_state_file_when_unspecified(monkeypatch, tmp_path):
-    kube_module = _reload_kube(monkeypatch, tmp_path)
+def test_resume_uses_current_context_state_file_when_unspecified(monkeypatch, tmp_path, kube_modules):
+    kube_module = kube_modules.resume
 
     state_path = tmp_path / "demo.json"
     state_path.write_text(json.dumps({"deployments": {"dep": 2}, "statefulsets": {"sts": 3}}))
@@ -155,8 +140,8 @@ def test_resume_uses_current_context_state_file_when_unspecified(monkeypatch, tm
     assert not state_path.exists()
 
 
-def test_dir_opens_state_directory(monkeypatch, tmp_path):
-    kube_module = _reload_kube(monkeypatch, tmp_path)
+def test_dir_opens_state_directory(monkeypatch, tmp_path, kube_modules):
+    kube_module = kube_modules.state_dir
 
     launched = {}
     monkeypatch.setattr(kube_module.typer, "launch", lambda path: launched.setdefault("path", path))
@@ -166,8 +151,8 @@ def test_dir_opens_state_directory(monkeypatch, tmp_path):
     assert launched["path"] == str(tmp_path)
 
 
-def test_suspend_requires_exactly_one_selector(monkeypatch, tmp_path):
-    kube_module = _reload_kube(monkeypatch, tmp_path)
+def test_suspend_requires_exactly_one_selector(monkeypatch, tmp_path, kube_modules):
+    kube_module = kube_modules.suspend
 
     with pytest.raises(typer.Exit):
         kube_module.suspend(kubecontext="demo", pattern=".*", label=["app=solr"])

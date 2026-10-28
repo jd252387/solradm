@@ -1,9 +1,5 @@
-import importlib
-
-
-def test_kube_console(monkeypatch):
-    from solradm.commands import kube as kube_module
-    importlib.reload(kube_module)
+def test_kube_console(monkeypatch, kube_modules):
+    kube_module = kube_modules.ui
 
     class DummyKubeContextInfo:
         def __init__(self):
